@@ -72,6 +72,36 @@ Deze bevat o.a.:
 
 👉 Gebruik `maakindustrie.json` als template.
 
+### 🔹 Realisme van de dataset
+
+De kwaliteit en het realisme van de gegenereerde dataset hangt sterk af van het gekozen startpunt van de simulatie.
+
+Je krijgt de meest realistische resultaten wanneer je:
+
+* start met een relatief klein aantal medewerkers
+* op een tijdstip in het verleden
+* en vervolgens de weken tot vandaag simuleert
+
+De generator maakt dan een initiële workforce op het startmoment en simuleert daarna week voor week gebeurtenissen zoals groei, uitstroom, promoties en interne transfers.
+
+Dit zorgt voor een natuurlijke opbouw van de organisatie en realistische historische data.
+
+---
+
+Je kunt er ook voor kiezen om direct een grote workforce te genereren op het huidige tijdstip en alleen vanaf dat moment incremental te simuleren.
+
+In dat geval:
+
+* is de dataset sneller beschikbaar
+* maar bevat de historische data minder dynamiek
+* en oogt de data minder realistisch (minder carrièrepaden, events en verloop over tijd)
+
+---
+
+👉 Aanbeveling:
+Gebruik een historische start met groei voor productie- of analysedoeleinden, en een directe grote workforce alleen voor snelle tests of demo’s.
+
+
 ---
 
 ## 🔹 Stap 2 — Schema configuratie maken
