@@ -1,0 +1,410 @@
+{
+"sector": "maakindustrie",
+"database": "db_hr_demo",
+  "beschrijving": "Middelgroot productiebedrijf met ploegendienst en lichte jaarlijkse groei",
+  "schema": "hr_maakindustrie_schema",
+  "start_year_simulation": 2020,
+
+  "baseline_headcount": 50,
+  "growth": {
+    "max_capacity": 800,
+    "weeks_before_peak_growth": 150,
+    "annual_growth_rate": {
+      "min": 0.03,
+      "max": 0.1
+    },
+    "shock_probablity": 0.05,
+    "shock_min": -20,
+    "shock_max": 30
+  },
+  "dim_location": {
+    "Hoofdkantoor": 0.25,
+    "Fabriek Noord": 0.40,
+    "Fabriek Zuid": 0.25,
+    "DC": 0.10
+  },
+
+  "career_events": {
+    "promotion_rate": 0.08,
+    "internal_transfer_rate": 0.05,
+    "salary_increase_rate": 0.6,
+    "contract_change_rate": 0.03
+  },
+
+  "dim_hire_source": [
+    "Referral",
+    "Vacaturebank",
+    "Recruiter",
+    "Campus",
+    "Interne mobiliteit"
+  ],
+
+  "dim_education_level": [
+    "MBO",
+    "HBO",
+    "WO",
+    "PhD"
+  ],
+  "dim_absence_type": {
+    "Ziek": true,
+    "Kort verzuim": true,
+    "Lang verzuim": true,
+    "Zwangerschap": false,
+    "Ouderschapsverlof": false,
+    "Onbetaald verlof": false,
+    "Bijzonder verlof": false,
+    "Vakantie": false,
+    "Tijd voor tijd": false
+  },
+ "absence": {
+    "base_probability": 0.20,
+    "age_multipliers": {
+      "<30": 0.8,
+      "30-45": 1.0,
+      "45-55": 1.2,
+      "55+": 1.5
+    },
+    "attribute_multipliers": {
+      "Ploegendienst": {
+        "Dag": 1.0,
+        "2-ploeg": 1.2,
+        "3-ploeg": 1.35
+      }
+
+    },
+    "duration_distribution": {
+      "1": 0.40,
+      "2": 0.25,
+      "3": 0.20,
+      "5": 0.10,
+      "10": 0.05
+    }
+  },
+
+  "education_distribution_by_role": {
+
+    "Productiemedewerker": {"MBO": 0.90, "HBO": 0.09, "WO": 0.01},
+    "Operator A": {"MBO": 0.85, "HBO": 0.14, "WO": 0.01},
+    "Operator B": {"MBO": 0.80, "HBO": 0.18, "WO": 0.02},
+    "Teamleider Productie": {"MBO": 0.50, "HBO": 0.45, "WO": 0.05},
+
+    "Monteur": {"MBO": 0.85, "HBO": 0.14, "WO": 0.01},
+    "Hoofd Technische Dienst": {"HBO": 0.70, "WO": 0.30},
+
+    "QC Medewerker": {"MBO": 0.70, "HBO": 0.25, "WO": 0.05},
+    "QC Engineer": {"HBO": 0.70, "WO": 0.30},
+    "QA Officer": {"HBO": 0.60, "WO": 0.40},
+    "QA Manager": {"HBO": 0.50, "WO": 0.50},
+
+    "Magazijnmedewerker": {"MBO": 0.90, "HBO": 0.10},
+    "Supply Chain Planner": {"HBO": 0.70, "WO": 0.30},
+    "Logistiek Manager": {"HBO": 0.60, "WO": 0.40},
+
+    "Productontwikkelaar": {"HBO": 0.50, "WO": 0.45, "PhD": 0.05},
+    "Procestechnoloog": {"HBO": 0.40, "WO": 0.50, "PhD": 0.10},
+    "R&D Manager": {"WO": 0.80, "PhD": 0.20},
+
+    "IT Support": {"MBO": 0.50, "HBO": 0.45, "WO": 0.05},
+    "Applicatiebeheerder": {"HBO": 0.70, "WO": 0.30},
+    "Functioneel Beheerder": {"HBO": 0.60, "WO": 0.40},
+    "IT Manager": {"HBO": 0.40, "WO": 0.60},
+
+    "Accountmanager": {"HBO": 0.80, "WO": 0.20},
+    "Sales Manager": {"HBO": 0.50, "WO": 0.50},
+
+    "HR Medewerker": {"HBO": 0.80, "WO": 0.20},
+    "HR Manager": {"HBO": 0.50, "WO": 0.50},
+
+    "Financieel Medewerker": {"MBO": 0.40, "HBO": 0.60},
+    "Controller": {"HBO": 0.50, "WO": 0.50},
+    "Finance Manager": {"WO": 1.0},
+
+    "Operations Director": {"WO": 1.0},
+    "Managing Director": {"WO": 0.90, "PhD": 0.10}
+  },
+
+  "contract_hours_distribution": {
+    "default": {
+      "40": 0.65,
+      "32": 0.20,
+      "24": 0.10,
+      "16": 0.05
+    },
+    "Productiemedewerker": {
+      "40": 0.90,
+      "32": 0.10
+    }
+  },
+
+  "employment_attributes": {
+    "Ploegendienst": {
+      "type": "categorical",
+      "values": ["Dag", "2-ploeg", "3-ploeg"],
+      "weights": [0.3, 0.4, 0.3],
+      "applies_if": "Ploegendienst_Flag"
+    }
+  },
+
+  "dim_reden_vertrek": {
+    "vrijwillig": ["Eigen initiatief", "Nieuwe baan elders", "Hoger salaris", "Carrière switch", "Opleiding volgen", "Pensioen", "Verhuizing", "Arbeidsvoorwaarden", "Medisch"],
+    "werkgever": ["Ontslag", "Disfunctioneren", "No-show"],
+    "tijdelijk": ["Contract niet verlengd", "Seizoenswerker"]
+  },
+
+  "dim_event_type": [
+    "Aangenomen",
+    "Promotie",
+    "Transfer",
+    "Uit dienst",
+    "Contract omgezet naar vast",
+    "Contract verlengd"
+  ],
+
+  "seasonality": {
+    "enabled": true,
+    "amplitude": 0.015,
+    "phase_shift_weeks": 13
+  },
+
+  "special_arrangements": {
+    "Banenafspraak": {
+      "probability": 0.05,
+      "roles": ["Operator A", "Productiemedewerker"]
+    },
+    "Expat": {
+      "probability": 0.08,
+      "roles": ["Operator A", "Productiemedewerker", "IT Support"]
+    }
+  },
+  "structure": {
+    "Productie": {
+      "Productiemedewerker": {
+        "fte_ratio": 0.32,
+        "leidinggevend": false,
+        "salaris_range": [30000, 35000],
+        "ploegendienst": true
+      },
+      "Operator A": {
+        "fte_ratio": 0.12,
+        "leidinggevend": false,
+        "salaris_range": [34000, 40000],
+        "ploegendienst": true
+      },
+      "Operator B": {
+        "fte_ratio": 0.08,
+        "leidinggevend": false,
+        "salaris_range": [38000, 45000],
+        "ploegendienst": true
+      },
+      "Teamleider Productie": {
+        "fte_ratio": 0.025,
+        "leidinggevend": true,
+        "salaris_range": [45000, 55000],
+        "ploegendienst": true
+      }
+    },
+
+    "Techniek": {
+      "Monteur": {
+        "fte_ratio": 0.04,
+        "leidinggevend": false,
+        "salaris_range": [38000, 48000],
+        "ploegendienst": false
+      },
+      "Hoofd Technische Dienst": {
+        "fte_ratio": 0.005,
+        "leidinggevend": true,
+        "salaris_range": [60000, 75000],
+        "ploegendienst": false
+      }
+    },
+
+    "Kwaliteit": {
+      "QC Medewerker": {
+        "fte_ratio": 0.03,
+        "leidinggevend": false,
+        "salaris_range": [32000, 38000],
+        "ploegendienst": false
+      },
+      "QC Engineer": {
+        "fte_ratio": 0.01,
+        "leidinggevend": false,
+        "salaris_range": [42000, 52000],
+        "ploegendienst": false
+      },
+      "QA Officer": {
+        "fte_ratio": 0.008,
+        "leidinggevend": false,
+        "salaris_range": [45000, 55000],
+        "ploegendienst": false
+      },
+      "QA Manager": {
+        "fte_ratio": 0.004,
+        "leidinggevend": true,
+        "salaris_range": [65000, 80000],
+        "ploegendienst": false
+      }
+    },
+
+    "Logistiek": {
+      "Magazijnmedewerker": {
+        "fte_ratio": 0.04,
+        "leidinggevend": false,
+        "salaris_range": [30000, 36000],
+        "ploegendienst": false
+      },
+      "Supply Chain Planner": {
+        "fte_ratio": 0.01,
+        "leidinggevend": false,
+        "salaris_range": [42000, 52000],
+        "ploegendienst": false
+      },
+      "Logistiek Manager": {
+        "fte_ratio": 0.004,
+        "leidinggevend": true,
+        "salaris_range": [60000, 75000],
+        "ploegendienst": false
+      }
+    },
+
+    "R&D": {
+      "Productontwikkelaar": {
+        "fte_ratio": 0.015,
+        "leidinggevend": false,
+        "salaris_range": [45000, 55000],
+        "ploegendienst": false
+      },
+      "Procestechnoloog": {
+        "fte_ratio": 0.01,
+        "leidinggevend": false,
+        "salaris_range": [50000, 60000],
+        "ploegendienst": false
+      },
+      "R&D Manager": {
+        "fte_ratio": 0.004,
+        "leidinggevend": true,
+        "salaris_range": [70000, 85000],
+        "ploegendienst": false
+      }
+    },
+
+    "IT": {
+      "IT Support": {
+        "fte_ratio": 0.01,
+        "leidinggevend": false,
+        "salaris_range": [35000, 42000],
+        "ploegendienst": false
+      },
+      "Applicatiebeheerder": {
+        "fte_ratio": 0.008,
+        "leidinggevend": false,
+        "salaris_range": [45000, 55000],
+        "ploegendienst": false
+      },
+      "Functioneel Beheerder": {
+        "fte_ratio": 0.006,
+        "leidinggevend": false,
+        "salaris_range": [50000, 60000],
+        "ploegendienst": false
+      },
+      "IT Manager": {
+        "fte_ratio": 0.003,
+        "leidinggevend": true,
+        "salaris_range": [70000, 85000],
+        "ploegendienst": false
+      }
+    },
+
+    "Sales": {
+      "Accountmanager": {
+        "fte_ratio": 0.015,
+        "leidinggevend": false,
+        "salaris_range": [45000, 60000],
+        "ploegendienst": false
+      },
+      "Sales Manager": {
+        "fte_ratio": 0.003,
+        "leidinggevend": true,
+        "salaris_range": [70000, 90000],
+        "ploegendienst": false
+      }
+    },
+
+    "HR": {
+      "HR Medewerker": {
+        "fte_ratio": 0.006,
+        "leidinggevend": false,
+        "salaris_range": [38000, 48000],
+        "ploegendienst": false
+      },
+      "HR Manager": {
+        "fte_ratio": 0.002,
+        "leidinggevend": true,
+        "salaris_range": [60000, 75000],
+        "ploegendienst": false
+      }
+    },
+
+    "Finance": {
+      "Financieel Medewerker": {
+        "fte_ratio": 0.006,
+        "leidinggevend": false,
+        "salaris_range": [38000, 48000],
+        "ploegendienst": false
+      },
+      "Controller": {
+        "fte_ratio": 0.004,
+        "leidinggevend": false,
+        "salaris_range": [55000, 65000],
+        "ploegendienst": false
+      },
+      "Finance Manager": {
+        "fte_ratio": 0.002,
+        "leidinggevend": true,
+        "salaris_range": [75000, 90000],
+        "ploegendienst": false
+      }
+    },
+
+    "Directie": {
+      "Operations Director": {
+        "fte_ratio": 0.002,
+        "leidinggevend": true,
+        "salaris_range": [95000, 120000],
+        "ploegendienst": false
+      },
+      "Managing Director": {
+        "fte_ratio": 0.002,
+        "leidinggevend": true,
+        "salaris_range": [120000, 160000],
+        "ploegendienst": false
+      }
+    }
+  },
+
+  "contract_rules": {
+    "Productie": {
+      "vast_kans": 0.70,
+      "tijdelijk_kans": 0.25,
+      "zomer_kans": 0.05
+    },
+    "default": {
+      "vast_kans": 0.85,
+      "tijdelijk_kans": 0.15,
+      "zomer_kans": 0.0
+    }
+  },
+
+  "attrition": {
+    "Productie": 0.11,
+    "Techniek": 0.08,
+    "Kwaliteit": 0.07,
+    "Logistiek": 0.09,
+    "R&D": 0.06,
+    "IT": 0.08,
+    "Sales": 0.10,
+    "HR": 0.06,
+    "Finance": 0.06,
+    "Directie": 0.03
+  }
+}

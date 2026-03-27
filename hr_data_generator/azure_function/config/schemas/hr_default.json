@@ -1,0 +1,29 @@
+{
+  "dim_department": {
+    "df": "dim_department",
+    "primary_key": "Department_Key"
+  },
+  "dim_role": {
+    "df": "dim_role",
+    "primary_key": "Role_Key",
+    "foreign_keys": [
+      ["Department_Key", "dim_department", "Department_Key"]
+    ]
+  },
+  "dim_employee": {
+    "df": "dim_employee",
+    "primary_key": "Employee_Key"
+  },
+  "fact_employment": {
+    "df": "fact_employment",
+    "primary_key": "Employment_Key",
+    "foreign_keys": [
+      ["Employee_Key", "dim_employee", "Employee_Key"],
+      ["Role_Key", "dim_role", "Role_Key"]
+    ],
+    "indexes": [
+      "Employee_Key",
+      "Role_Key"
+    ]
+  }
+}

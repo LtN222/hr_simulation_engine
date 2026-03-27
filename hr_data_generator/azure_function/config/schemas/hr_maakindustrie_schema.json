@@ -1,0 +1,209 @@
+{
+  "dim_department": {
+    "df": "dim_department",
+    "primary_key": "Department_Key",
+    "types": {
+      "Department_Key": "INT",
+      "Department_Name": "NVARCHAR(100)"
+    }
+  },
+
+  "dim_role": {
+    "df": "dim_role",
+    "primary_key": "Role_Key",
+    "types": {
+      "Role_Key": "INT",
+      "Department_Key": "INT",
+      "Role_Name": "NVARCHAR(100)",
+      "Leidinggevend": "BIT",
+      "Salaris_min": "INT",
+      "Salaris_max": "INT",
+      "Ploegendienst_Flag": "BIT"
+    },
+    "foreign_keys": [
+      ["Department_Key", "dim_department", "Department_Key"]
+    ]
+  },
+
+  "dim_manager": {
+    "df": "dim_manager",
+    "primary_key": "Manager_Key",
+    "types": {
+      "Manager_Key": "INT",
+      "Voornaam": "NVARCHAR(50)",
+      "Achternaam": "NVARCHAR(50)"
+    }
+  },
+
+  "dim_location": {
+    "df": "dim_location",
+    "primary_key": "Location_Key",
+    "types": {
+      "Location_Key": "INT",
+      "Location_Name": "NVARCHAR(100)"
+    }
+  },
+
+  "dim_hire_source": {
+    "df": "dim_hire_source",
+    "primary_key": "HireSource_Key",
+    "types": {
+      "HireSource_Key": "INT",
+      "HireSource_Name": "NVARCHAR(100)"
+    }
+  },
+
+  "dim_education_level": {
+    "df": "dim_education_level",
+    "primary_key": "EducationLevel_Key",
+    "types": {
+      "EducationLevel_Key": "INT",
+      "EducationLevel": "NVARCHAR(50)"
+    }
+  },
+
+  "dim_absence_type": {
+    "df": "dim_absence_type",
+    "primary_key": "AbsenceType_Key",
+    "types": {
+      "AbsenceType_Key": "INT",
+      "AbsenceType_Name": "NVARCHAR(100)",
+      "Telt_als_verzuim": "BIT"
+    }
+  },
+
+  "dim_employee": {
+    "df": "dim_employee",
+    "primary_key": "Employee_Key",
+    "types": {
+      "Employee_Key": "INT",
+      "Voornaam": "NVARCHAR(100)",
+      "Achternaam": "NVARCHAR(100)",
+      "Gender": "NVARCHAR(20)",
+      "Geboortedatum": "DATE",
+      "Leeftijd": "INT",
+      "Land": "NVARCHAR(100)",
+      "HireSource_Key": "INT",
+      "EducationLevel_Key": "INT",
+      "Location_Key": "INT",
+      "Bijzondere_Aanstelling": "NVARCHAR(100)",
+      "Manager_Key": "INT",
+      "Performance_Score": "DECIMAL(3,2)"
+    },
+    "foreign_keys": [
+      ["HireSource_Key", "dim_hire_source", "HireSource_Key"],
+      ["EducationLevel_Key", "dim_education_level", "EducationLevel_Key"],
+      ["Location_Key", "dim_location", "Location_Key"]
+    ]
+  },
+
+  "dim_reden_vertrek": {
+    "df": "dim_reden_vertrek",
+    "primary_key": "RedenVertrek_Key",
+    "types": {
+      "RedenVertrek_Key": "INT",
+      "RedenVertrek": "NVARCHAR(100)",
+      "Categorie": "NVARCHAR(50)"
+    }
+  },
+
+  "dim_event_type": {
+    "df": "dim_event_type",
+    "primary_key": "EventType_Key",
+    "types": {
+      "EventType_Key": "INT",
+      "EventType": "NVARCHAR(50)"
+    }
+  },
+
+  "fact_employment": {
+    "df": "fact_employment",
+    "primary_key": "Employment_Key",
+    "types": {
+      "Employment_Key": "INT",
+      "Previous_Employment_Key": "INT",
+      "Employee_Key": "INT",
+      "Role_Key": "INT",
+      "Location_Key": "INT",
+      "Startdatum": "DATE",
+      "Einddatum": "DATE",
+      "Dienstverband_status": "NVARCHAR(50)",
+      "Salaris": "INT",
+      "Contracttype": "NVARCHAR(50)",
+      "Contracturen": "INT",
+      "Contract_einddatum": "DATE",
+      "Contract_ronde": "INT",
+      "EventType_Key": "INT",
+      "RedenVertrek_Key": "INT"
+    },
+    "foreign_keys": [
+      ["Employee_Key", "dim_employee", "Employee_Key"],
+      ["Role_Key", "dim_role", "Role_Key"],
+      ["Location_Key", "dim_location", "Location_Key"],
+      ["Previous_Employment_Key", "fact_employment", "Employment_Key"],
+      ["EventType_Key", "dim_event_type", "EventType_Key"],
+      ["RedenVertrek_Key", "dim_reden_vertrek", "RedenVertrek_Key"]
+    ],
+    "indexes": [
+      "Employee_Key",
+      "Role_Key",
+      "Location_Key",
+      "Startdatum",
+      "Einddatum"
+    ]
+  },
+
+  "fact_employment_attribute": {
+    "df": "fact_employment_attribute",
+    "types": {
+      "Employment_Key": "INT",
+      "Attribute_Name": "NVARCHAR(100)",
+      "Attribute_Value": "NVARCHAR(100)"
+    },
+    "foreign_keys": [
+      ["Employment_Key", "fact_employment", "Employment_Key"]
+    ],
+    "indexes": [
+      "Employment_Key"
+    ]
+  },
+
+  "fact_absence": {
+    "df": "fact_absence",
+    "primary_key": "Absence_Key",
+    "types": {
+      "Absence_Key": "INT",
+      "Employee_Key": "INT",
+      "AbsenceType_Key": "INT",
+      "Startdatum": "DATE",
+      "Einddatum": "DATE",
+      "Duur_dagen": "INT"
+    },
+    "foreign_keys": [
+      ["Employee_Key", "dim_employee", "Employee_Key"],
+      ["AbsenceType_Key", "dim_absence_type", "AbsenceType_Key"]
+    ],
+    "indexes": [
+      "Employee_Key",
+      "Startdatum"
+    ]
+  },
+
+  "fact_performance_review": {
+    "df": "fact_performance_review",
+    "primary_key": "PerformanceReview_Key",
+    "types": {
+      "PerformanceReview_Key": "INT",
+      "Employee_Key": "INT",
+      "Review_Datum": "DATE",
+      "Performance_Score": "DECIMAL(3,2)"
+    },
+    "foreign_keys": [
+      ["Employee_Key", "dim_employee", "Employee_Key"]
+    ],
+    "indexes": [
+      "Employee_Key",
+      "Review_Datum"
+    ]
+  }
+}
