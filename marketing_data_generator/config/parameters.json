@@ -1,0 +1,11 @@
+{
+    "records": 1000,
+    "campaigns": 3,
+    "timeframe": ["01-01-2001", "05-01-2001"],
+    "location": 10,
+    "devices": 10,
+    "clicks": 25,
+    "page_views": 15,
+    "traffic_source": 5,
+    "conversion_rate": 0.85
+}
