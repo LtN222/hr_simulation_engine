@@ -202,8 +202,7 @@ class DataGenerator():
     
     def add_new_campaigns(self, start, end, n_campaigns):
         """Returns lists of campaign properties of all campaigns, new and old"""
-        total_campaigns = self.state.get("n_campaigns", 0) + n_campaigns
-
+        # Get existing campaign state, if non-existing create new
         campaign = self.state.get("campaign", {
                 "effect": [],
                 "offset": [],
@@ -211,29 +210,30 @@ class DataGenerator():
                 "scale": []
             })
 
-        campaign["id"] = np.arange(1, total_campaigns + 1)
+        # Generate ID's for the new campaigns
+        campaign_id = np.arange(1, n_campaigns + 1) + self.state.get("n_campaigns", 0)
 
-        # Randomly determine effectiveness of each campaign
-        campaign_effect = self._rng.random(total_campaigns) # IDEA: multiple campaign types and platforms with each their own effect
-        # campaign["effect"] = np.concatenate([campaign["effect"], campaign_effect])
-        campaign["effect"] = campaign_effect
+        # Randomly determine effectiveness of each new campaign
+        campaign_effect = self._rng.random(n_campaigns) # IDEA: multiple campaign types and platforms with each their own effect
 
-        # campaign["offset"] = np.concatenate([campaign["offset"], self._rng.uniform(
-        #     start.astype(np.int64),
-        #     end.astype(np.int64),
-        #     n_campaigns).astype(np.int64)])
-        campaign["offset"] = self._rng.uniform(
+        # Randomly place the peaks of the new campaigns in the new timeframe
+        campaign_offset = self._rng.uniform(
             start.astype(np.int64),
             end.astype(np.int64),
-            total_campaigns).astype(np.int64)
+            n_campaigns).astype(np.int64)
 
-        # campaign["skew"] = np.concatenate([campaign["skew"], (campaign_effect - 0.5) * 10])
-        campaign["skew"] = (campaign_effect - 0.5) * 10
+        # Compute the skew from the effectiveness
+        campaign_skew = (campaign_effect - 0.5) * 10
 
-        # campaign["scale"] = np.timedelta64(2, 'Y').astype('timedelta64[s]').astype(np.int64) * (1 - campaign_effect)
-        # campaign_scale = [(end-start).astype('timedelta64[s]').astype(np.int64) / 2] * n_campaigns
-        # campaign["scale"] = np.concatenate([campaign["scale"], campaign_scale])
-        campaign["scale"] = np.timedelta64(2, 'Y').astype('timedelta64[s]').astype(np.int64) * (1 - campaign_effect)
+        # Compute scale with a maximum campaign duration of 2 years
+        campaign_scale = np.timedelta64(2, 'Y').astype('timedelta64[s]').astype(np.int64) * (1 - campaign_effect)
+
+        # Update campaign state
+        campaign["id"] = np.concatenate([campaign["id"], campaign_id])
+        campaign["scale"] = np.concatenate([campaign["scale"], campaign_scale])
+        campaign["effect"] = np.concatenate([campaign["effect"], campaign_effect])
+        campaign["offset"] = np.concatenate([campaign["offset"], campaign_offset])
+        campaign["skew"] = np.concatenate([campaign["skew"], campaign_skew])
 
         return campaign
 
