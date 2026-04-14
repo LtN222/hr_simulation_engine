@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import timedelta
 import numpy as np
 import numpy.typing as npt
 import pandas as pd
@@ -28,9 +28,17 @@ class DataGenerator():
             # global start date (for left bound)
             # end date of generated records (for new start date)
 
+    def save_state(self):
+        campaigns = self.state["campaign"]
+        # Convert campaign properties to lists for json conversion
+        for key, value in campaigns.items():
+            campaigns[key] = value.tolist()
+        
+        # write campaign properties to file
+        with open('config/state.json', 'w') as file:
+            json.dump(self.state, file)
 
-
-    def _generate_skewness(self, campaigns: dict[str, list], campaign_ids: npt.NDArray[np.integer], start, end, n: int) -> npt.NDArray[np.floating]:
+    def _generate_skewness(self, campaign_ids: npt.NDArray[np.integer], start, end, n: int) -> npt.NDArray[np.floating]:
         """
         Sample random timestamps from a skewwed normal distribution. 
         Each campaign has its own skewness and peak location within the timeframe.
@@ -42,6 +50,7 @@ class DataGenerator():
 
         :return: sampled datetimes, precision in seconds
         """
+        campaigns = self.state["campaign"]
         # Compute skew per campaign
         skew_per_row = campaigns["skew"][campaign_ids - 1]
 
@@ -126,9 +135,22 @@ class DataGenerator():
         dates = np.where(candidate < end_date, candidate, dates)
 
         return dates
-    
 
-    def _session_date_gen(self, start_date: np.datetime64, end_date: np.datetime64, n: int, n_campaigns: int, campaigns: dict[str, list]) -> tuple[int, npt.NDArray[np.datetime64]]:
+    def _sample_campaign_ids(self, start, end, n):
+        campaigns = self.state["campaign"]
+
+        activity = skewnorm.cdf(end.astype(np.int64), campaigns["skew"], campaigns["offset"], campaigns["scale"]) - \
+                    skewnorm.cdf(start.astype(np.int64), campaigns["skew"], campaigns["offset"], campaigns["scale"])
+
+        # Campaign ID's are sampled based on their current activity in the timeframe
+        weight = activity
+        weight /= weight.sum()
+
+        campaign_ids = self._rng.choice(campaigns["id"], n, p=weight)
+
+        return campaign_ids
+
+    def _session_date_gen(self, start_date: np.datetime64, end_date: np.datetime64, n: int, n_campaigns: int) -> tuple[int, npt.NDArray[np.datetime64]]:
         """
         Generates n random dates between start_date and end_date.
 
@@ -137,10 +159,10 @@ class DataGenerator():
         :param n: number of dates to generate
         :return: list of randomly generated dates in given frame sorted by date
         """
-        campaign_ids = self._sample_campaign_ids(campaigns, start_date, end_date, n)
+        campaign_ids = self._sample_campaign_ids(start_date, end_date, n)
 
         # Generate dates skewwed to simulate campaign effectiveness
-        dates = self._generate_skewness(campaigns, campaign_ids, start_date.astype(np.int64), end_date.astype(np.int64), n)
+        dates = self._generate_skewness(campaign_ids, start_date.astype(np.int64), end_date.astype(np.int64), n)
 
         if self.day_preference:
             dates = self._introduce_day_preference(dates, end_date, campaign_ids, n_campaigns)
@@ -154,8 +176,7 @@ class DataGenerator():
         visit_duration = visit_duration.view(f'timedelta64[{precision}]')
         return visit_duration
 
-
-    def _generate_trend(self, number_of_records: int, min_value: int, max_value: int, campaign_effect: npt.NDArray[np.floating]) -> npt.NDArray:
+    def _generate_trend(self, number_of_records: int, min_value: int, max_value: int, campaign_ids: npt.NDArray[np.floating]) -> npt.NDArray:
         """
         Generate a linear trendline with noise, taking into account the 
         effect of the campaign.
@@ -169,6 +190,10 @@ class DataGenerator():
         :param campaign_effect: effect of the campaign per record
         :return: generated trend clipped to min and max values
         """
+        campaigns = self.state["campaign"]
+        # Map each record to its campaign effect based on campaigns_ids (1-indexed)
+        campaign_effect = campaigns["effect"][campaign_ids - 1]
+
         # trend_base is scaled by campaign effect per record and timeline growth
         trend_base = campaign_effect * np.linspace(min_value, max_value, number_of_records, dtype=float)
 
@@ -179,20 +204,8 @@ class DataGenerator():
 
         return np.clip(trend_base + noise, min_value, max_value)
 
-    def _sample_campaign_ids(self, campaigns, start, end, n):
-
-        activity = skewnorm.cdf(end.astype(np.int64), campaigns["skew"], campaigns["offset"], campaigns["scale"]) - \
-                    skewnorm.cdf(start.astype(np.int64), campaigns["skew"], campaigns["offset"], campaigns["scale"])
-
-        # Campaign ID limited number of campaigns randomly assigned to session (more sessions for effective campaigns)
-        weight = activity
-        weight /= weight.sum()
-
-        campaign_ids = self._rng.choice(campaigns["id"], n, p=weight)
-
-        return campaign_ids
     
-    def add_new_campaigns(self, start, end, n_campaigns):
+    def _add_new_campaigns(self, start, end, n_campaigns):
         """Returns lists of campaign properties of all campaigns, new and old"""
         # Get existing campaign state, if non-existing create new
         campaign = self.state.get("campaign", {
@@ -201,9 +214,13 @@ class DataGenerator():
                 "skew": [],
                 "scale": []
             })
+        
+        # Create campaign counter if not there yet
+        if "n_campaigns" not in self.state:
+            self.state["n_campaigns"] = 0
 
         # Generate ID's for the new campaigns
-        campaign_id = np.arange(1, n_campaigns + 1) + self.state.get("n_campaigns", 0)
+        campaign_id = np.arange(1, n_campaigns + 1) + self.state["n_campaigns"]
 
         # Randomly determine effectiveness of each new campaign
         campaign_effect = self._rng.random(n_campaigns) # IDEA: multiple campaign types and platforms with each their own effect
@@ -227,7 +244,8 @@ class DataGenerator():
         campaign["offset"] = np.concatenate([campaign["offset"], campaign_offset])
         campaign["skew"] = np.concatenate([campaign["skew"], campaign_skew])
 
-        return campaign
+        self.state["campaign"] = campaign
+        self.state["n_campaigns"] += n_campaigns
 
     def generate_data(self, parameters):
         number_of_records = parameters["records"]
@@ -249,10 +267,10 @@ class DataGenerator():
         session_ids = np.arange(1, number_of_records + 1)
 
         # Generate random properties for each campaign
-        campaigns = self.add_new_campaigns(start, end, n_campaigns)
+        self._add_new_campaigns(start, end, n_campaigns)
 
         # Generate random dates and sort for chronological order of sessions
-        campaigns_ids, session_dates = self._session_date_gen(start, end, number_of_records, n_campaigns, campaigns)
+        campaign_ids, session_dates = self._session_date_gen(start, end, number_of_records, n_campaigns)
 
         # A visitor may be recurrent. Therefore the possibility for duplicate IDs is needed
         visitor_ids = self._rng.integers(1, number_of_records * 3, number_of_records)
@@ -264,18 +282,15 @@ class DataGenerator():
 
         conversion = self._rng.random(number_of_records) > conversion_rate
 
-        # Map each record to its campaign effect based on campaigns_ids (1-indexed)
-        campaign_effect = campaigns["effect"][campaigns_ids - 1]
-
         # Generate click trend
-        click_total = self._generate_trend(number_of_records, 0, clicks, campaign_effect).astype(int)
+        click_total = self._generate_trend(number_of_records, 0, clicks, campaign_ids).astype(int)
 
         # Minimal 1 click when a conversion happened
         click_minimum = ((conversion == 1) & (click_total == 0)).astype(int)
         click_total += click_minimum
 
         # Generate pageview trend
-        view_total = self._generate_trend(number_of_records, 1, page_views, campaign_effect)
+        view_total = self._generate_trend(number_of_records, 1, page_views, campaign_ids)
 
         randomized_device = self._rng.integers(1, devices, number_of_records)
 
@@ -283,23 +298,13 @@ class DataGenerator():
 
         randomized_traffic_sources = self._rng.integers(1, traffic_sources, number_of_records)
 
-        # Convert campaign properties to lists for json conversion
-        for key, value in campaigns.items():
-            campaigns[key] = value.tolist()
-        
         # Update state
         self.state["last_record"] = number_of_records + 1
-        self.state["n_campaigns"] = len(campaigns["id"])
-        self.state["campaign"] = campaigns
         self.state["current_date"] = np.datetime_as_string(session_dates[-1], unit='s')
-
-        # write campaign properties to file
-        with open('config/state.json', 'w') as file:
-            json.dump(self.state, file)
 
         generated_records = pd.DataFrame({
             "sessie_ID": session_ids,
-            "campagne_ID": campaigns_ids,
+            "campagne_ID": campaign_ids,
             "bezoeker_ID": visitor_ids,
             "starttijd_bezoek": session_dates,
             "eindtijd_bezoek": session_dates + visit_duration,
@@ -326,5 +331,6 @@ class DataGenerator():
     def save_data(self, data: pd.DataFrame, save_path: str, sep: str = ';', date_format="%d-%m-%Y %H:%M"):
         present_line("Saving records..")
         data.to_csv(save_path, sep=sep, date_format=date_format, index=False)
+        self.save_state()
         present_line("Records saved")
         present_line("\nHave a pretty day!\n")
