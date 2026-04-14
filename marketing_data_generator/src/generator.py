@@ -53,8 +53,6 @@ class DataGenerator():
         skewwed_dates = np.empty(n)
         mask = np.ones(n, dtype=bool)
 
-        print(start, end)
-
         # Resample values out of bounds
         while np.any(mask):
             n_missing = mask.sum()
@@ -139,14 +137,9 @@ class DataGenerator():
         :param n: number of dates to generate
         :return: list of randomly generated dates in given frame sorted by date
         """
-        # Get time difference in seconds
-        delta = end_date - start_date
-        delta_in_seconds = delta.item().total_seconds()
+        campaign_ids = self._sample_campaign_ids(campaigns, start_date, end_date, n)
 
-        midpoint = start_date.astype(np.int64) + (delta_in_seconds / 2)
-        campaign_ids = self._sample_campaign_ids(campaigns, midpoint, n)
-
-        # Generate deltas skewwed to simulate campaign effectiveness
+        # Generate dates skewwed to simulate campaign effectiveness
         dates = self._generate_skewness(campaigns, campaign_ids, start_date.astype(np.int64), end_date.astype(np.int64), n)
 
         if self.day_preference:
@@ -185,17 +178,16 @@ class DataGenerator():
             noise[i] = 0.7 * noise[i-1] + self._rng.normal(0, 0.5)
 
         return np.clip(trend_base + noise, min_value, max_value)
-    
-    def _sample_campaign_ids(self, campaigns, t, n):
 
-        # locs = offset_per_campaign[campaign_ids - 1] - start_date.astype('datetime64[s]').astype(np.int64)
-        distance_to_peak = t - campaigns["offset"]
-        activity = skewnorm.pdf(distance_to_peak, a=campaigns["skew"], loc=0, scale=campaigns["scale"])
+    def _sample_campaign_ids(self, campaigns, start, end, n):
 
+        activity = skewnorm.cdf(end.astype(np.int64), campaigns["skew"], campaigns["offset"], campaigns["scale"]) - \
+                    skewnorm.cdf(start.astype(np.int64), campaigns["skew"], campaigns["offset"], campaigns["scale"])
 
         # Campaign ID limited number of campaigns randomly assigned to session (more sessions for effective campaigns)
-        weight = campaigns["effect"].copy()# * activity
+        weight = activity
         weight /= weight.sum()
+
         campaign_ids = self._rng.choice(campaigns["id"], n, p=weight)
 
         return campaign_ids
