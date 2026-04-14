@@ -5,7 +5,7 @@ import pandas as pd
 from scipy.stats import skewnorm
 import json
 
-from src.utils import present_line, plot_campaign_effect_on_interaction, plot_sessions_per_campaign
+from src.utils import sort_by_date, present_line, plot_campaign_effect_on_interaction, plot_sessions_per_campaign
 
 
 class DataGenerator():
@@ -18,6 +18,7 @@ class DataGenerator():
         self._rng = np.random.default_rng(seed)
         self.day_preference = day_preference
         self.state = {} # state object contains state of simulation
+        self.update = update
         if update:
             with open('config/state.json') as file:
                 self.state = json.load(file)
@@ -79,24 +80,6 @@ class DataGenerator():
 
         return skewwed_dates.astype('datetime64[s]')
 
-    def _sort_by_date(self, ids: npt.NDArray[np.integer], dates: npt.NDArray[np.datetime64]) -> tuple[npt.NDArray[np.integer], npt.NDArray[np.datetime64]]:
-        """
-        Sort dates together with its campaign_ids.
-
-        :param ids: ids that are coupled with the dates
-        :param dates: dates to be sorted
-
-        :return: sorted ids, sorted dates
-        """
-        # Get the indexorder of the sorted array
-        idx = np.argsort(dates)
-
-        # Sort the arrays
-        sorted_ids = ids[idx]
-        sorted_dates = dates[idx]
-
-        return sorted_ids, sorted_dates
-    
     def _introduce_day_preference(self, dates: npt.NDArray[np.datetime64], end_date: np.datetime64, campaign_ids: npt.NDArray[np.integer], n_campaigns: int) -> npt.NDArray[np.datetime64]:
         """
         Bias already calculated dates towards weekdays or weekends.
@@ -167,7 +150,7 @@ class DataGenerator():
         if self.day_preference:
             dates = self._introduce_day_preference(dates, end_date, campaign_ids, n_campaigns)
 
-        campaign_ids, sorted_dates = self._sort_by_date(campaign_ids, dates)
+        campaign_ids, sorted_dates = sort_by_date(campaign_ids, dates)
 
         return campaign_ids, sorted_dates
     
@@ -330,7 +313,9 @@ class DataGenerator():
 
     def save_data(self, data: pd.DataFrame, save_path: str, sep: str = ';', date_format="%d-%m-%Y %H:%M"):
         present_line("Saving records..")
-        data.to_csv(save_path, sep=sep, date_format=date_format, index=False)
+        # Append to file when updating
+        write_mode = 'a' if self.update else 'w'
+        data.to_csv(save_path, sep=sep, date_format=date_format, mode=write_mode, index=False)
         self.save_state()
         present_line("Records saved")
         present_line("\nHave a pretty day!\n")

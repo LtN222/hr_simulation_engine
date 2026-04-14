@@ -1,7 +1,7 @@
 import time
 import matplotlib.pyplot as plt
 import pandas as pd
-import scipy.stats
+import numpy.typing as npt
 import numpy as np
 
 """
@@ -70,3 +70,22 @@ def plot_sessions_per_campaign(session_dates, campaigns_ids):
 
     plt.tight_layout()
     plt.show()
+
+
+def sort_by_date(ids: npt.NDArray[np.integer], dates: npt.NDArray[np.datetime64]) -> tuple[npt.NDArray[np.integer], npt.NDArray[np.datetime64]]:
+    """
+    Sort dates together with its campaign_ids.
+
+    :param ids: ids that are coupled with the dates
+    :param dates: dates to be sorted
+
+    :return: sorted ids, sorted dates
+    """
+    # Get the indexorder of the sorted array
+    idx = np.argsort(dates)
+
+    # Sort the arrays
+    sorted_ids = ids[idx]
+    sorted_dates = dates[idx]
+
+    return sorted_ids, sorted_dates
