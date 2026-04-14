@@ -1,8 +1,6 @@
 from datetime import datetime
-from src.utils import present_line
+from src.utils import present_line, load_state, DATE_FORMAT
 import math
-
-DATE_FORMAT = "%d-%m-%Y"
 
 class ParameterInputHandler():
     def __init__(self, max_records = 100000):
@@ -361,15 +359,15 @@ class ParameterInputHandler():
 
         return parameters
 
-    def update_parameters(self, args) -> dict[str, int | str | tuple[datetime]]:
+    def update_parameters(self, args, state_path: str = 'config/state.json') -> dict[str, int | str | tuple[datetime]]:
         """
         Method contract to be included
         :param args:
         :return:
         """
         # DEBATEABLE: standard update to today from last day read from state.
-        timeframe = (datetime.strptime(args.timeframe[0], DATE_FORMAT), datetime.strptime(args.timeframe[1], DATE_FORMAT))
-        print(timeframe)
+        state = load_state(state_path)
+        timeframe = (datetime.strptime(state.get('current_date'), DATE_FORMAT), datetime.today())
         parameters = dict()
         parameters["records"] = args.records
         parameters["campaigns"] = args.campaigns

@@ -1,8 +1,11 @@
+import json
 import time
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy.typing as npt
 import numpy as np
+
+DATE_FORMAT = "%d-%m-%Y"
 
 """
 ##############################################
@@ -41,24 +44,16 @@ def plot_sessions_per_campaign(session_dates, campaigns_ids):
     # 1. Zet je list om naar een Pandas Series
     dates_series = pd.Series(session_dates)
     dates = pd.Series(session_dates).groupby(campaigns_ids).apply(list)
-    # for date in dates:
-    #     dt = pd.Series(date).dt.date.value_counts().sort_index()
-        # print(scipy.stats.skew(np.array(dt)))
-    # 2. Tel het aantal sessies per dag
-    # We sorteren op index om de tijdlijn chronologisch te houden
     dagelijkse_counts = dates_series.dt.date.value_counts().sort_index()
-    dagelijkse_counts_1 = pd.Series(dates[1]).dt.date.value_counts().sort_index()
-    dagelijkse_counts_2 = pd.Series(dates[2]).dt.date.value_counts().sort_index()
-    dagelijkse_counts_3 = pd.Series(dates[3]).dt.date.value_counts().sort_index()
 
     # 3. Plot de Verdeling (De 'Piek' in de tijd)
     plt.figure(figsize=(12, 5))
 
     plt.subplot(1, 2, 1)
     dagelijkse_counts.plot(kind='line', color='blue', title='Sessies per Dag')
-    dagelijkse_counts_1.plot()
-    dagelijkse_counts_2.plot()
-    dagelijkse_counts_3.plot()
+    for date in dates:
+        dt = pd.Series(date).dt.date.value_counts().sort_index()
+        dt.plot()
     plt.ylabel('Aantal sessies')
     plt.grid(True, alpha=0.3)
 
@@ -89,3 +84,10 @@ def sort_by_date(ids: npt.NDArray[np.integer], dates: npt.NDArray[np.datetime64]
     sorted_dates = dates[idx]
 
     return sorted_ids, sorted_dates
+
+def load_state(state_path: str = 'config/state.json'):
+    try:
+        with open(state_path) as file:
+            return json.load(file)
+    except FileNotFoundError:
+        return {}  # Default empty state

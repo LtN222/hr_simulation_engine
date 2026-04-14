@@ -1,10 +1,10 @@
 from datetime import datetime, timedelta
 import argparse
 
-from src.parameters import ParameterInputHandler, DATE_FORMAT
+from src.parameters import ParameterInputHandler
 from src.generator import DataGenerator
 
-from src.utils import present_line
+from src.utils import present_line, DATE_FORMAT
 
 
 """
@@ -86,24 +86,6 @@ def range_check(low, high = None):
 
     return int_range_checker
 
-def timeframe_validation():
-    """
-    Function handle for generating data for a single day
-    """
-    def validate_timeframe(timeframe):
-        try:
-            given_date = datetime.strptime(timeframe, DATE_FORMAT)
-        except:
-            present_line(f"Date argument is invalid: {timeframe}")
-            present_line("Please try again.")
-            exit(1)
-
-        yesterday = given_date - timedelta(days=1)
-
-        return [yesterday.strftime(DATE_FORMAT), given_date.strftime(DATE_FORMAT)]
-
-    return validate_timeframe
-
 def help_handler():
     parser = argparse.ArgumentParser(
         prog="Dataset generator Sales Dashboard",
@@ -116,7 +98,6 @@ def help_handler():
                         'update' to set the update scenario
                         int for the number of records
                         int for the number of campaigns
-                        date in string format (use yesterday for realistic update data)
                         int for the number of locations
                         int for the number of devices
                         int for the number of clicks
@@ -152,8 +133,8 @@ def help_handler():
                                help="Number of records to generate.")
     update_parser.add_argument('-c', '--campaigns', required=True, default=3, type=range_check(1, 10),
                                help="Number of campaigns to run")
-    update_parser.add_argument('-t', '--timeframe', required=True, default="02-08-2002", type=timeframe_validation(),
-                               help="Date to update records to")
+    # update_parser.add_argument('-t', '--timeframe', required=True, default="02-08-2002", type=timeframe_validation(),
+    #                            help="Date to update records to")
     update_parser.add_argument('-l', '--location', required=True, default=10, type=range_check(1),
                                help="Number of locations.")
     update_parser.add_argument('-d', '--devices', required=True, default=10, type=range_check(1, 100),
