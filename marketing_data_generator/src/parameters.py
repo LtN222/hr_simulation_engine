@@ -5,7 +5,6 @@ import math
 class ParameterInputHandler():
     def __init__(self, max_records = 100000):
         self.max_limit = max_records
-        pass
 
     
     def _get_number_of_records_needed(self) -> int:
@@ -345,10 +344,10 @@ class ParameterInputHandler():
         Method contract to be included
         :return:
         """
-        timeframe = (datetime.strptime("01-01-2001", DATE_FORMAT), datetime.strptime("01-08-2002", DATE_FORMAT))
+        timeframe = (datetime.strptime("01-01-2001", DATE_FORMAT), datetime.strptime("01-08-2001", DATE_FORMAT))
         parameters = dict()
-        parameters["records"] = 100000
-        parameters["campaigns"] = 3
+        parameters["records"] = 1000
+        parameters["campaigns"] = 2
         parameters["timeframe"] = timeframe
         parameters["location"] = 10
         parameters["devices"] = 10

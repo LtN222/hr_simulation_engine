@@ -123,6 +123,8 @@ def help_handler():
                                         Execute the script with 'test' as argument.
                                         Example: Python .\\generate_dataset.py test
                                         """, formatter_class=argparse.RawDescriptionHelpFormatter)
+    tstsub_parser = test_parser.add_subparsers(dest='command')
+    tstsub_parser.add_parser('increment')
     update_parser = subparsers.add_parser('update', help='Get a dataset for 1 day, to update existing data.', description="""
                                         Get a dataset for 1 day, to update existing data.
                                         Execute the script with parameters.
@@ -164,9 +166,13 @@ def main():
     update = args.method == 'update'
     generator = DataGenerator(update=update) # optional: DataGenerator(seed=42, day_preference=True)
 
-    try:
-        # Generate data
+    # Generate data
+    if args.command == 'increment':
+        records = generator.generate_incremental(parameters)
+    else:
         records = generator.generate_data(parameters)
+    try:
+        pass
     except KeyboardInterrupt:
         present_line("\n\nCtrl+C detected, data generation stops..")
         exit(1)
@@ -179,7 +185,8 @@ def main():
         exit(1)
 
     try:
-        generator.save_data(records, 'generated_dataset.txt', date_format="%d-%m-%Y %H:%M")
+        if not args.command == 'increment':
+            generator.save_data(records, 'generated_dataset.txt', date_format="%d-%m-%Y %H:%M")
     except KeyboardInterrupt:
         present_line("\n\nCtrl+C detected, data saving stops..")
         exit(1)

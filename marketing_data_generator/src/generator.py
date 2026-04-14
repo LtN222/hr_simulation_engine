@@ -132,7 +132,7 @@ class DataGenerator():
                     skewnorm.cdf(start, campaigns["skew"], campaigns["offset"], campaigns["scale"])
 
         # Campaign ID's are sampled based on their current activity in the timeframe
-        weight = activity
+        weight = activity.clip(0, 1)
         weight /= weight.sum()
 
         campaign_ids = self._rng.choice(campaigns["id"], n, p=weight)
@@ -220,7 +220,7 @@ class DataGenerator():
         campaign_skew = (campaign_effect - 0.5) * 10
 
         # Compute scale with a maximum campaign duration of 2 years
-        campaign_scale = np.timedelta64(2, 'Y').astype('timedelta64[s]').astype(np.int64) * (1 - campaign_effect)
+        campaign_scale = np.timedelta64(3, 'W').astype('timedelta64[s]').astype(np.int64) * (1 - campaign_effect)
 
         # Update campaign state
         campaign["id"] = np.concatenate([campaign["id"], campaign_id])
@@ -312,6 +312,25 @@ class DataGenerator():
             present_line("The number of records generated doesn't equal the number of records needed.")
 
         return generated_records
+
+    def generate_incremental(self, parameters: dict):
+        start, end = parameters["timeframe"]
+
+        weekly_parameters = parameters.copy()
+        current_start = start
+        current_end = start + timedelta(days=7)
+        weekly_parameters["timeframe"] = (current_start, current_end)
+        records = self.generate_data(weekly_parameters)
+        current_start = current_end
+        current_end += timedelta(weeks=1)
+        self.save_data(records, 'incremental_dataset.csv')
+        self.update = True
+        while current_end < end:
+            weekly_parameters["timeframe"] = (current_start, current_end)
+            records = self.generate_data(weekly_parameters)
+            current_start = current_end
+            current_end += timedelta(weeks=1)
+            self.save_data(records, 'incremental_dataset.csv')
 
     def save_data(self, data: pd.DataFrame, save_path: str, sep: str = ';', date_format="%d-%m-%Y %H:%M"):
         present_line("Saving records..")
