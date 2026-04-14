@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta
 import argparse
 
-from src.parameters import ParameterInputHandler
+from src.parameters import ParameterInputHandler, DATE_FORMAT
 from src.generator import DataGenerator
 
 from src.utils import present_line
@@ -92,7 +92,7 @@ def timeframe_validation():
     """
     def validate_timeframe(timeframe):
         try:
-            given_date = datetime.strptime(timeframe, format="%d-%m-%Y")
+            given_date = datetime.strptime(timeframe, DATE_FORMAT)
         except:
             present_line(f"Date argument is invalid: {timeframe}")
             present_line("Please try again.")
@@ -100,7 +100,7 @@ def timeframe_validation():
 
         yesterday = given_date - timedelta(days=1)
 
-        return [yesterday.strftime("%d-%m-%Y"), timeframe]
+        return [yesterday.strftime(DATE_FORMAT), given_date.strftime(DATE_FORMAT)]
 
     return validate_timeframe
 
@@ -145,14 +145,14 @@ def help_handler():
     update_parser = subparsers.add_parser('update', help='Get a dataset for 1 day, to update existing data.', description="""
                                         Get a dataset for 1 day, to update existing data.
                                         Execute the script with parameters.
-                                        Example: Python .\\generate_dataset.py --update -r 1000 -c 3 -t 20-03-2026 -l 10 -d 10 -cl 25 -pv 15 -ts 5
+                                        Example: Python .\\generate_dataset.py update -r 1000 -c 3 -t 20-03-2026 -l 10 -d 10 -cl 25 -pv 15 -ts 5
                                         """, formatter_class=argparse.RawDescriptionHelpFormatter)
     
     update_parser.add_argument('-r', '--records', required=True, default=100000, type=range_check(1, MAX_RECORDS),
                                help="Number of records to generate.")
     update_parser.add_argument('-c', '--campaigns', required=True, default=3, type=range_check(1, 10),
                                help="Number of campaigns to run")
-    update_parser.add_argument('-t', '--timeframe', required=True, default="02-08-2002", type=timeframe_validation,
+    update_parser.add_argument('-t', '--timeframe', required=True, default="02-08-2002", type=timeframe_validation(),
                                help="Date to update records to")
     update_parser.add_argument('-l', '--location', required=True, default=10, type=range_check(1),
                                help="Number of locations.")
@@ -164,7 +164,7 @@ def help_handler():
                                help="Number of page_views.")
     update_parser.add_argument('-ts', '--traffic_source', required=True, default=5, type=range_check(1, 50),
                                help="Number of traffic_sources.")
-    update_parser.add_argument('-cr', '--conversion_rate', required=False, default='generated_dataset.txt',
+    update_parser.add_argument('-cr', '--conversion_rate', required=False, default=0.85,
                                help="Percentage of sessions leading to conversion.")
     update_parser.add_argument('-f', '--input_file', required=False, default='generated_dataset.txt',
                                help="Input file.")
@@ -180,7 +180,8 @@ def main():
         present_line("\n\nCtrl+C detected, closing program..")
         exit(1)
 
-    generator = DataGenerator() # optional: DataGenerator(seed=42, day_preference=True)
+    update = args.method == 'update'
+    generator = DataGenerator(update=update) # optional: DataGenerator(seed=42, day_preference=True)
 
     try:
         # Generate data

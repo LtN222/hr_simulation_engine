@@ -361,13 +361,15 @@ class ParameterInputHandler():
 
         return parameters
 
-    def update_parameters(sefl, args) -> dict[str, int | str | tuple[datetime]]:
+    def update_parameters(self, args) -> dict[str, int | str | tuple[datetime]]:
         """
         Method contract to be included
         :param args:
         :return:
         """
+        # DEBATEABLE: standard update to today from last day read from state.
         timeframe = (datetime.strptime(args.timeframe[0], DATE_FORMAT), datetime.strptime(args.timeframe[1], DATE_FORMAT))
+        print(timeframe)
         parameters = dict()
         parameters["records"] = args.records
         parameters["campaigns"] = args.campaigns
@@ -377,7 +379,7 @@ class ParameterInputHandler():
         parameters["clicks"] = args.clicks
         parameters["page_views"] = args.page_views
         parameters["traffic_source"] = args.traffic_source
-        parameters["conversion_rate"] = args.conversion_rate
+        parameters["conversion_rate"] = self._validate_float(args.conversion_rate)
 
         return parameters
 
