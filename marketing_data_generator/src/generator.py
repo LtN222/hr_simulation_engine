@@ -242,7 +242,6 @@ class DataGenerator():
         clicks = parameters["clicks"]
         page_views = parameters["page_views"]
         traffic_sources = parameters["traffic_source"]
-        conversion_rate = parameters["conversion_rate"]
 
         # Convert to numpy datetime for efficient calculations
         start_ts = np.datetime64(start, 's').astype(np.int64)
@@ -267,23 +266,35 @@ class DataGenerator():
         max_visit_time = 30 # minutes
         visit_duration = self._generate_visit_duration(min_visit_time, max_visit_time, number_of_records, precision='m')
 
-        conversion = self._rng.random(number_of_records) > conversion_rate
-
         # Generate click trend
         click_total = self._generate_trend(number_of_records, 0, clicks, campaign_ids).astype(int)
-
-        # Minimal 1 click when a conversion happened
-        click_minimum = ((conversion == 1) & (click_total == 0)).astype(int)
-        click_total += click_minimum
 
         # Generate pageview trend
         view_total = self._generate_trend(number_of_records, 1, page_views, campaign_ids)
 
+        # The influence parameters have on conversion chance
+        conversion_influence = {
+            'click': 0.35,
+            'page_view': 0.15,
+            'duration': 0.5
+        }
+        # Compute conversion chance
+        conversion_chance = 0.0
+        conversion_chance += conversion_influence['click'] * (click_total / clicks)
+        conversion_chance += conversion_influence['page_view'] * (view_total / page_views)
+        conversion_chance += conversion_influence['duration'] * (visit_duration.astype(np.int64) / max_visit_time)
+
+        # Compute conversions
+        conversion = self._rng.random(number_of_records) < conversion_chance
+        
         randomized_device = self._rng.integers(1, devices, number_of_records)
 
         randomized_city = self._rng.integers(1, location, number_of_records)
 
         randomized_traffic_sources = self._rng.integers(1, traffic_sources, number_of_records)
+
+
+
 
         # Update state
         self.state["last_record"] = old_records + number_of_records

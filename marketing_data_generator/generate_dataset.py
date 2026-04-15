@@ -147,8 +147,6 @@ def help_handler():
                                help="Number of page_views.")
     update_parser.add_argument('-ts', '--traffic_source', required=True, default=5, type=range_check(1, 50),
                                help="Number of traffic_sources.")
-    update_parser.add_argument('-cr', '--conversion_rate', required=False, default=0.85,
-                               help="Percentage of sessions leading to conversion.")
     update_parser.add_argument('-f', '--input_file', required=False, default='generated_dataset.txt',
                                help="Input file.")
     args = parser.parse_args()

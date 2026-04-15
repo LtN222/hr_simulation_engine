@@ -150,14 +150,6 @@ class ParameterInputHandler():
         """
         message = f"What is the maximum number of traffic sources for each record: "
         return self._validate_input(message)
-    
-
-    def _get_conversion_rate(self) -> float:
-        """
-        :return: A validated float provided by the user.
-        """
-        message = f"What is the conversion chance for each record (between 0 and 1): "
-        return self._validate_input(message, limit=1.0, dtype=float)
 
 
     def _validate_float(self, input, limit = 1.0):
@@ -295,7 +287,6 @@ class ParameterInputHandler():
         present_line(f"Traffic source data set to: {parameters['traffic_source']}")
         present_line(f"Limit for clicks set to: {parameters['clicks']}")
         present_line(f"Limit for page views set to: {parameters['page_views']}")
-        present_line(f"Conversion rate set to: {parameters['conversion_rate']}")
 
 
     def get_parameters(self) -> dict[str, int | str | list[str]]:
@@ -328,7 +319,6 @@ class ParameterInputHandler():
             parameters["clicks"] = self._get_clicks_range()
             parameters["page_views"] = self._get_page_visit_range()
             parameters["traffic_source"] = self._get_traffic_source()
-            parameters["conversion_rate"] = self._get_conversion_rate()
 
             # Ask user to agree to current parameters
             if self._confirm_parameters(parameters): # User agrees -> continue to next phase
@@ -354,7 +344,6 @@ class ParameterInputHandler():
         parameters["clicks"] = 25
         parameters["page_views"] = 15
         parameters["traffic_source"] = 5
-        parameters["conversion_rate"] = 0.85
 
         return parameters
 
@@ -376,7 +365,6 @@ class ParameterInputHandler():
         parameters["clicks"] = args.clicks
         parameters["page_views"] = args.page_views
         parameters["traffic_source"] = args.traffic_source
-        parameters["conversion_rate"] = self._validate_float(args.conversion_rate)
 
         return parameters
 
@@ -396,8 +384,7 @@ class ParameterInputHandler():
             "devices",
             "clicks",
             "page_views",
-            "traffic_source",
-            "conversion_rate"
+            "traffic_source"
         }
 
         # Opening JSON file
@@ -416,11 +403,9 @@ class ParameterInputHandler():
 
             # Validate all keys have correct data type
             for key in keys:
-                # Skip timeframe
-                if key == "timeframe": continue
-                if key == "conversion_rate": 
-                    data[key] = self._validate_float(data[key])
-                else: 
+                if key == "timeframe": 
+                    self._validate_date(data[key][1], data[key][0])
+                else:
                     data[key] = self._validate_int(data[key])
 
             data['timeframe'] = tuple(datetime.strptime(date, DATE_FORMAT) for date in data['timeframe'])
