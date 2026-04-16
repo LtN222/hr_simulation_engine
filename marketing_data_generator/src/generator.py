@@ -7,6 +7,8 @@ import json
 
 from src.utils import sort_by_date, present_line, load_state, dict_ndarray_to_list, DATE_FORMAT
 
+from src.utils import plot_sessions_per_campaign
+
 MAX_VISIT_TIME = 30 # minutes TODO: Get from config file
 
 class DataGenerator():
@@ -40,6 +42,7 @@ class DataGenerator():
 
     def save_state(self):
         # Convert campaign properties to lists for json conversion
+        self.state["campaign"]["sessions"]["loc"] = self.state["campaign"]["sessions"]["loc"].astype('datetime64[s]').astype(str)
         self.state["campaign"] = dict_ndarray_to_list(self.state["campaign"])
 
         # write state to file
@@ -72,8 +75,10 @@ class DataGenerator():
         # Randomly place the peaks of the new campaigns in the new timeframe
         campaign_mean = self._rng.uniform(start, end, n_campaigns)
 
-        # Use the offset to place the starting location in the future
-        campaign_offset = stats.skewnorm.ppf(0.01, a=campaign_speed, loc=campaign_mean, scale=campaign_scale)
+        # Get the starting location of the campaign
+        campaign_start = stats.skewnorm.ppf(0.001, a=campaign_speed, loc=campaign_mean, scale=campaign_scale)
+        # Use the offset to place the starting location in the future makes all campaigns start at the same time
+        campaign_offset = np.abs(start - campaign_start)
 
         page_prob = self._rng.random(n_campaigns)
 
@@ -111,28 +116,37 @@ class DataGenerator():
         :return: sampled datetimes, precision in seconds
         """
         session_parameters = self.state["campaign"]["sessions"]
+
         # Compute parameters per row
         skew_per_row = session_parameters["skew"][campaign_ids - 1]
         locs_per_row = session_parameters["loc"][campaign_ids - 1]
         scale_per_row = session_parameters["scale"][campaign_ids - 1]
 
+        # Generate sessions
         skewwed_dates = np.empty(n)
-        mask = np.ones(n, dtype=bool)
+        samples = stats.skewnorm.rvs(
+            a=skew_per_row,
+            loc=locs_per_row,
+            scale=scale_per_row,
+            size=n,
+            random_state=self._rng
+        )
+        # Accept only that fall within timeframe
+        accept = (samples >= start) & (samples <= end)
+        skewwed_dates = np.where(accept, samples, skewwed_dates)
 
-        # Resample values out of bounds
-        while np.any(mask):
-            n_missing = mask.sum()
-            samples = stats.skewnorm.rvs(
-                a=skew_per_row[mask],
-                loc=locs_per_row[mask],
-                scale=scale_per_row[mask],
-                size=n_missing,
-                random_state=self._rng
-            )
-            # Accept only values within [0, delta_in_seconds]
-            accept = (samples >= start) & (samples <= end)
-            skewwed_dates[mask] = np.where(accept, samples, skewwed_dates[mask])
-            mask[mask] = np.logical_not(accept)  # resample rejected values
+        # Resample values that fall out of bounds
+        resample = np.logical_not(accept)
+
+        # Determine density of the campaigns
+        start_density = stats.skewnorm.cdf(start, a=session_parameters["skew"], loc=session_parameters["loc"], scale=session_parameters["scale"])
+        end_density = stats.skewnorm.cdf(end, a=session_parameters["skew"], loc=session_parameters["loc"], scale=session_parameters["scale"])
+
+        # Sample percentile within timeframe
+        sample_locations = self._rng.uniform(start_density[campaign_ids - 1][resample], end_density[campaign_ids - 1][resample], resample.sum())
+
+        # Sample rest of dates using percentiles
+        skewwed_dates[resample] = stats.skewnorm.ppf(sample_locations, a=skew_per_row[resample], loc=locs_per_row[resample], scale=scale_per_row[resample])
 
         return skewwed_dates.astype('datetime64[s]')
 
@@ -190,14 +204,19 @@ class DataGenerator():
 
         return campaign_ids
 
-    def _generate_visit_duration(self, pageviews, n, precision = 'm') -> npt.NDArray:
-        duration_parameters = self.state["campaign"]["durations"]
+    def _generate_visit_duration(self, campaign_ids, pageviews, n, precision = 'm') -> npt.NDArray:
+        duration_parameters = self.state["campaign"]["duration"]
+
+        shape_per_row = duration_parameters["shape"][campaign_ids - 1]
+        loc_per_row = duration_parameters["min_duration"][campaign_ids - 1]
+        scale_per_row = duration_parameters["avg_duration"][campaign_ids - 1]
         
-        visit_duration = stats.gamma.rvs(a=duration_parameters["shape"], 
-                                         loc=pageviews * duration_parameters["min_duration"], 
-                                         scale=duration_parameters["avg_duration"], 
-                                         size=n)
-        visit_duration = visit_duration.view(f'timedelta64[{precision}]')
+        visit_duration = stats.gamma.rvs(a=shape_per_row, 
+                                         loc=pageviews * loc_per_row, 
+                                         scale=scale_per_row, 
+                                         size=n, random_state=self._rng)
+        visit_duration = visit_duration.astype(f'timedelta64[{precision}]')
+
         return visit_duration
 
     def _generate_page_views(self, number_of_records: int, min_value: int, max_value: int, campaign_ids: npt.NDArray[np.floating]) -> npt.NDArray:
@@ -238,7 +257,7 @@ class DataGenerator():
         """
         campaigns = self.state["campaign"]
         # Map each record to its campaign effect based on campaigns_ids (1-indexed)
-        campaign_effect = campaigns["effect"][campaign_ids - 1]
+        campaign_effect = campaigns["sessions"]["reach"][campaign_ids - 1]
 
         # trend_base is scaled by campaign effect per record and timeline growth
         trend_base = campaign_effect * np.linspace(min_value, max_value, number_of_records, dtype=float)
@@ -255,7 +274,7 @@ class DataGenerator():
         view_total = self._generate_page_views(number_of_records, 1, page_views, campaign_ids)
 
         # Generate visit duration trend
-        visit_duration = self._generate_visit_duration(view_total, number_of_records, precision='m')
+        visit_duration = self._generate_visit_duration(campaign_ids, view_total, number_of_records, precision='m')
 
         # Generate click trend
         click_total = self._generate_trend(number_of_records, 0, clicks, campaign_ids).astype(int)

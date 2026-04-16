@@ -96,7 +96,6 @@ def load_state(state_path: str = 'config/state.json'):
 def dict_ndarray_to_list(dictionary: dict[str, npt.NDArray | dict]):
     for key, value in dictionary.items():
         if type(value) == dict:
-            print(key)
             dictionary[key] = dict_ndarray_to_list(value)
         elif type(value) == list: continue
         else: 
