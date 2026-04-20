@@ -324,6 +324,10 @@ class DataGenerator():
             'page_view': 0.15,
             'duration': 0.5
         }
+        # Make sure values are normalized
+        infl_sum = sum(conversion_influence.values())
+        conversion_influence = {key: value/infl_sum for key, value in conversion_influence.items()}
+
         # Compute conversion chance
         conversion_chance = 0.0
         conversion_chance += conversion_influence['click'] * (click_total / clicks)
