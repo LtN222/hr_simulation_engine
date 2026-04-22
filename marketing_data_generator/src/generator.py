@@ -5,7 +5,8 @@ import pandas as pd
 from scipy import stats
 import json
 
-from src.utils import sort_by_date, present_line, load_state, dict_ndarray_to_list, DATE_FORMAT
+from src.utils import dict_list_to_ndarray, sort_by_date, present_line, dict_ndarray_to_list, DATE_FORMAT
+from src import utils
 
 from src.utils import plot_sessions_per_campaign
 
@@ -37,8 +38,16 @@ class DataGenerator():
         self.update = update
         self.state_path = state_path
 
+        # Initialize default state values
+        self.state["campaign"] = self._default_campaign.copy()
+
         if update:
-            self.state = load_state(state_path)
+            self.load_state(state_path)
+
+    def load_state(self, state_path):
+        self.state = utils.load_state(state_path)
+        self.state['campaign'] = dict_list_to_ndarray(self.state['campaign'])
+        self.state["campaign"]["session"]["loc"] = self.state["campaign"]["session"]["loc"].astype('datetime64[D]').astype(np.int64)
 
     def save_state(self):
         # Convert campaign properties to lists for json conversion
@@ -48,7 +57,7 @@ class DataGenerator():
         # write state to file
         with open(self.state_path, 'w') as file:
             json.dump(self.state, file, indent=4)
-    
+
     def _add_new_campaigns(self, start, end, n_campaigns):
         """Returns lists of campaign properties of all campaigns, new and old"""
         campaign = self.state.get("campaign", self._default_campaign)
@@ -82,14 +91,19 @@ class DataGenerator():
         # Use the offset to place the starting location in the future, makes all campaigns start at the same time
         campaign_offset = np.abs(start - campaign_start)
 
+        # Probability of visiting the next page
         page_prob = self._rng.random(n_campaigns)
 
+        # Shape of the visit curve per campaign
         visit_shape = self._rng.uniform(1, 3, n_campaigns)
+        # Generate average visit duration per page
         visit_avg_duration = self._rng.uniform(1, MAX_VISIT_TIME, n_campaigns)
+        # Generate minimum visit duration per page
         visit_min_duration = self._rng.uniform(1, 5, n_campaigns)
 
+        # Average number of clicks per page per campaign
         click_shape = self._rng.uniform(0.5, 1, n_campaigns)
-        click_avg_click = self._rng.integers(1, 100, n_campaigns)
+        # Minimum number of clicks per page per campaign
         click_min_click = self._rng.integers(0, 4, n_campaigns)
 
         # Update campaign state
@@ -106,31 +120,30 @@ class DataGenerator():
         campaign["duration"]["min_duration"] = np.concatenate([campaign["duration"]["min_duration"], visit_min_duration])
 
         campaign["click"]["shape"] = np.concatenate([campaign["click"]["shape"], click_shape])
-        campaign["click"]["avg_click"] = np.concatenate([campaign["click"]["avg_click"], click_avg_click])
         campaign["click"]["min_click"] = np.concatenate([campaign["click"]["min_click"], click_min_click])
 
         self.state["n_campaigns"] = n_existing + n_campaigns
         self.state["campaign"] = campaign
 
-    def _generate_session_times(self, n):
+    def _generate_session_times(self, number_of_records):
         # Select peak our (14 == 14:00, 14.5 == 14:30)
         peak_hour = 14 * 60
 
         min_per_day = np.timedelta64(1, 'D').astype('timedelta64[m]').astype(np.int64)
 
         accepted_hours = []
-        while len(accepted_hours) < n:
+        while len(accepted_hours) < number_of_records:
             # Sample hours from normal distribution
-            sample = self._rng.normal(loc=peak_hour, scale=5 * 60, size=n * 2)
+            sample = self._rng.normal(loc=peak_hour, scale=5 * 60, size=number_of_records * 2)
 
             accepted_hours = sample[(sample >= 0) & (sample < min_per_day)]
 
-        session_hours = accepted_hours[:n]
+        session_hours = accepted_hours[:number_of_records]
 
         # Return as timedelta in minutes
         return session_hours.astype('timedelta64[m]')
 
-    def _generate_session_dates(self, campaign_ids: npt.NDArray[np.integer], start: np.int64, end: np.int64, n: int) -> npt.NDArray[np.floating]:
+    def _generate_session_dates(self, campaign_ids: npt.NDArray[np.integer], n: int, start: int, end: int) -> npt.NDArray[np.floating]:
         """
         Sample random timestamps from a skewwed normal distribution. 
         Each campaign has its own skewness and peak location within the timeframe.
@@ -182,10 +195,10 @@ class DataGenerator():
         skewwed_dates[resample] = stats.skewnorm.ppf(sample_locations, a=skew_per_row[resample], loc=locs_per_row[resample], scale=scale_per_row[resample])
 
         return skewwed_dates.astype('datetime64[D]')
-    
-    def _generate_sessions(self, start, end, campaign_ids, n):
-        session_dates = self._generate_session_dates(campaign_ids, start, end, n)
-        session_times = self._generate_session_times(n)
+
+    def _generate_sessions(self, campaign_ids: npt.NDArray[np.integer], number_of_records, start: int, end: int):
+        session_dates = self._generate_session_dates(campaign_ids, number_of_records, start, end)
+        session_times = self._generate_session_times(number_of_records)
 
         return session_dates + session_times
 
@@ -228,7 +241,7 @@ class DataGenerator():
 
         return dates
 
-    def _sample_campaign_ids(self, start, end, n):
+    def _sample_campaign_ids(self, number_of_records: int, start: int, end: int):
         campaigns = self.state["campaign"]
         session_parameters = campaigns["session"]
 
@@ -239,11 +252,11 @@ class DataGenerator():
         weight = activity.clip(0, 1) * session_parameters["reach"]
         weight /= weight.sum()
 
-        campaign_ids = self._rng.choice(campaigns["id"], n, p=weight)
+        campaign_ids = self._rng.choice(campaigns["id"], number_of_records, p=weight)
 
         return campaign_ids
 
-    def _generate_visit_duration(self, campaign_ids, pageviews, n, precision = 'm') -> npt.NDArray:
+    def _generate_visit_duration(self, campaign_ids: npt.NDArray[np.integer], number_of_records: int, pageviews: int, precision: str = 'm') -> npt.NDArray:
         duration_parameters = self.state["campaign"]["duration"]
 
         shape_per_row = duration_parameters["shape"][campaign_ids - 1]
@@ -253,12 +266,12 @@ class DataGenerator():
         visit_duration = stats.gamma.rvs(a=shape_per_row,
                                          loc=pageviews * loc_per_row,
                                          scale=scale_per_row, 
-                                         size=n, random_state=self._rng)
+                                         size=number_of_records, random_state=self._rng)
         visit_duration = visit_duration.astype(f'timedelta64[{precision}]')
 
         return visit_duration
 
-    def _generate_page_views(self, number_of_records: int, min_value: int, max_value: int, campaign_ids: npt.NDArray[np.floating]) -> npt.NDArray:
+    def _generate_page_views(self, campaign_ids: npt.NDArray[np.integer], number_of_records: int) -> npt.NDArray:
         """
         Generate a linear trendline with noise, taking into account the 
         effect of the campaign.
@@ -278,9 +291,9 @@ class DataGenerator():
 
         page_views = stats.geom.rvs(p_per_row, size=number_of_records, random_state=self._rng)
 
-        return np.clip(page_views, min_value, max_value)
+        return np.clip(page_views, 1, self.state['max_page_views'])
 
-    def _generate_clicks(self, pageviews, n: int, campaign_ids: npt.NDArray[np.floating]) -> npt.NDArray:
+    def _generate_clicks(self, campaign_ids: npt.NDArray[np.integer], number_of_records: int, pageviews: int) -> npt.NDArray:
         """
         Generate a linear trendline with noise, taking into account the 
         effect of the campaign.
@@ -294,10 +307,6 @@ class DataGenerator():
         :param campaign_effect: effect of the campaign per record
         :return: generated trend clipped to min and max values
         """
-        campaigns = self.state["campaign"]
-        # Map each record to its campaign effect based on campaigns_ids (1-indexed)
-        # campaign_effect = campaigns["session"]["reach"][campaign_ids - 1]
-
         click_parameters = self.state["campaign"]["click"]
 
         shape_per_row = click_parameters["shape"][campaign_ids - 1]
@@ -305,19 +314,19 @@ class DataGenerator():
 
         click = stats.poisson.rvs(mu=shape_per_row,
                                 loc=pageviews * loc_per_row,
-                                size=n, random_state=self._rng)
+                                size=number_of_records, random_state=self._rng)
 
-        return click
+        return np.clip(click, 1, self.state['max_clicks'])
 
-    def _generate_interaction(self, campaign_ids, clicks, page_views, number_of_records):
+    def _generate_interaction(self, campaign_ids, number_of_records):
         # Generate pageview trend
-        view_total = self._generate_page_views(number_of_records, 1, page_views, campaign_ids)
+        view_total = self._generate_page_views(campaign_ids, number_of_records)
 
         # Generate visit duration trend
-        visit_duration = self._generate_visit_duration(campaign_ids, view_total, number_of_records, precision='m')
+        visit_duration = self._generate_visit_duration(campaign_ids, number_of_records, view_total, precision='m')
 
         # Generate click trend
-        click_total = self._generate_clicks(view_total, number_of_records, campaign_ids).astype(int)
+        click_total = self._generate_clicks(campaign_ids, number_of_records, view_total)
 
         return visit_duration, view_total, click_total
 
@@ -327,11 +336,11 @@ class DataGenerator():
         n_campaigns = parameters["campaigns"]
         start, end = parameters["timeframe"]
         country = 'NL'
-        location = parameters["location"]
-        devices = parameters["devices"]
-        clicks = parameters["clicks"]
-        page_views = parameters["page_views"]
-        traffic_sources = parameters["traffic_source"]
+        self.state['max_location'] = parameters["location"]
+        self.state['max_devices'] = parameters["devices"]
+        self.state['max_clicks'] = parameters["clicks"]
+        self.state['max_page_views'] = parameters["page_views"]
+        self.state['max_traffic_sources'] = parameters["traffic_source"]
 
         # Convert to numpy datetime for efficient calculations
         start_ts = np.datetime64(start, 'D').astype(np.int64)
@@ -348,15 +357,15 @@ class DataGenerator():
         self._add_new_campaigns(start_ts, end_ts, n_campaigns)
 
         # Sample campaign ids
-        campaign_ids = self._sample_campaign_ids(start_ts, end_ts, number_of_records)
+        campaign_ids = self._sample_campaign_ids(number_of_records, start_ts, end_ts, )
 
         # Generate random dates and sort for chronological order of sessions
-        session_dates = self._generate_sessions(start_ts, end_ts, campaign_ids, number_of_records)
+        session_dates = self._generate_sessions(campaign_ids, number_of_records, start_ts, end_ts)
 
         # Sort for chronology
         campaign_ids, session_dates = sort_by_date(campaign_ids, session_dates)
 
-        visit_duration, view_total, click_total = self._generate_interaction(campaign_ids, clicks, page_views, number_of_records)
+        visit_duration, view_total, click_total = self._generate_interaction(campaign_ids, number_of_records)
         
         # The influence parameters have on conversion chance TODO: Get from config file
         conversion_influence = {
@@ -370,8 +379,8 @@ class DataGenerator():
 
         # Compute conversion chance
         conversion_chance = 0.0
-        conversion_chance += conversion_influence['click'] * (click_total / clicks)
-        conversion_chance += conversion_influence['page_view'] * (view_total / page_views)
+        conversion_chance += conversion_influence['click'] * (click_total / self.state['max_clicks'])
+        conversion_chance += conversion_influence['page_view'] * (view_total / self.state['max_page_views'])
         conversion_chance += conversion_influence['duration'] * (visit_duration.astype(np.int64) / MAX_VISIT_TIME)
 
         # Compute conversions
@@ -379,11 +388,11 @@ class DataGenerator():
 
 
         # Generate random source data
-        randomized_device = self._rng.integers(1, devices, number_of_records)
+        randomized_device = self._rng.integers(1, self.state['max_devices'], number_of_records)
 
-        randomized_city = self._rng.integers(1, location, number_of_records)
+        randomized_city = self._rng.integers(1, self.state['max_location'], number_of_records)
 
-        randomized_traffic_sources = self._rng.integers(1, traffic_sources, number_of_records)
+        randomized_traffic_sources = self._rng.integers(1, self.state['max_traffic_sources'], number_of_records)
 
 
         # Update state
@@ -406,8 +415,6 @@ class DataGenerator():
             "conversie": conversion.astype(int)
         })
 
-        self.state["records_last_day"] = (generated_records['starttijd_bezoek'].dt.date == session_dates[-1].item().date()).sum().astype(str)
-
         if len(generated_records) == number_of_records:
             present_line("Records generated")
         else:
@@ -415,25 +422,6 @@ class DataGenerator():
             present_line("The number of records generated doesn't equal the number of records needed.")
 
         return generated_records
-
-    def generate_incremental(self, parameters: dict):
-        start, end = parameters["timeframe"]
-
-        weekly_parameters = parameters.copy()
-        current_start = start
-        current_end = start + timedelta(days=7)
-        weekly_parameters["timeframe"] = (current_start, current_end)
-        records = self.generate_data(weekly_parameters)
-        current_start = current_end
-        current_end += timedelta(weeks=1)
-        self.save_data(records, 'incremental_dataset.csv')
-        self.update = True
-        while current_end < end:
-            weekly_parameters["timeframe"] = (current_start, current_end)
-            records = self.generate_data(weekly_parameters)
-            current_start = current_end
-            current_end += timedelta(weeks=1)
-            self.save_data(records, 'incremental_dataset.csv')
 
     def save_data(self, data: pd.DataFrame, save_path: str, sep: str = ';', date_format="%d-%m-%Y %H:%M"):
         present_line("Saving records..")
