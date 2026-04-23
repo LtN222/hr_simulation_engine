@@ -85,12 +85,13 @@ def sort_by_date(ids: npt.NDArray[np.integer], dates: npt.NDArray[np.datetime64]
 
     return sorted_ids, sorted_dates
 
-def load_state(state_path: str = 'config/state.json'):
+def load_json(path: str):
     try:
-        with open(state_path) as file:
+        with open(path, 'r') as file:
             return json.load(file)
     except FileNotFoundError:
-        return {}  # Default empty state
+        raise FileNotFoundError(f"{path} can not be found. " \
+                    "Please make sure the file exists and try again.")
 
 def dict_list_to_ndarray(dictionary: dict[str, npt.NDArray | dict]):
     for key, value in dictionary.items():

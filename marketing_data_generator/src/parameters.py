@@ -1,9 +1,8 @@
-from datetime import datetime, timedelta
+from datetime import datetime
 from src import utils
 
-from src.utils import present_line, load_state, DATE_FORMAT
+from src.utils import present_line, DATE_FORMAT
 import math
-import numpy as np
 
 class ParameterInputHandler():
     def __init__(self, max_records = 100000):
@@ -335,8 +334,6 @@ class ParameterInputHandler():
         :param args:
         :return:
         """
-        import json
-
         keys = {
             "records",
             "campaigns",
@@ -349,31 +346,30 @@ class ParameterInputHandler():
         }
 
         # Opening JSON file
-        with open(file) as json_file:
-            data: dict = json.load(json_file)
+        data: dict = utils.load_json(file)
 
-            # Validate all keys exist
-            data_keys = set(data.keys())
-            if data_keys != keys:
-                if keys.issubset(data_keys):
-                    invalid = data_keys.difference(keys)
-                    raise Exception(f"Invalid keys are present. Invalid keys: {invalid}")
-                else:
-                    missing = keys.difference(data_keys)
-                    raise Exception(f"Not all keys are present. Missing keys: {missing}")
+        # Validate all keys exist
+        data_keys = set(data.keys())
+        if data_keys != keys:
+            if keys.issubset(data_keys):
+                invalid = data_keys.difference(keys)
+                raise Exception(f"Invalid keys are present. Invalid keys: {invalid}")
+            else:
+                missing = keys.difference(data_keys)
+                raise Exception(f"Not all keys are present. Missing keys: {missing}")
 
-            # Validate all keys have correct data type
-            for key in keys:
-                if key == "timeframe": 
-                    start_date = self._validate_date(data[key][0])
-                    end_date = self._validate_date(data[key][1], datetime.strptime(data[key][0], DATE_FORMAT))
-                    data[key] = (start_date, end_date)
-                else:
-                    data[key] = self._validate_int(data[key])
+        # Validate all keys have correct data type
+        for key in keys:
+            if key == "timeframe": 
+                start_date = self._validate_date(data[key][0])
+                end_date = self._validate_date(data[key][1], datetime.strptime(data[key][0], DATE_FORMAT))
+                data[key] = (start_date, end_date)
+            else:
+                data[key] = self._validate_int(data[key])
 
-            start_date, end_date = data['timeframe']
-            if not start_date < end_date:
-                raise Exception(f"Timeframe is not sorted, \
-                                {start_date.strftime(DATE_FORMAT)} is a date after {end_date.strftime(DATE_FORMAT)}.")
+        start_date, end_date = data['timeframe']
+        if not start_date < end_date:
+            raise Exception(f"Timeframe is not sorted, \
+                            {start_date.strftime(DATE_FORMAT)} is a date after {end_date.strftime(DATE_FORMAT)}.")
 
         return data
