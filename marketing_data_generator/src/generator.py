@@ -48,6 +48,7 @@ class DataGenerator():
         self.state = utils.load_state(state_path)
         self.state['campaign'] = dict_list_to_ndarray(self.state['campaign'])
         self.state["campaign"]["session"]["loc"] = self.state["campaign"]["session"]["loc"].astype('datetime64[D]').astype(np.int64)
+        return self.state
 
     def save_state(self):
         # Convert campaign properties to lists for json conversion
@@ -76,7 +77,8 @@ class DataGenerator():
         campaign_effect = self._rng.random(n_campaigns)
 
         # Duration of the campaign
-        campaign_duration = self._rng.uniform(1, 72, n_campaigns) # in months
+        campaign_duration = self._rng.uniform(1, 12, n_campaigns) # in months
+        print(campaign_duration)
 
         # Compute scale with a campaign duration in months
         # Scale is standard deviation, curve 'dies out' after +- 3 * sd,
@@ -85,11 +87,17 @@ class DataGenerator():
 
         # Randomly place the peaks of the new campaigns in the new timeframe
         campaign_mean = self._rng.uniform(start, end, n_campaigns)
+        print(campaign_mean.astype('datetime64[D]'))
 
-        # Get the starting location of the campaign
-        campaign_start = stats.skewnorm.ppf(0.01, a=campaign_speed, loc=campaign_mean, scale=campaign_scale)
-        # Use the offset to place the starting location in the future, makes all campaigns start at the same time
-        campaign_offset = np.abs(start - campaign_start)
+        campaign_offset = 0
+        # Only when updating data place start of campaign at start of timeframe
+        if self.update:
+            # Get the starting location of the campaign
+            campaign_start = stats.skewnorm.ppf(0.001, a=campaign_speed, loc=campaign_mean, scale=campaign_scale)
+            print(campaign_start.astype('datetime64[D]'))
+            # Use the offset to place the starting location in the future, makes all campaigns start at the same time
+            campaign_offset = start - campaign_start
+            print(campaign_offset.astype('timedelta64[D]'))
 
         # Probability of visiting the next page
         page_prob = self._rng.random(n_campaigns)
@@ -241,12 +249,15 @@ class DataGenerator():
 
         return dates
 
+    def get_activity(self, param, start, end):
+        return stats.skewnorm.cdf(end, param["skew"], param["loc"], param["scale"]) - \
+                stats.skewnorm.cdf(start, param["skew"], param["loc"], param["scale"])
+
     def _sample_campaign_ids(self, number_of_records: int, start: int, end: int):
         campaigns = self.state["campaign"]
         session_parameters = campaigns["session"]
 
-        activity = stats.skewnorm.cdf(end, session_parameters["skew"], session_parameters["loc"], session_parameters["scale"]) - \
-                    stats.skewnorm.cdf(start, session_parameters["skew"], session_parameters["loc"], session_parameters["scale"])
+        activity = self.get_activity(session_parameters, start, end)
 
         # Campaign ID's are sampled based on their current activity in the timeframe
         weight = activity.clip(0, 1) * session_parameters["reach"]
@@ -330,17 +341,8 @@ class DataGenerator():
 
         return visit_duration, view_total, click_total
 
-
-    def generate_data(self, parameters):
-        number_of_records = parameters["records"]
-        n_campaigns = parameters["campaigns"]
-        start, end = parameters["timeframe"]
+    def generate_data(self, number_of_records, n_campaigns, start, end):
         country = 'NL'
-        self.state['max_location'] = parameters["location"]
-        self.state['max_devices'] = parameters["devices"]
-        self.state['max_clicks'] = parameters["clicks"]
-        self.state['max_page_views'] = parameters["page_views"]
-        self.state['max_traffic_sources'] = parameters["traffic_source"]
 
         # Convert to numpy datetime for efficient calculations
         start_ts = np.datetime64(start, 'D').astype(np.int64)
@@ -414,6 +416,8 @@ class DataGenerator():
             "verkeers_bron": randomized_traffic_sources,
             "conversie": conversion.astype(int)
         })
+        
+        self.state["records_last_day"] = int((generated_records['starttijd_bezoek'].dt.date == session_dates[-1].item().date()).sum())
 
         if len(generated_records) == number_of_records:
             present_line("Records generated")
@@ -423,10 +427,100 @@ class DataGenerator():
 
         return generated_records
 
+    def get_params(self, parameters):
+        number_of_records = parameters["records"]
+        n_campaigns = parameters["campaigns"]
+        start, end = parameters["timeframe"]
+
+        # Place rest in state
+        self.state['max_location'] = parameters["location"]
+        self.state['max_devices'] = parameters["devices"]
+        self.state['max_clicks'] = parameters["clicks"]
+        self.state['max_page_views'] = parameters["page_views"]
+        self.state['max_traffic_sources'] = parameters["traffic_source"]
+
+        return number_of_records, n_campaigns, start, end
+
+    def get_updated_params(self, start, end):
+
+        start_ts = np.datetime64(start, 'D').astype(np.int64)
+        end_ts = np.datetime64(end, 'D').astype(np.int64)
+
+        session_parameters = self.state['campaign']['session']
+
+        activity_last_day = self.get_activity(session_parameters, start_ts - 1, end_ts - 1)
+
+        activity_cur_day = self.get_activity(session_parameters, start_ts, end_ts)
+
+        records = int(activity_cur_day.sum()/activity_last_day.sum() * self.state['records_last_day'])
+
+        n_campaigns = 1 if self._rng.random() < 0.00 else 0
+
+        # Get rest from state
+
+        return records, n_campaigns
+    
+    def generate_incremental(self):
+        """
+        Generate new data up to today.
+        Data is generated day by day.
+
+        :return: newly generated records
+        """
+        yesterday_str = datetime.strftime(datetime.today() - timedelta(days=1), DATE_FORMAT) # or just dont generate when state is not filled
+
+        # Get start date from state
+        start = datetime.strptime(self.state.get('current_date', yesterday_str), DATE_FORMAT)
+
+        end = datetime.today()
+
+        # Set current dates
+        current_start = start
+        current_end = start + timedelta(days=1)
+
+        # Update data for 1 day
+        records = pd.DataFrame()
+        while current_end < end:
+            # Set new start and end
+            n_records, n_campaigns = self.get_updated_params(current_start, current_end)
+
+            # Add generated data to dataframe
+            records = pd.concat([records, self.generate_data(n_records, n_campaigns, current_start, current_end)])
+
+            # Update dates
+            current_start = current_end
+            current_end += timedelta(days=1)
+
+        return records
+
+    def generate(self, parameters):
+        """
+        Starting point of generator. 
+        Generates data up to current day or generates data in given timeframe.
+
+        :param parameters: Dictionary of parameters to use when generating historical data
+        """
+        if self.update:
+            return self.generate_incremental()
+        else:
+            n_records, n_campaigns, start, end = self.get_params(parameters)
+            return self.generate_data(n_records, n_campaigns, start, end)
+
     def save_data(self, data: pd.DataFrame, save_path: str, sep: str = ';', date_format="%d-%m-%Y %H:%M"):
+        """
+        Saves generated records to file.
+
+        :param data:
+        :param save_path:
+        :param sep:
+        :param date_format:
+        :return:
+        """
         present_line("Saving records..")
+
         # Append to file when updating
         write_mode = 'a' if self.update else 'w'
+
         data.to_csv(
             save_path, 
             sep=sep, 
@@ -435,6 +529,9 @@ class DataGenerator():
             index=False, 
             header=not self.update
         )
+
+        # Save the current state to file
         self.save_state()
+
         present_line("Records saved")
         present_line("\nHave a pretty day!\n")

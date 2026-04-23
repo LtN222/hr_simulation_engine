@@ -91,7 +91,16 @@ def load_state(state_path: str = 'config/state.json'):
             return json.load(file)
     except FileNotFoundError:
         return {}  # Default empty state
-    
+
+def dict_list_to_ndarray(dictionary: dict[str, npt.NDArray | dict]):
+    for key, value in dictionary.items():
+        if type(value) == dict:
+            dictionary[key] = dict_list_to_ndarray(value)
+        elif type(value) == npt.NDArray: continue
+        else: 
+            dictionary[key] = np.array(value)
+
+    return dictionary
 
 def dict_ndarray_to_list(dictionary: dict[str, npt.NDArray | dict]):
     for key, value in dictionary.items():

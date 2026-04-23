@@ -1,10 +1,10 @@
-from datetime import datetime, timedelta
+from datetime import datetime
 import argparse
 
 from src.parameters import ParameterInputHandler
 from src.generator import DataGenerator
 
-from src.utils import present_line, DATE_FORMAT
+from src.utils import present_line
 
 
 """
@@ -17,7 +17,7 @@ MAX_RECORDS = 10_000_000
 
 def scenario_handler(args) -> dict[str, int | str | tuple[datetime]]:
     """
-    Method contract to be included
+    Handle the different possible scenarios and get the appropiate parameters.
 
     :param args: list of arguments.
     :return: dictionary of parameters.
@@ -28,14 +28,7 @@ def scenario_handler(args) -> dict[str, int | str | tuple[datetime]]:
     if args.method == "test":
         present_line("Generating test data.")
         parameters = param_handler.test_parameters()
-    elif args.method == "update":
-        present_line("Generating update data.")
-        try:
-            parameters = param_handler.update_parameters(args)
-        except:
-            present_line("Something went wrong processing the arguments.\n"
-                            "Please try again.")
-            exit(1)
+    elif args.method == "update": parameters = {}
     elif args.parameter_file:
         present_line("Fetching data from parameter file..")
         try:
@@ -65,28 +58,12 @@ def scenario_handler(args) -> dict[str, int | str | tuple[datetime]]:
 ##############################################
 """
 
-def range_check(low, high = None):
-    """
-    Return function handle of an argument type function for 
-    ArgumentParser checking a int range: low <= arg <= high
-
-    :param low: minimum acceptable argument value
-    :param high: maximum acceptable argument value
-    """
-
-    # Define the function with default arguments
-    def int_range_checker(arg):
-        try:
-            f = int(arg)
-        except ValueError:
-            raise argparse.ArgumentTypeError("Value must be an integer")
-        if f < low or (high and f > high):
-            raise argparse.ArgumentTypeError("Value must be in range [" + str(low) + " .. " + str(high)+"]")
-        return f
-
-    return int_range_checker
-
 def help_handler():
+    """
+    Parses the arguments and provides a help documentation.
+
+    :returns: argument namespace containing parsed argument options.
+    """
     parser = argparse.ArgumentParser(
         prog="Dataset generator Sales Dashboard",
         description="""
@@ -94,16 +71,7 @@ def help_handler():
                 1. Create a custom dataset
                     Execute the script without any arguments.
                 2. Get a dataset for 1 day, to update existing data.
-                    Execute the script with arguments:
-                        'update' to set the update scenario
-                        int for the number of records
-                        int for the number of campaigns
-                        int for the number of locations
-                        int for the number of devices
-                        int for the number of clicks
-                        int for the number of page views
-                        int for the number of traffic sources
-                    Example: Python .\\generate_dataset.py --update -r 1000 -c 3 -t 20-03-2026 -l 10 -d 10 -cl 25 -pv 15 -ts 5
+                    Example: Python .\\generate_dataset.py update
                 3.  Generate a quick dataset for testing or sample data.
                     Execute the script with 'test' as argument.
                     Example: Python .\\generate_dataset.py test
@@ -115,7 +83,8 @@ def help_handler():
         )
     
     parser.add_argument('-p', '--parameter_file', required=False, help="File where parameters are stored.")
-    
+    parser.add_argument('-o', '--output_file', required=False, default='generated_dataset.csv', help='File to store generated data to')
+
     subparsers = parser.add_subparsers(dest='method', required=False)
     test_parser = subparsers.add_parser('test', help='Generate a quick dataset for testing or sample data.', 
                                         description="""
@@ -123,38 +92,20 @@ def help_handler():
                                         Execute the script with 'test' as argument.
                                         Example: Python .\\generate_dataset.py test
                                         """, formatter_class=argparse.RawDescriptionHelpFormatter)
-    tstsub_parser = test_parser.add_subparsers(dest='command')
-    tstsub_parser.add_parser('increment')
-    update_parser = subparsers.add_parser('update', help='Get a dataset for 1 day, to update existing data.', description="""
-                                        Get a dataset for 1 day, to update existing data.
+    update_parser = subparsers.add_parser('update', help='Update the dataset to today.', description="""
+                                        Update existing dataset to today.
                                         Execute the script with parameters.
-                                        Example: Python .\\generate_dataset.py update -r 1000 -c 3 -t 20-03-2026 -l 10 -d 10 -cl 25 -pv 15 -ts 5
+                                        Example: Python .\\generate_dataset.py update
                                         """, formatter_class=argparse.RawDescriptionHelpFormatter)
-    
-    update_parser.add_argument('-r', '--records', required=True, default=100000, type=range_check(1, MAX_RECORDS),
-                               help="Number of records to generate.")
-    update_parser.add_argument('-c', '--campaigns', required=True, default=3, type=range_check(1, 10),
-                               help="Number of campaigns to run")
-    # update_parser.add_argument('-t', '--timeframe', required=True, default="02-08-2002", type=timeframe_validation(),
-    #                            help="Date to update records to")
-    update_parser.add_argument('-l', '--location', required=True, default=10, type=range_check(1),
-                               help="Number of locations.")
-    update_parser.add_argument('-d', '--devices', required=True, default=10, type=range_check(1, 100),
-                               help="Number of devices.")
-    update_parser.add_argument('-cl', '--clicks', required=True, default=25, type=range_check(1),
-                               help="Number of clicks.")
-    update_parser.add_argument('-pv', '--page_views', required=True, default=15, type=range_check(1),
-                               help="Number of page_views.")
-    update_parser.add_argument('-ts', '--traffic_source', required=True, default=5, type=range_check(1, 50),
-                               help="Number of traffic_sources.")
-    update_parser.add_argument('-f', '--input_file', required=False, default='generated_dataset.txt',
-                               help="Input file.")
+    update_parser.add_argument('-i', '--input_file', required=False, default='generated_dataset.csv', help='Starting point for updated data')
+
     args = parser.parse_args()
     return args
 
 def main():
     args = help_handler()
 
+    # Fetch generation parameters
     try:
         parameters = scenario_handler(args)
     except KeyboardInterrupt:
@@ -165,31 +116,28 @@ def main():
     generator = DataGenerator(update=update) # optional: DataGenerator(seed=42, day_preference=True)
 
     # Generate data
-    if args.command == 'increment':
-        records = generator.generate_incremental(parameters)
-    else:
-        records = generator.generate_data(parameters)
     try:
-        pass
+        records = generator.generate(parameters)
     except KeyboardInterrupt:
         present_line("\n\nCtrl+C detected, data generation stops..")
         exit(1)
     except Exception as e:
         present_line(f"Data generation failed with the following error: {e}")
         present_line("\nIt is unclear what happened, "
-              "but it appears the generation of data broke down,\n"
-              "and might have resulted in the destruction of some cities.\n")
+            "but it appears the generation of data broke down,\n"
+            "and might have resulted in the destruction of some cities.\n")
         present_line("Be proud of what you did, but please try again and do it right this time.")
         exit(1)
 
+    # Save data and state
     try:
-        if not args.command == 'increment':
-            generator.save_data(records, 'generated_dataset.txt', date_format="%d-%m-%Y %H:%M")
+        generator.save_data(records, args.output_file, date_format="%d-%m-%Y %H:%M")
     except KeyboardInterrupt:
         present_line("\n\nCtrl+C detected, data saving stops..")
         exit(1)
-    except Exception:
+    except Exception as e:
         present_line("Something went wrong saving the data.")
+        present_line(f"See below for details: \n\n {e}")
         exit(1)
 
 if __name__ == '__main__':

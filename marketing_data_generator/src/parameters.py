@@ -1,6 +1,9 @@
-from datetime import datetime
+from datetime import datetime, timedelta
+from src import utils
+
 from src.utils import present_line, load_state, DATE_FORMAT
 import math
+import numpy as np
 
 class ParameterInputHandler():
     def __init__(self, max_records = 100000):
@@ -17,7 +20,7 @@ class ParameterInputHandler():
 
         :return: A validated integer provided by the user.
         """
-        # max_limit = 10_000 # Limit number of records to generate, to prevent long runtime. (Can be higer when Numpy and Pandas have been implemented)
+        # Limit number of records to generate.
         message = f"How many records are needed? (limited to {self.max_limit}): "
 
         return self._validate_input(message, self.max_limit)
@@ -49,34 +52,6 @@ class ParameterInputHandler():
         :return: A validated string, representing a date.
         """
         return self._validate_input(message, before_date=before_date, dtype=datetime)
-        # while True:
-        #     date = input(message)
-
-        #     error_message = ("Invalid format, please try again.\n"
-        #                     "Make sure you use the right format and a valid date.\n"
-        #                     "Example: \n   November first 2020 becomes: 01-11-2020")
-
-        #     try:
-        #         date = datetime.strptime(date, DATE_FORMAT)
-
-        #         if date.year < 1900 or date > datetime.today():
-        #             error_message = ("Provided year is invalid.\n"
-        #                             "Please try again.")
-        #             raise ValueError
-
-        #         # Validate start_date <= end_date
-        #         if before_date is not None:
-        #             if before_date <= date:
-        #                 return date # Validation successful
-        #             else:
-        #                 error_message = (f"Invalid date, start date ({before_date.strftime(DATE_FORMAT)}) is before end date.\n"
-        #                                 "Please try again.")
-        #                 raise ValueError
-        #         else:
-        #             return date
-
-        #     except:  # Validation failed
-        #         present_line(error_message)
 
 
     def _get_timeframe(self) -> tuple[datetime]:
@@ -196,6 +171,13 @@ class ParameterInputHandler():
             return value
         
     def _validate_date(self, input, before_date: datetime):
+        """
+        Validate that given input is a date
+        
+        :param input: value to validate
+        :param before_date: date before date to validate for order validation
+        :return: A validated date
+        """
         try:
             date = datetime.strptime(input, DATE_FORMAT)
         except:
@@ -334,9 +316,9 @@ class ParameterInputHandler():
         Method contract to be included
         :return:
         """
-        timeframe = (datetime.strptime("01-01-2001", DATE_FORMAT), datetime.strptime("01-08-2001", DATE_FORMAT))
+        timeframe = (datetime.strptime("01-12-2025", DATE_FORMAT), datetime.strptime("01-08-2026", DATE_FORMAT))
         parameters = dict()
-        parameters["records"] = 1000
+        parameters["records"] = 100000
         parameters["campaigns"] = 2
         parameters["timeframe"] = timeframe
         parameters["location"] = 10
@@ -344,27 +326,6 @@ class ParameterInputHandler():
         parameters["clicks"] = 25
         parameters["page_views"] = 15
         parameters["traffic_source"] = 5
-
-        return parameters
-
-    def update_parameters(self, args, state_path: str = 'config/state.json') -> dict[str, int | str | tuple[datetime]]:
-        """
-        Method contract to be included
-        :param args:
-        :return:
-        """
-        # DEBATEABLE: standard update to today from last day read from state.
-        state = load_state(state_path)
-        timeframe = (datetime.strptime(state.get('current_date'), DATE_FORMAT), datetime.today())
-        parameters = dict()
-        parameters["records"] = args.records
-        parameters["campaigns"] = args.campaigns
-        parameters["timeframe"] = timeframe
-        parameters["location"] = args.location
-        parameters["devices"] = args.devices
-        parameters["clicks"] = args.clicks
-        parameters["page_views"] = args.page_views
-        parameters["traffic_source"] = args.traffic_source
 
         return parameters
 
@@ -404,11 +365,11 @@ class ParameterInputHandler():
             # Validate all keys have correct data type
             for key in keys:
                 if key == "timeframe": 
-                    self._validate_date(data[key][1], data[key][0])
+                    start_date = self._validate_date(data[key][0])
+                    end_date = self._validate_date(data[key][1], datetime.strptime(data[key][0], DATE_FORMAT))
+                    data[key] = (start_date, end_date)
                 else:
                     data[key] = self._validate_int(data[key])
-
-            data['timeframe'] = tuple(datetime.strptime(date, DATE_FORMAT) for date in data['timeframe'])
 
             start_date, end_date = data['timeframe']
             if not start_date < end_date:
