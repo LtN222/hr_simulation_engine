@@ -86,7 +86,6 @@ class DataGenerator():
 
         # Duration of the campaign
         campaign_duration = self._rng.uniform(1, 12, n_campaigns) # in months
-        print(campaign_duration)
 
         # Compute scale with a campaign duration in months
         # Scale is standard deviation, curve 'dies out' after +- 3 * sd,
@@ -95,17 +94,14 @@ class DataGenerator():
 
         # Randomly place the peaks of the new campaigns in the new timeframe
         campaign_mean = self._rng.uniform(start, end, n_campaigns)
-        print(campaign_mean.astype('datetime64[D]'))
 
         campaign_offset = 0
         # Only when updating data place start of campaign at start of timeframe
         if self.update:
             # Get the starting location of the campaign
             campaign_start = stats.skewnorm.ppf(0.001, a=campaign_speed, loc=campaign_mean, scale=campaign_scale)
-            print(campaign_start.astype('datetime64[D]'))
             # Use the offset to place the starting location in the future, makes all campaigns start at the same time
             campaign_offset = start - campaign_start
-            print(campaign_offset.astype('timedelta64[D]'))
 
         # Probability of visiting the next page
         page_prob = self._rng.random(n_campaigns)
@@ -408,11 +404,12 @@ class DataGenerator():
         # A visitor may be recurrent. Therefore the possibility for duplicate IDs is needed
         visitor_ids = self._rng.integers(1, number_of_records * 3, number_of_records)
 
-        # Generate random properties for each campaign
-        self._add_new_campaigns(start_ts, end_ts, n_campaigns)
+        # Generate random properties for each new campaign
+        if not self.update:
+            self._add_new_campaigns(start_ts, end_ts, n_campaigns)
 
         # Sample campaign ids
-        campaign_ids = self._sample_campaign_ids(number_of_records, start_ts, end_ts, )
+        campaign_ids = self._sample_campaign_ids(number_of_records, start_ts, end_ts)
 
         # Generate random dates and sort for chronological order of sessions
         session_dates = self._generate_sessions(campaign_ids, number_of_records, start_ts, end_ts)
@@ -469,12 +466,17 @@ class DataGenerator():
             "verkeers_bron": randomized_traffic_sources,
             "conversie": conversion.astype(int)
         })
-        
-        self.state["records_last_day"] = int((generated_records['starttijd_bezoek'].dt.date == session_dates[-1].item().date()).sum())
 
-        if len(generated_records) == number_of_records:
-            present_line("Records generated")
-        else:
+        last_day = session_dates[-1].item().date()
+
+        last_day_records = generated_records[generated_records['starttijd_bezoek'].dt.date == last_day]
+
+        records_per_campaign = last_day_records.groupby('campagne_ID').size().reindex(self.state["campaign"]['id'], fill_value=0).to_numpy()
+
+        self.state["records_last_day"] = len(last_day_records)
+        self.state["records_last_day_per_campaign"] = records_per_campaign
+
+        if len(generated_records) != number_of_records:
             present_line("Something went wrong!")
             present_line("The number of records generated doesn't equal the number of records needed.")
 
@@ -503,15 +505,24 @@ class DataGenerator():
         start_ts = np.datetime64(start, 'D').astype(np.int64)
         end_ts = np.datetime64(end, 'D').astype(np.int64)
 
+        n_campaigns = 1 if self._rng.random() < 0.1 else 0
+        if n_campaigns > 0:
+            self._add_new_campaigns(start_ts, end_ts, n_campaigns)
+            records_last_day_per_campaign = np.concatenate([self.state["records_last_day_per_campaign"], [0]])
+        else:
+            records_last_day_per_campaign = self.state["records_last_day_per_campaign"]
+
         session_parameters = self.state['campaign']['session']
 
         activity_last_day = self.get_activity(session_parameters, start_ts - 1, end_ts - 1)
 
         activity_cur_day = self.get_activity(session_parameters, start_ts, end_ts)
 
-        records = int(activity_cur_day.sum()/activity_last_day.sum() * self.state['records_last_day'])
+        ratio_per_campaign = activity_cur_day/activity_last_day
 
-        n_campaigns = 1 if self._rng.random() < 0.00 else 0
+        trend = int((ratio_per_campaign * records_last_day_per_campaign).sum())
+
+        records = int(self._rng.normal(trend, trend * 0.02)) # 2% noise
 
         return records, n_campaigns
     
@@ -522,10 +533,8 @@ class DataGenerator():
 
         :return: newly generated records
         """
-        yesterday_str = datetime.strftime(datetime.today() - timedelta(days=1), DATE_FORMAT) # or just dont generate when state is not filled
-
         # Get start date from state
-        start = datetime.strptime(self.state.get('current_date', yesterday_str), DATE_FORMAT)
+        start = datetime.strptime(self.state['current_date'], DATE_FORMAT)
 
         end = datetime.today()
 

@@ -107,7 +107,7 @@ def dict_ndarray_to_list(dictionary: dict[str, npt.NDArray | dict]):
     for key, value in dictionary.items():
         if type(value) == dict:
             dictionary[key] = dict_ndarray_to_list(value)
-        elif type(value) == list: continue
+        elif type(value) != np.ndarray: continue
         else: 
             dictionary[key] = value.tolist()
 
