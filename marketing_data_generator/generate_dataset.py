@@ -68,14 +68,14 @@ def help_handler():
         prog="Dataset generator Sales Dashboard",
         description="""
             Scripts can be run in 4 scenario's: 
-                1. Create a custom dataset
+                1.  Create a custom dataset
                     Execute the script without any arguments.
-                2. Get a dataset for 1 day, to update existing data.
+                2.  Update the dataset up to today, to update existing data.
                     Example: Python .\\generate_dataset.py update
                 3.  Generate a quick dataset for testing or sample data.
                     Execute the script with 'test' as argument.
                     Example: Python .\\generate_dataset.py test
-                4.  Generate a quick dataset with sample data from a json file
+                4.  Generate an historical dataset with sample data from a json file
                     Execute with -p flag
                     Example: Python .\\generate_dataset.py -p "parameter_file.json"
             """, 

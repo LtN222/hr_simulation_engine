@@ -315,10 +315,10 @@ class ParameterInputHandler():
         Method contract to be included
         :return:
         """
-        timeframe = (datetime.strptime("01-12-2025", DATE_FORMAT), datetime.strptime("01-08-2026", DATE_FORMAT))
+        timeframe = (datetime.strptime("01-12-2025", DATE_FORMAT), datetime.strptime("01-01-2026", DATE_FORMAT))
         parameters = dict()
-        parameters["records"] = 100000
-        parameters["campaigns"] = 2
+        parameters["records"] = 1000000
+        parameters["campaigns"] = 3
         parameters["timeframe"] = timeframe
         parameters["location"] = 10
         parameters["devices"] = 10

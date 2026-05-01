@@ -22,16 +22,26 @@ def present_line(line: str) -> None:
     print(line)
     time.sleep(0.5)
 
+"""
+##############################################
+        Plotting functions
+##############################################
+"""
+
+
 def plot_campaign_effect_on_interaction(generated_records: pd.DataFrame, campaigns: int):
-    print(generated_records.head())
-    print(generated_records.tail())
+    """Plot clicktrends and pageview trends per campaign"""
+    plt.figure(figsize=(12, 5))
+
+    plt.subplot(1, 2, 1)
     for i in range(campaigns):
         campaign = generated_records[generated_records['campagne_ID'] == i+1]
 
         clicks = campaign['kliks_op_site_elementen']
 
         plt.plot(clicks)
-    plt.show()
+
+    plt.subplot(1, 2, 2)
     for i in range(campaigns):
         campaign = generated_records[generated_records['campagne_ID'] == i+1]
 
@@ -41,6 +51,7 @@ def plot_campaign_effect_on_interaction(generated_records: pd.DataFrame, campaig
     plt.show()
 
 def plot_sessions_per_campaign(session_dates, campaigns_ids):
+    """Plot the number of sessions per day per campaign"""
     # 1. Zet je list om naar een Pandas Series
     dates_series = pd.Series(session_dates)
     dates = pd.Series(session_dates).groupby(campaigns_ids).apply(list)
@@ -86,6 +97,7 @@ def sort_by_date(ids: npt.NDArray[np.integer], dates: npt.NDArray[np.datetime64]
     return sorted_ids, sorted_dates
 
 def load_json(path: str):
+    """Load a file in JSON format"""
     try:
         with open(path, 'r') as file:
             return json.load(file)
@@ -94,16 +106,17 @@ def load_json(path: str):
                     "Please make sure the file exists and try again.")
 
 def dict_list_to_ndarray(dictionary: dict[str, npt.NDArray | dict]):
+    """Convert lists in a dictionary to ndarrays"""
     for key, value in dictionary.items():
         if type(value) == dict:
             dictionary[key] = dict_list_to_ndarray(value)
-        elif type(value) == npt.NDArray: continue
-        else: 
+        elif type(value) == list:
             dictionary[key] = np.array(value)
 
     return dictionary
 
 def dict_ndarray_to_list(dictionary: dict[str, npt.NDArray | dict]):
+    """Convert ndarrays in a dictionary to lists"""
     for key, value in dictionary.items():
         if type(value) == dict:
             dictionary[key] = dict_ndarray_to_list(value)

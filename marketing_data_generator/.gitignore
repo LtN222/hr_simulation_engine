@@ -122,3 +122,5 @@ dmypy.json
 
 tests/
 generated_dataset.txt
+
+*.csv
