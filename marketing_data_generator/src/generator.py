@@ -209,7 +209,7 @@ class DataGenerator():
             accepted_hours = sample[(sample >= 0) & (sample < min_per_day)]
 
         # Only keep samples that are needed
-        session_hours = accepted_hours[:number_of_records]
+        session_hours = np.array(accepted_hours[:number_of_records])
 
         # Return as timedelta in minutes
         return session_hours.astype('timedelta64[m]')
@@ -470,22 +470,23 @@ class DataGenerator():
 
         return conversion
 
-    # def _generate_base(self, number_of_records: int) -> npt.NDArray:
-    #     """
-    #       Generates a base trend. TODO: needs to be updated
-    #     """
+    def _generate_base(self, start, stop, number_of_records: int) -> npt.NDArray:
+        """
+          Generates a base trend. TODO: needs to be updated
+        """
 
-    #     # trend_base is scaled by campaign effect per record and timeline growth
-    #     trend_base = np.linspace(0, 1, number_of_records, dtype=float)
+        # trend_base is scaled by timeline growth
+        n_days = stop - start
+        days = np.arange(start, stop, dtype=int)
 
-    #     # Add noise based on the noise of the previous record
-    #     noise = np.zeros(number_of_records)
-    #     for i in range(1, number_of_records):
-    #         noise[i] = 0.7 * noise[i-1] + self._rng.normal(0, 0.5)
+        weight = np.linspace(0.1, 1, n_days)
+        weight /= weight.sum()
 
-    #     return np.clip(trend_base + noise, min_value, max_value)
+        trend_base = self._rng.choice(days, p=weight, size=number_of_records)
 
-    def generate_data(self, number_of_records, n_campaigns, start, end):
+        return trend_base.astype('datetime64[D]')
+
+    def generate_data(self, n_campaign_records, n_base_records, n_campaigns, start, end):
         """ 
         Main generator function.
         This function generates data for all `number_of_records` records from `start` to `end`.
@@ -497,6 +498,8 @@ class DataGenerator():
         :return: generated data as dataframe
         """
         country = 'NL'
+        number_of_records = n_campaign_records + n_base_records
+        print(number_of_records, n_base_records, n_campaign_records)
 
         # Convert to numpy datetime for efficient calculations
         start_ts = np.datetime64(start, 'D').astype(np.int64)
@@ -514,10 +517,15 @@ class DataGenerator():
             self._add_new_campaigns(start_ts, end_ts, n_campaigns)
 
         # Sample campaign ids
-        campaign_ids = self._sample_campaign_ids(number_of_records, start_ts, end_ts)
+        campaign_ids = self._sample_campaign_ids(n_campaign_records, start_ts, end_ts)
 
         # Generate random dates and sort for chronological order of sessions
-        session_dates = self._generate_sessions(campaign_ids, number_of_records, start_ts, end_ts)
+        session_dates = self._generate_sessions(campaign_ids, n_campaign_records, start_ts, end_ts)
+
+        # Generate base trend
+        base_session_dates = self._generate_base(start_ts, end_ts, n_base_records)
+        session_dates = np.concatenate([session_dates, base_session_dates])
+        campaign_ids = np.concatenate([campaign_ids, np.zeros(n_base_records, dtype=int)])
 
         # Sort for chronology
         campaign_ids, session_dates = sort_by_date(campaign_ids, session_dates)
@@ -534,7 +542,6 @@ class DataGenerator():
 
         randomized_traffic_sources = self._rng.integers(1, self.state['max_traffic_sources'], number_of_records)
 
-
         # Update state
         self.state["last_record"] = old_records + number_of_records
         self.state["current_date"] = end.strftime(DATE_FORMAT)
@@ -544,7 +551,7 @@ class DataGenerator():
             "campagne_ID": campaign_ids,
             "bezoeker_ID": visitor_ids,
             "starttijd_bezoek": session_dates,
-            "eindtijd_bezoek": session_dates + visit_duration,
+            "eindtijd_bezoek": (session_dates + visit_duration),
             "totale_tijd_bezoek": visit_duration.astype(int),
             "kliks_op_site_elementen": click_total.astype(int),
             "paginas_bekeken": view_total.astype(int),
@@ -559,7 +566,8 @@ class DataGenerator():
 
         last_day_records = generated_records[generated_records['starttijd_bezoek'].dt.date == last_day]
 
-        records_per_campaign = last_day_records.groupby('campagne_ID').size().reindex(self.state["campaign"]['id'], fill_value=0).to_numpy()
+        campaign_id_index = np.concatenate(([0], self.state["campaign"]["id"]))
+        records_per_campaign = last_day_records.groupby('campagne_ID').size().reindex(campaign_id_index, fill_value=0).to_numpy()
 
         self.state["records_last_day"] = len(last_day_records)
         self.state["records_last_day_per_campaign"] = records_per_campaign
@@ -578,6 +586,8 @@ class DataGenerator():
         :return: number of records to be generated, number of campaigns, start date, end date.
         """
         number_of_records = parameters["records"]
+        n_base = int(number_of_records * 0.01) # 1% of records for basetrend
+        n_campaign_records = number_of_records - n_base
         n_campaigns = parameters["campaigns"]
         start, end = parameters["timeframe"]
 
@@ -588,7 +598,7 @@ class DataGenerator():
         self.state['max_page_views'] = parameters["page_views"]
         self.state['max_traffic_sources'] = parameters["traffic_source"]
 
-        return number_of_records, n_campaigns, start, end
+        return n_campaign_records, n_base, n_campaigns, start, end
 
     def get_updated_params(self, start: datetime, end: datetime) -> tuple[int, int]:
         """
@@ -613,17 +623,23 @@ class DataGenerator():
 
         session_parameters = self.state['campaign']['session']
 
+        # Get activity of the campaign curves
         activity_last_day = np.nan_to_num(self.get_activity(session_parameters, start_ts - 1, end_ts - 1))
-
         activity_cur_day = np.nan_to_num(self.get_activity(session_parameters, start_ts, end_ts))
 
+        # Calculate growth per campaign
         ratio_per_campaign = np.divide(activity_cur_day, activity_last_day, out=np.zeros_like(activity_cur_day, dtype=float), where=activity_last_day!=0)
 
-        trend = int((ratio_per_campaign * records_last_day_per_campaign).sum())
+        # Calculate new number of records per campaign
+        campaign_trend = int((ratio_per_campaign * records_last_day_per_campaign[1:]).sum())
 
-        records = int(self._rng.normal(trend, trend * 0.02)) # 2% noise
+        # Calculate new number of records for base
+        base_trend = int(records_last_day_per_campaign[0] * 1.01)
 
-        return records, n_campaigns
+        campaign_records = int(self._rng.normal(campaign_trend, campaign_trend * 0.02)) # 2% noise
+        base_records = int(self._rng.normal(base_trend, base_trend * 0.02)) # 2% noise
+
+        return campaign_records, base_records, n_campaigns
     
     def generate_incremental(self) -> pd.DataFrame:
         """
@@ -646,10 +662,10 @@ class DataGenerator():
         records = pd.DataFrame()
         while current_end < end:
             # Set new start and end
-            n_records, n_campaigns = self.get_updated_params(current_start, current_end)
+            n_records, n_base, n_campaigns = self.get_updated_params(current_start, current_end)
 
             # Add generated data to dataframe
-            records = pd.concat([records, self.generate_data(n_records, n_campaigns, current_start, current_end)])
+            records = pd.concat([records, self.generate_data(n_records, n_base, n_campaigns, current_start, current_end)])
 
             # Update dates
             current_start = current_end
@@ -668,8 +684,8 @@ class DataGenerator():
         if self.update:
             return self.generate_incremental()
         else:
-            n_records, n_campaigns, start, end = self.get_params(parameters)
-            return self.generate_data(n_records, n_campaigns, start, end)
+            n_records, n_base, n_campaigns, start, end = self.get_params(parameters)
+            return self.generate_data(n_records, n_base, n_campaigns, start, end)
 
     def save_data(self, data: pd.DataFrame, save_path: str, sep: str = ';', date_format="%d-%m-%Y %H:%M"):
         """
