@@ -124,3 +124,5 @@ tests/
 generated_dataset.txt
 
 *.csv
+
+config/state.json

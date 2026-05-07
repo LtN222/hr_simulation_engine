@@ -295,6 +295,7 @@ class ParameterInputHandler():
             parameters["records"] = self._get_number_of_records_needed()
             parameters["campaigns"] = self._get_number_of_campaigns_needed()
             parameters["timeframe"] = self._get_timeframe()
+            parameters["country"] = ['NL']
             parameters["location"] = self._get_location()
             parameters["devices"] = self._get_devices()
             parameters["clicks"] = self._get_clicks_range()
@@ -317,9 +318,10 @@ class ParameterInputHandler():
         """
         timeframe = (datetime.strptime("01-12-2025", DATE_FORMAT), datetime.strptime("01-01-2026", DATE_FORMAT))
         parameters = dict()
-        parameters["records"] = 1000000
+        parameters["records"] = 100000
         parameters["campaigns"] = 3
         parameters["timeframe"] = timeframe
+        parameters["country"] = ['NL']
         parameters["location"] = 10
         parameters["devices"] = 10
         parameters["clicks"] = 25
@@ -338,11 +340,12 @@ class ParameterInputHandler():
             "records",
             "campaigns",
             "timeframe",
+            "country",
             "location",
             "devices",
             "clicks",
             "page_views",
-            "traffic_source"
+            "traffic_source",
         }
 
         # Opening JSON file

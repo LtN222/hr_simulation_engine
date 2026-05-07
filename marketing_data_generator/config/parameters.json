@@ -1,7 +1,8 @@
 {
-    "records": 1000,
+    "records": 10000,
     "campaigns": 3,
     "timeframe": ["01-01-2026", "07-02-2026"],
+    "country": ["NL"],
     "location": 10,
     "devices": 10,
     "clicks": 25,

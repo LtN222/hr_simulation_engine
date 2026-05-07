@@ -2,7 +2,8 @@ from datetime import datetime
 import argparse
 
 from src.parameters import ParameterInputHandler
-from src.generator import DataGenerator
+from src.generator.historical_generator import HistoricalGenerator
+from src.generator.incremental_generator import IncrementalGenerator
 
 from src.utils import present_line
 
@@ -113,11 +114,14 @@ def main():
         exit(1)
 
     update = args.method == 'update'
-    generator = DataGenerator(update=update) # optional: DataGenerator(seed=42, day_preference=True)
+    if update:
+        generator = IncrementalGenerator()
+    else:
+        generator = HistoricalGenerator(parameters)
 
     # Generate data
     try:
-        records = generator.generate(parameters)
+        records = generator.generate()
     except KeyboardInterrupt:
         present_line("\n\nCtrl+C detected, data generation stops..")
         exit(1)
