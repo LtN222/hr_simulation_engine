@@ -1,3 +1,14 @@
+## Feedback Joshua (in progress)
+Mail
+    Weet je zeker dat je hier (alleen) je Heeyoo mail adres wilt gebruiken? Mijn zege heb je om er ook een persoonlijke te vermelden en/of een link naar de GitHub repo als je dat wilt.
+    Andersom zou ik je werkmail verwijderen als je dit script in een persoonlijke repo zet. Als je werkmail door een scraper uit je repo wordt getrokken kan die belanden in een spam list en dat kan vervelend worden.
+Prerequisites
+    Horen de libraries hier niet bij?
+Create and activate a virtual environment
+    Heel netjes dat je dat beschrijft. Had wat mij betreft niet echt gehoeven, maar ik zie het graag!
+Usage
+    Ik zou hier dan wss ook nog vermelden hoe je de parameter file in moet vullen. Iemand die het algoritme voor het eerst gebruikt, zal dat bij de eerste poging (en wss ook de opvolgende) verpesten.
+Aanvullende feedback volgt..
 
 # Marketing dashboard data generator
 Auteur: Christian Steennis (<christian.steennis@heeyoo.nl>)
