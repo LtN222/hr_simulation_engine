@@ -23,6 +23,16 @@ De sessies zijn campagne gedreven, dat wil zeggen elke elke sessie is gegenereer
 - Python 3.x
 - Git
 
+### Python packages:
+
+Required (manual install only needed when not using given requirements.txt):
+- numpy
+- pandas
+- scipy
+
+Optional:
+- matplotlib
+
 ## Installation
 Clone the repository
 ```bash
@@ -30,7 +40,7 @@ git clone https://Heeyoo-Services@dev.azure.com/Heeyoo-Services/Beheer/_git/Demo
 cd Demo_Dashboards/marketing_data_generator
 ```
 
-### Create and activate a virtual environment
+### Create and activate a virtual environment (optional)
 Windows:
 ```bash
 python -m venv .venv
@@ -66,6 +76,21 @@ For updating an existing dataset:
 python generate_dataset.py update
 ```
 
+Wanneer de parameterfile gebruikt wordt moet deze het volgende bevatten:
+
+| Keyword       | Syntax                                    | Uitleg                                                                 |
+|---------------|-------------------------------------------|------------------------------------------------------------------------|
+| records       | 10000                                     | Het aantal sessies dat gegenereerd moet worden                         |
+| campaigns     | 5                                         | Het aantal campagnes dat simultaan kan lopen binnen het tijdsframe     |
+| timeframe     | ["01-01-2024", "31-12-2024"]              | De start- en einddatum waarbinnen sessies gegenereerd mogen worden     |
+| country       | ["NL", "BE"]                              | De landen waarvoor sessies gegenereerd moeten worden                   |
+| location      | 10                                        | Het aantal verschillende locaties dat gebruikt kan worden              |
+| devices       | 4                                         | Het aantal verschillende devices dat in sessies kan worden gebruikt    |
+| clicks        | 20                                        | Het maximale aantal clicks per sessie                                  |
+| page_views    | 10                                        | Het maximale aantal pagina's dat per sessie bekeken kan worden         |
+| traffic_source| 5                                         | Het aantal verschillende verkeersbronnen (bijv. browsers/kanalen)      |
+
+
 ## Overzicht van de pipelines
 
 Initial generation:
@@ -84,7 +109,7 @@ current state
 ↓
 daily simulation
 ↓
-save dataframe to csv
+append dataframe to csv
 ↓
 state update
 ```
