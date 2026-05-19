@@ -10,7 +10,24 @@ from .interaction_generator import InteractionGenerator
 from src.utils import present_line, DATE_FORMAT
 from src import utils
 
-MAX_VISIT_TIME = 30 # minutes TODO: Get from config file
+DEFAULT_CONFIG = {
+    "random_seed": 42,
+    "day_bias_enabled": False,
+    "base_growth_rate": 0.01,
+    "new_campaign_probability": 0.1,
+    "trend_noise_ratio": 0.02,
+    "campaign": {
+        "speed": {"min": -10, "max": 11},
+        "duration_months": {"min": 1, "max": 12},
+        "pageview_prob_range": {"min": 0, "max": 1},
+        "visit_shape": {"min": 1, "max": 3},
+        "visit_duration": {"min": 1, "max": 30},
+        "visit_min_duration": {"min": 1, "max": 5},
+        "click_shape": {"min": 0.5, "max": 1},
+        "click_min_per_page": {"min": 0, "max": 4},
+        "day_bias_sd": 0.25
+    }
+}
 
 class DataGenerator():
 
@@ -19,12 +36,16 @@ class DataGenerator():
     """
 
     def __init__(
-            self, 
+            self,
+            config: dict = None,
             seed: int = 42,
             day_bias = False
         ):
         self._rng = np.random.default_rng(seed)
-        self.day_bias = day_bias
+        if config == None:
+            self.config = DEFAULT_CONFIG
+        else:
+            self.config = config
 
         self._default_campaign = {
             "id": np.array([], dtype=int), # id of the campaign
@@ -38,9 +59,10 @@ class DataGenerator():
         if "campaign" not in self.state:
             self.state["campaign"] = self._default_campaign.copy()
 
-        self.campaign_manager = CampaignManager(self._rng, self.state['campaign'])
-        self.session_generator = SessionGenerator(self._rng, self.state['campaign']['session'], day_bias)
-        self.interaction_generator = InteractionGenerator(self._rng, self.state["max_page_views"], self.state["max_clicks"], MAX_VISIT_TIME, self.state["campaign"])
+        self.campaign_manager = CampaignManager(self._rng, self.state['campaign'], self.config)
+        self.session_generator = SessionGenerator(self._rng, self.state['campaign']['session'], self.config, day_bias)
+        self.interaction_generator = InteractionGenerator(self._rng, self.state["max_page_views"], self.state["max_clicks"], 
+                                                          self.config["campaign"]["visit_duration"]["max"], self.state["campaign"], config)
 
     def _load_state(self, state_path = "config/state.json"):
         """

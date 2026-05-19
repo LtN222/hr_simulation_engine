@@ -5,7 +5,7 @@ from .base_generator import DataGenerator
 
 class HistoricalGenerator(DataGenerator):
 
-    def __init__(self, parameters, seed = 42, day_bias = False):
+    def __init__(self, parameters, config, seed = 42, day_bias = False):
         self.state = {}
         self.state['max_location'] = parameters["location"]
         self.state['max_devices'] = parameters["devices"]
@@ -14,7 +14,7 @@ class HistoricalGenerator(DataGenerator):
         self.state['max_traffic_sources'] = parameters["traffic_source"]
         self.state['country'] = np.array(parameters["country"])
         self.update = False
-        super().__init__(seed, day_bias)
+        super().__init__(config, seed, day_bias)
 
         self.n_records, self.n_base, self.start, self.end = self._get_params(parameters)
 
@@ -26,7 +26,8 @@ class HistoricalGenerator(DataGenerator):
         :return: number of records to be generated, number of campaigns, start date, end date.
         """
         number_of_records = parameters["records"]
-        n_base = int(number_of_records * 0.01) # 1% of records for basetrend
+        base_share = self.config["base_start_share"]
+        n_base = int(number_of_records * base_share)
         n_campaign_records = number_of_records - n_base
         n_campaigns = parameters["campaigns"]
         start, end = parameters["timeframe"]

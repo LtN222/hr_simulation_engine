@@ -6,7 +6,7 @@ from src.generator.historical_generator import HistoricalGenerator
 from src.generator.incremental_generator import IncrementalGenerator
 
 from src.utils import present_line
-import utils
+import src.utils as utils
 
 
 """
@@ -105,8 +105,13 @@ def help_handler():
     return args
 
 def main():
-    seed = 42
-    days_bias = True
+    try:
+        config = utils.load_json('config/settings.json')
+    except FileNotFoundError:
+        config = {}
+
+    seed = config['random_seed']
+    days_bias = config.get('day_bias_enabled', False)
 
     args = help_handler()
 
@@ -119,9 +124,9 @@ def main():
 
     update = args.method == 'update'
     if update:
-        generator = IncrementalGenerator(seed=seed, day_bias=days_bias)
+        generator = IncrementalGenerator(seed=seed, day_bias=days_bias, config=config)
     else:
-        generator = HistoricalGenerator(parameters, seed=seed, day_bias=days_bias)
+        generator = HistoricalGenerator(parameters, seed=seed, day_bias=days_bias, config=config)
 
     # Generate data
     try:

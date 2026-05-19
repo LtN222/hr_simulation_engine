@@ -2,13 +2,12 @@ import numpy as np
 import numpy.typing as npt
 from scipy import stats
 
-MAX_VISIT_TIME = 30 # minutes TODO: Get from config file
-
 class CampaignManager():
     
-    def __init__(self, rng: np.random.Generator, campaign_state: dict):
+    def __init__(self, rng: np.random.Generator, campaign_state: dict, config: dict):
         self._rng = rng
         self.campaign_state = campaign_state
+        self.campaign_config = config["campaign"]
 
     def add_new_campaigns(self, start: int, end: int, n_campaigns: int, update: bool = False):
         """
@@ -40,12 +39,20 @@ class CampaignManager():
         # Randomly determine effectiveness of each new campaign
         # # IDEA: multiple campaign types and platforms with each their own effects
         # Adoption speed, how fast does the campaign show effect
-        campaign_speed = self._rng.uniform(-10, 11, n_campaigns)
+        campaign_speed = self._rng.uniform(
+            self.campaign_config["speed"]["min"],
+            self.campaign_config["speed"]["max"],
+            n_campaigns
+        )
         # How many sessions does the campaign generate
         campaign_reach = self._rng.random(n_campaigns)
 
         # Duration of the campaign
-        campaign_duration = self._rng.uniform(1, 12, n_campaigns) # in months
+        campaign_duration = self._rng.uniform(
+            self.campaign_config["duration_months"]["min"],
+            self.campaign_config["duration_months"]["max"],
+            n_campaigns
+        ) # in months
 
         # Compute scale with a campaign duration in months
         # Scale is standard deviation, curve 'dies out' after +- 3 * sd,
@@ -64,7 +71,7 @@ class CampaignManager():
             campaign_offset = start - campaign_start
 
         # Closer to 0 weekday bias closer to 1 weekend bias
-        sd = 0.25 # deviation from even distribution
+        sd = self.campaign_config["day_bias_sd"] # deviation from even distribution
         day_bias = self._rng.uniform(0.5 - sd, 0.5 + sd, n_campaigns)
 
         # Calculate weights per day per campaign
@@ -81,7 +88,11 @@ class CampaignManager():
         ####################################
         """
         # Probability of visiting the next page
-        page_prob = self._rng.random(n_campaigns)
+        page_prob = self._rng.uniform(
+            self.campaign_config["pageview_prob_range"]["min"],
+            self.campaign_config["pageview_prob_range"]["max"],
+            n_campaigns
+        )
 
         """
         ####################################
@@ -89,11 +100,23 @@ class CampaignManager():
         ####################################
         """
         # Shape of the visit curve per campaign
-        visit_shape = self._rng.uniform(1, 3, n_campaigns)
+        visit_shape = self._rng.uniform(
+            self.campaign_config["visit_shape"]["min"],
+            self.campaign_config["visit_shape"]["max"],
+            n_campaigns
+        )
         # Generate average visit duration per page
-        visit_avg_duration = self._rng.uniform(1, MAX_VISIT_TIME, n_campaigns)
+        visit_avg_duration = self._rng.uniform(
+            self.campaign_config["visit_duration"]["min"],
+            self.campaign_config["visit_duration"]["max"],
+            n_campaigns
+        )
         # Generate minimum visit duration per page
-        visit_min_duration = self._rng.uniform(1, 5, n_campaigns)
+        visit_min_duration = self._rng.uniform(
+            self.campaign_config["visit_min_duration"]["min"],
+            self.campaign_config["visit_min_duration"]["max"],
+            n_campaigns
+        )
 
         """
         ####################################
@@ -101,9 +124,17 @@ class CampaignManager():
         ####################################
         """
         # Average number of clicks per page per campaign
-        click_shape = self._rng.uniform(0.5, 1, n_campaigns)
+        click_shape = self._rng.uniform(
+            self.campaign_config["click_shape"]["min"],
+            self.campaign_config["click_shape"]["max"],
+            n_campaigns
+        )
         # Minimum number of clicks per page per campaign
-        click_min_click = self._rng.integers(0, 4, n_campaigns)
+        click_min_click = self._rng.integers(
+            self.campaign_config["click_min_per_page"]["min"],
+            self.campaign_config["click_min_per_page"]["max"],
+            n_campaigns
+        )
 
         """
         ###################################

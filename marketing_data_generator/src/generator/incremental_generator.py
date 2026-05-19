@@ -8,7 +8,7 @@ class IncrementalGenerator(DataGenerator):
 
     """Generator for incremental data generation"""
 
-    def __init__(self, seed = 42, day_bias = False):
+    def __init__(self, config, seed = 42, day_bias = False):
         """
         Initialize the incremental generator
 
@@ -17,7 +17,7 @@ class IncrementalGenerator(DataGenerator):
         """
         self.state = self._load_state()
         self.update = True
-        super().__init__(seed, day_bias)
+        super().__init__(config, seed, day_bias)
 
     def _get_updated_params(self, start: int, end: int) -> tuple[int, int]:
         """
@@ -29,7 +29,8 @@ class IncrementalGenerator(DataGenerator):
         :param end: end of the day
         :return: Number of records for day to be generated, number of generated new campaigns
         """
-        n_campaigns = 1 if self._rng.random() < 0.1 else 0
+        new_campaign_probability = self.config["new_campaign_probability"]
+        n_campaigns = 1 if self._rng.random() < new_campaign_probability else 0
         if n_campaigns > 0:
             self.campaign_manager.add_new_campaigns(start, end, n_campaigns, self.update)
             records_last_day_per_campaign = np.concatenate([self.state["records_last_day_per_campaign"], [0]])
@@ -51,10 +52,12 @@ class IncrementalGenerator(DataGenerator):
         campaign_trend = int((ratio_per_campaign * records_last_day_per_campaign[1:]).sum())
 
         # Calculate new number of records for base
-        base_trend = int(records_last_day_per_campaign[0] * 1.01)
+        base_growth = self.config["base_growth_rate"]
+        base_trend = int(records_last_day_per_campaign[0] * (1 + base_growth))
 
-        campaign_records = int(self._rng.normal(campaign_trend, campaign_trend * 0.02)) # 2% noise
-        base_records = int(self._rng.normal(base_trend, base_trend * 0.02)) # 2% noise
+        trend_noise = self.config["trend_noise_ratio"]
+        campaign_records = int(self._rng.normal(campaign_trend, max(1, campaign_trend * trend_noise)))
+        base_records = int(self._rng.normal(base_trend, max(1, base_trend * trend_noise))) # noise
 
         return campaign_records, base_records
     

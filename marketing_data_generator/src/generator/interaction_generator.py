@@ -2,15 +2,14 @@ import numpy as np
 import numpy.typing as npt
 from scipy import stats
 
-MAX_VISIT_TIME = 30 # minutes TODO: Get from config file
-
 class InteractionGenerator():
-    def __init__(self, rng, max_page_views, max_clicks, max_visit_time, campaign_state):
+    def __init__(self, rng, max_page_views, max_clicks, max_visit_time, campaign_state, config):
         self._rng = rng
         self.max_page_views = max_page_views
         self.max_clicks = max_clicks
         self.max_visit_time = max_visit_time
         self.campaign_state = campaign_state
+        self.config = config
 
 
     def _generate_page_views(self, campaign_ids: npt.NDArray[np.integer], number_of_records: int) -> npt.NDArray:
@@ -105,12 +104,9 @@ class InteractionGenerator():
         Determines wether the interactions lead to a conversion.
 
         """
-        # The influence parameters have on conversion chance TODO: Get from config file
-        conversion_influence = {
-            'click': 0.35,
-            'page_view': 0.15,
-            'duration': 0.5
-        }
+        # The influence parameters have on conversion chance
+        conversion_influence = self.config["conversion"]
+
         # Make sure values are normalized
         infl_sum = sum(conversion_influence.values())
         conversion_influence = {key: value/infl_sum for key, value in conversion_influence.items()}

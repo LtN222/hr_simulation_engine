@@ -8,7 +8,7 @@ class SessionGenerator():
 
     """Class for generating sessions"""
 
-    def __init__(self, rng: np.random.Generator, campaign_parameters: dict, day_bias: bool = False):
+    def __init__(self, rng: np.random.Generator, campaign_parameters: dict, config: dict, day_bias: bool = False):
         """
         Session generator initialization.
         
@@ -18,6 +18,7 @@ class SessionGenerator():
         self._rng = rng
         self.parameters = campaign_parameters
         self.day_bias = day_bias
+        self.config = config
     
     def generate_base(self, start: int, stop: int, number_of_records: int) -> npt.NDArray[np.datetime64]:
         """
@@ -58,7 +59,7 @@ class SessionGenerator():
         :return: Sampled times as timedelta in minutes
         """
         # Select peak our (14 == 14:00, 14.5 == 14:30)
-        peak_hour = 14 * 60
+        peak_hour = self.config.get("peak_hour", 14) * 60
 
         min_per_day = np.timedelta64(1, 'D').astype('timedelta64[m]').astype(np.int64)
 
