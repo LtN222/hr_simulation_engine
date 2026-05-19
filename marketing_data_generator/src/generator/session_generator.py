@@ -5,7 +5,16 @@ from datetime import timedelta
 
 
 class SessionGenerator():
+
+    """Class for generating sessions"""
+
     def __init__(self, rng: np.random.Generator, campaign_parameters: dict):
+        """
+        Session generator initialization.
+        
+        :param rng: random number generator
+        :param campaign_parameters: parameters of the campaigns
+        """
         self._rng = rng
         self.parameters = campaign_parameters
     
@@ -14,7 +23,7 @@ class SessionGenerator():
           Generates a base trend.
 
           The base trend is generated based on a linear distribution. 
-          
+
           Each day is assigned a weight linearly.
           The sessions are randomly sampled from this distribution.
 
