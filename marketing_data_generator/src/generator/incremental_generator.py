@@ -6,10 +6,18 @@ from .base_generator import DataGenerator, DATE_FORMAT
 
 class IncrementalGenerator(DataGenerator):
 
-    def __init__(self, seed = 42):
+    """Generator for incremental data generation"""
+
+    def __init__(self, seed = 42, day_bias = False):
+        """
+        Initialize the incremental generator
+
+        :param seed: seed of the generator
+        :param day_bias: wheter to add bias for weekdays or weekends
+        """
         self.state = self._load_state()
         self.update = True
-        super().__init__(seed)
+        super().__init__(seed, day_bias)
 
     def _get_updated_params(self, start: int, end: int) -> tuple[int, int]:
         """
@@ -35,7 +43,9 @@ class IncrementalGenerator(DataGenerator):
         activity_cur_day = np.nan_to_num(self.campaign_manager.get_activity(session_parameters, start, end))
 
         # Calculate growth per campaign
-        ratio_per_campaign = np.divide(activity_cur_day, activity_last_day, out=np.zeros_like(activity_cur_day, dtype=float), where=activity_last_day!=0)
+        ratio_per_campaign = np.divide(activity_cur_day, activity_last_day, 
+                                       out=np.zeros_like(activity_cur_day, dtype=float), 
+                                       where=activity_last_day != 0)
 
         # Calculate new number of records per campaign
         campaign_trend = int((ratio_per_campaign * records_last_day_per_campaign[1:]).sum())

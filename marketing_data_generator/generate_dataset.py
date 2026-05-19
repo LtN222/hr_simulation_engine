@@ -6,6 +6,7 @@ from src.generator.historical_generator import HistoricalGenerator
 from src.generator.incremental_generator import IncrementalGenerator
 
 from src.utils import present_line
+import utils
 
 
 """
@@ -104,6 +105,9 @@ def help_handler():
     return args
 
 def main():
+    seed = 42
+    days_bias = True
+
     args = help_handler()
 
     # Fetch generation parameters
@@ -115,9 +119,9 @@ def main():
 
     update = args.method == 'update'
     if update:
-        generator = IncrementalGenerator()
+        generator = IncrementalGenerator(seed=seed, day_bias=days_bias)
     else:
-        generator = HistoricalGenerator(parameters)
+        generator = HistoricalGenerator(parameters, seed=seed, day_bias=days_bias)
 
     # Generate data
     try:

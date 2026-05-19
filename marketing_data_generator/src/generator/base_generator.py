@@ -20,13 +20,15 @@ class DataGenerator():
 
     def __init__(
             self, 
-            seed: int = 42
+            seed: int = 42,
+            day_bias = False
         ):
         self._rng = np.random.default_rng(seed)
+        self.day_bias = day_bias
 
         self._default_campaign = {
             "id": np.array([], dtype=int), # id of the campaign
-            "session": {"reach": [], "skew": [], "loc": [], "scale": []}, # Properties of session trends per campaign
+            "session": {"reach": [], "skew": [], "loc": [], "scale": [], "day_bias": np.empty((0,7))}, # Properties of session trends per campaign
             "click": {"shape": [], "avg_click": [], "min_click": []}, # Properties of clicktrend per campaign
             "pageview": {"p": []}, # Probability of visiting another page per campaign
             "duration": {"shape": [], "avg_duration": [], "min_duration": []} # properties of the durations 
@@ -37,7 +39,7 @@ class DataGenerator():
             self.state["campaign"] = self._default_campaign.copy()
 
         self.campaign_manager = CampaignManager(self._rng, self.state['campaign'])
-        self.session_generator = SessionGenerator(self._rng, self.state['campaign']['session'])
+        self.session_generator = SessionGenerator(self._rng, self.state['campaign']['session'], day_bias)
         self.interaction_generator = InteractionGenerator(self._rng, self.state["max_page_views"], self.state["max_clicks"], MAX_VISIT_TIME, self.state["campaign"])
 
     def _load_state(self, state_path = "config/state.json"):

@@ -8,15 +8,16 @@ class SessionGenerator():
 
     """Class for generating sessions"""
 
-    def __init__(self, rng: np.random.Generator, campaign_parameters: dict):
+    def __init__(self, rng: np.random.Generator, campaign_parameters: dict, day_bias: bool = False):
         """
         Session generator initialization.
         
         :param rng: random number generator
-        :param campaign_parameters: parameters of the campaigns
+        :param campaign_parameters: session parameters of the campaigns
         """
         self._rng = rng
         self.parameters = campaign_parameters
+        self.day_bias = day_bias
     
     def generate_base(self, start: int, stop: int, number_of_records: int) -> npt.NDArray[np.datetime64]:
         """
@@ -137,46 +138,37 @@ class SessionGenerator():
         :return: sampled session datetimes, precision in minutes
         """
         session_dates = self._generate_session_dates(campaign_ids, number_of_records, start, end)
+        if self.day_bias:
+            session_dates = self._introduce_day_bias(session_dates, end, campaign_ids)
         session_times = self._generate_session_times(number_of_records)
 
         return session_dates + session_times
 
-    def _introduce_day_bias(self, dates: npt.NDArray[np.datetime64], end_date: np.datetime64, campaign_ids: npt.NDArray[np.integer], n_campaigns: int) -> npt.NDArray[np.datetime64]:
+    def _introduce_day_bias(self, dates: npt.NDArray[np.datetime64], end_date: int, campaign_ids: npt.NDArray[np.integer]) -> npt.NDArray[np.datetime64]:
         """
         Bias already calculated dates towards weekdays or weekends.
-        TODO FUNCTION IS OUTDATED NEEDS TO BE UPDATED OR REMOVED
 
         :param dates: calculated random dates
-        :param end_date: upper bound of the timeframe to stay within
+        :param end_date: end of the timeframe in days since 1-1-1970
         :param campaign_ids: array of campaign_ids containing id for every row
         :param n_campaigns: number of campaigns in simulation
 
-        :return: dates unsorted biased towards closest weekday or weekend
+        :return: dates biased towards closest weekday or weekend
         """
-        days = np.arange(7)
-        # Closer to 0 weekday bias closer to 1 weekend bias
-        day_preference_per_campaign = np.array([0.2, 0.5, 0.8]) # TODO: randomize
-
-        # Calculate weights per day per campaign
-        weights = np.array([
-            (1 - day_preference_per_campaign[c] if d < 5 else day_preference_per_campaign[c])
-            for c in range(n_campaigns) for d in days
-        ]).reshape(n_campaigns, 7)
-        weights /= weights.sum(axis=1, keepdims=True)  # normalize per campaign
-
         # Calculate target day per row per campaign
-        cum_probs = np.cumsum(weights, axis=1)
+        cum_probs = np.cumsum(self.parameters["day_bias"], axis=1)
         cum_probs_per_row = cum_probs[campaign_ids - 1]
 
-        rand = self._rng.random(len(campaign_ids))
+        rand = self._rng.random((len(campaign_ids), 1))
 
-        target_flat = (rand[:, None] < cum_probs_per_row).argmax(axis=1)
+        target_flat = (rand < cum_probs_per_row).argmax(axis=1)
 
-        # Shift each date to match weekday offset
-        dow = np.array([d.weekday() for d in dates]) # days of the week of the generated dates
-        offset = ((target_flat - dow) % 7) * timedelta(days=1)
+        # Shift each date to match weekday offset (+3 because 1-1-1970 was a thursday)
+        dow = (dates.astype(np.int64) + 3) % 7 # days of the week of the generated dates
+        offset = ((target_flat - dow) % 7) * np.timedelta64(1, 'D')
         candidate = dates + offset
 
-        dates = np.where(candidate < end_date, candidate, dates)
+        # Only shift dates that do not fall out of timeframe
+        dates = np.where(candidate.astype(np.int64) < end_date, candidate, dates)
 
         return dates

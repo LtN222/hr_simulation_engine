@@ -5,7 +5,7 @@ from .base_generator import DataGenerator
 
 class HistoricalGenerator(DataGenerator):
 
-    def __init__(self, parameters, seed = 42):
+    def __init__(self, parameters, seed = 42, day_bias = False):
         self.state = {}
         self.state['max_location'] = parameters["location"]
         self.state['max_devices'] = parameters["devices"]
@@ -14,7 +14,7 @@ class HistoricalGenerator(DataGenerator):
         self.state['max_traffic_sources'] = parameters["traffic_source"]
         self.state['country'] = np.array(parameters["country"])
         self.update = False
-        super().__init__(seed)
+        super().__init__(seed, day_bias)
 
         self.n_records, self.n_base, self.start, self.end = self._get_params(parameters)
 

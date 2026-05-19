@@ -63,6 +63,18 @@ class CampaignManager():
             # Use the offset to place the starting location in the future, makes all campaigns start at the same time
             campaign_offset = start - campaign_start
 
+        # Closer to 0 weekday bias closer to 1 weekend bias
+        sd = 0.25 # deviation from even distribution
+        day_bias = self._rng.uniform(0.5 - sd, 0.5 + sd, n_campaigns)
+
+        # Calculate weights per day per campaign
+        campaign_bias = np.array([
+            (1 - day_bias[c] if d < 5 else day_bias[c])
+            for c in range(n_campaigns) for d in range(7)
+        ]).reshape(n_campaigns, 7)
+
+        campaign_bias /= campaign_bias.sum(axis=1, keepdims=True)  # normalize per campaign
+
         """
         ####################################
                Page view properties
@@ -106,6 +118,7 @@ class CampaignManager():
         self.campaign_state["session"]["loc"] = np.concatenate([self.campaign_state["session"]["loc"], campaign_mean + campaign_offset])
         self.campaign_state["session"]["scale"] = np.concatenate([self.campaign_state["session"]["scale"], campaign_scale])
         self.campaign_state["session"]["reach"] = np.concatenate([self.campaign_state["session"]["reach"], campaign_reach])
+        self.campaign_state["session"]["day_bias"] = np.concatenate([self.campaign_state["session"]["day_bias"], campaign_bias], axis=0)
 
         # Update pageviews
         self.campaign_state["pageview"]["p"] = np.concatenate([self.campaign_state["pageview"]["p"], page_prob])

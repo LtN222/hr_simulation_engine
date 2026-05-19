@@ -77,7 +77,7 @@ def plot_sessions_per_campaign(session_dates, campaigns_ids):
     plt.tight_layout()
     plt.show()
 
-def load_json(path: str):
+def load_json(path: str) -> dict:
     """Load a file in JSON format"""
     try:
         with open(path, 'r') as file:
