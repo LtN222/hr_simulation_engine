@@ -1,7 +1,7 @@
 {
   "random_seed": 42,
   "day_bias_enabled": false,
-  "base_start_share": 0.01,
+  "base_start_share": 0.05,
   "base_growth_rate": 0.01,
   "new_campaign_probability": 0.1,
   "trend_noise_ratio": 0.02,

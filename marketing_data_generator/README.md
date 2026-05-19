@@ -76,6 +76,19 @@ For updating an existing dataset:
 python generate_dataset.py update
 ```
 
+## Configuratibestand maken
+
+Dit project gebruikt twee soorten configuratie:
+
+1. `config/parameters.json`
+   - Voor de datasetparameters: `records`, `campaigns`, `timeframe`, `country`, `location`, `devices`, `clicks`, `page_views`, `traffic_source`
+
+2. `config/settings.json`
+   - Voor de generator- en simulatiewaarden.
+
+
+### Parameterfile
+
 Wanneer de parameterfile gebruikt wordt moet deze het volgende bevatten:
 
 | Keyword       | Syntax                                    | Uitleg                                                                 |
@@ -90,6 +103,66 @@ Wanneer de parameterfile gebruikt wordt moet deze het volgende bevatten:
 | page_views    | 10                                        | Het maximale aantal pagina's dat per sessie bekeken kan worden         |
 | traffic_source| 5                                         | Het aantal verschillende verkeersbronnen (bijv. browsers/kanalen)      |
 
+Voorbeeld `parameter.json`:
+```
+{
+    "records": 10000,
+    "campaigns": 3,
+    "timeframe": ["01-01-2026", "07-02-2026"],
+    "country": ["NL"],
+    "location": 10,
+    "devices": 10,
+    "clicks": 25,
+    "page_views": 15,
+    "traffic_source": 5
+}
+```
+
+### Settingsfile
+
+Wanneer de settingsfile aangepast wordt moet deze het volgende bevatten:
+
+| Keyword                  | Syntax voorbeeld    | Uitleg                                                                                                                              |
+|--------------------------|---------------------|-------------------------------------------------------------------------------------------------------------------------------------|
+| random_seed              | 42                  | Willekeurige seed voor reproduceerbaarheid                                                                                          |
+| day_bias_enabled         | true                | Wordt er wel of geen rekening gehouden met een week-/weekend voorkeur                                                               |
+| base_start_share         | 0.1                 | Het aandeel base sessies wat niet tot een campagne behoort                                                                          |
+| base_growth_rate         | 0.01                | De groeifactor voor de basetrend                                                                                                    |
+| new_campaign_probability | 10                  | De kans dat er op een dag een nieuwe campagne wordt gestart bij een iteratieve update                                               |
+| trend_noise_ratio        | 4                   | De hoeveelheid noise in de trend bij een iteratieve update                                                                          |
+| peak_hour                | 20                  | Het uur waarop de meeste sessies zijn op een dag. De tijden zijn normaal verdeeld rond dit uur met een standaardafwijking van 5 uur |
+| campaign                 | 10                  | Bevat de minima en maxima van de campagne eigenschappen                                                                             |
+| conversion               | 5                   | Bevat de invloed van de clicks paginaweergaven en bezoekduur op de conversie                                                        |
+
+Voorbeeld `settings.json`:
+
+```
+{
+  "random_seed": 42,
+  "day_bias_enabled": false,
+  "base_start_share": 0.05,
+  "base_growth_rate": 0.01,
+  "new_campaign_probability": 0.1,
+  "trend_noise_ratio": 0.02,
+  "peak_hour": 14,
+  "campaign": {
+    "speed": { "min": -10, "max": 11 },
+    "duration_months": { "min": 1, "max": 12 },
+    "pageview_prob_range": {"min": 0, "max": 1},
+    "visit_shape": { "min": 1, "max": 3 },
+    "visit_duration": { "min": 1, "max": 30 },
+    "visit_min_duration": { "min": 1, "max": 5 },
+    "click_shape": { "min": 0.5, "max": 1 },
+    "click_min_per_page": { "min": 0, "max": 4 },
+    "day_bias_sd": 0.25
+  },
+  "conversion": {
+    "click": 0.35,
+    "page_view": 0.15,
+    "duration": 0.5
+  }
+}
+```
 
 ## Overzicht van de pipelines
 
