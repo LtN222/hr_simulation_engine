@@ -9,18 +9,30 @@ class SessionGenerator():
         self._rng = rng
         self.parameters = campaign_parameters
     
-    def generate_base(self, start, stop, number_of_records: int) -> npt.NDArray:
+    def generate_base(self, start: int, stop: int, number_of_records: int) -> npt.NDArray[np.datetime64]:
         """
-          Generates a base trend. TODO: needs to be updated
+          Generates a base trend.
+
+          The base trend is generated based on a linear distribution. 
+          
+          Each day is assigned a weight linearly.
+          The sessions are randomly sampled from this distribution.
+
+          :param start: start of timeframe in days since 1-1-1970
+          :param stop: start of timeframe in days since 1-1-1970
+          :param number_of_records: number of records to generate
+          :return: days of the sessions of the base trend
         """
 
         # trend_base is scaled by timeline growth
-        n_days = stop - start
         days = np.arange(start, stop, dtype=int)
 
+        # Distribute weights evenly over linear space
+        n_days = stop - start
         weight = np.linspace(0.1, 1, n_days)
         weight /= weight.sum()
 
+        # Choose days for the base trend based on linear weight distribution
         trend_base = self._rng.choice(days, p=weight, size=number_of_records)
 
         return trend_base.astype('datetime64[D]') + self._generate_session_times(number_of_records)
