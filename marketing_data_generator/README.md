@@ -91,7 +91,7 @@ Dit project gebruikt twee soorten configuratie:
 
 Wanneer de parameterfile gebruikt wordt moet deze het volgende bevatten:
 
-| Keyword       | Syntax                                    | Uitleg                                                                 |
+| Property       | Syntax voorbeeld                         | Uitleg                                                                 |
 |---------------|-------------------------------------------|------------------------------------------------------------------------|
 | records       | 10000                                     | Het aantal sessies dat gegenereerd moet worden                         |
 | campaigns     | 5                                         | Het aantal campagnes dat simultaan kan lopen binnen het tijdsframe     |
@@ -122,17 +122,37 @@ Voorbeeld `parameter.json`:
 
 Wanneer de settingsfile aangepast wordt moet deze het volgende bevatten:
 
-| Keyword                  | Syntax voorbeeld    | Uitleg                                                                                                                              |
+| Property                  | Syntax voorbeeld    | Uitleg                                                                                                                              |
 |--------------------------|---------------------|-------------------------------------------------------------------------------------------------------------------------------------|
 | random_seed              | 42                  | Willekeurige seed voor reproduceerbaarheid                                                                                          |
 | day_bias_enabled         | true                | Wordt er wel of geen rekening gehouden met een week-/weekend voorkeur                                                               |
 | base_start_share         | 0.1                 | Het aandeel base sessies wat niet tot een campagne behoort                                                                          |
 | base_growth_rate         | 0.01                | De groeifactor voor de basetrend                                                                                                    |
-| new_campaign_probability | 10                  | De kans dat er op een dag een nieuwe campagne wordt gestart bij een iteratieve update                                               |
-| trend_noise_ratio        | 4                   | De hoeveelheid noise in de trend bij een iteratieve update                                                                          |
-| peak_hour                | 20                  | Het uur waarop de meeste sessies zijn op een dag. De tijden zijn normaal verdeeld rond dit uur met een standaardafwijking van 5 uur |
-| campaign                 | 10                  | Bevat de minima en maxima van de campagne eigenschappen                                                                             |
-| conversion               | 5                   | Bevat de invloed van de clicks paginaweergaven en bezoekduur op de conversie                                                        |
+| new_campaign_probability | 0.1                  | De kans dat er op een dag een nieuwe campagne wordt gestart bij een iteratieve update                                               |
+| trend_noise_ratio        | 0.02                   | De hoeveelheid noise in de trend bij een iteratieve update                                                                          |
+| peak_hour                | 14                  | Het uur waarop de meeste sessies zijn op een dag. De tijden zijn normaal verdeeld rond dit uur met een standaardafwijking van 5 uur |
+
+**Campaign eigenschappen:**
+
+| Property               | Syntax voorbeeld  | Uitleg                                                                 |
+|------------------------|-------------------|------------------------------------------------------------------------|
+| speed                  | { "min": -10, "max": 11 }                 | Min/max groeifactor van de campagne                                    |
+| duration_months        | { "min": 1, "max": 12 }                   | Min/max duur van de campagne in maanden                                |
+| pageview_prob_range    | {"min": 0, "max": 1}                      | Min/max waarschijnlijkheid voor paginaweergave                         |
+| visit_shape            | { "min": 1, "max": 3 }                    | Min/max shape parameter voor verdeling bezoeken                       |
+| visit_duration         | { "min": 1, "max": 30 }                   | Min/max bezoekduur in minuten                                         |
+| visit_min_duration     | { "min": 1, "max": 5 }                    | Min/max minimale bezoekduur per pagina                                |
+| click_shape            | { "min": 0.5, "max": 1 }                  | Min/max shape parameter voor klik-distributie                         |
+| click_min_per_page     | { "min": 0, "max": 4 }                    | Min/max minimum clicks per pagina                                     |
+| day_bias_sd            | 0.25                                      | Standaardafwijking voor week-/weekendpatroon                          |
+
+**Conversion eigenschappen:**
+
+| Property    | Syntax voorbeeld | Uitleg                                                      |
+|-------------|------------------|-------------------------------------------------------------|
+| click       | 0.35             | Gewicht van clicks in conversie-berekening                 |
+| page_view   | 0.15             | Gewicht van paginaweergaven in conversie-berekening        |
+| duration    | 0.5              | Gewicht van bezoekduur in conversie-berekening             |
 
 Voorbeeld `settings.json`:
 
