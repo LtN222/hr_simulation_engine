@@ -11,7 +11,7 @@ Usage
 Aanvullende feedback volgt..
 
 # Marketing dashboard data generator
-Auteur: Christian Steennis (<christian.steennis@heeyoo.nl>)
+Auteur: Christian Steennis (<csteennis@hotmail.nl>)
 
 ## Description
 Dit project genereert marketinggegevens voor dashboards.
