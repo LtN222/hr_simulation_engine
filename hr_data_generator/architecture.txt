@@ -1,8 +1,6 @@
 ARCHITECTURE OVERVIEW
 HR Data Generator – Project structuur en datastroom
 
-OUD - nog updaten
-
 PROJECTSTRUCTUUR
 
 Demo_dashboards_HRdata

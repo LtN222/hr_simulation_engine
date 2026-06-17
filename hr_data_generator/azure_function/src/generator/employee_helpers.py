@@ -1,4 +1,4 @@
-def choose_hire_source(dim_hire_source, rng):
+def choose_hire_source(config, dim_hire_source, rng):
 
     return rng.choice(
         dim_hire_source["HireSource_Key"].tolist()
@@ -7,15 +7,12 @@ def choose_hire_source(dim_hire_source, rng):
 
 def choose_education(
     role_name,
-    sector_config,
+    config,
     dim_education_level,
     rng
 ):
 
-    edu_cfg = sector_config.get(
-        "education_distribution_by_role",
-        {}
-    ).get(
+    edu_cfg = config.education_distribution_by_role.get(
         role_name,
         {"MBO": 0.5, "HBO": 0.3, "WO": 0.2}
     )
@@ -36,11 +33,11 @@ def choose_education(
 
 def choose_location(
     dim_location,
-    sector_config,
+    config,
     rng
 ):
 
-    loc_cfg = sector_config.get("dim_location", {})
+    loc_cfg = config.dim_location
 
     names = list(loc_cfg.keys())
     weights = list(loc_cfg.values())

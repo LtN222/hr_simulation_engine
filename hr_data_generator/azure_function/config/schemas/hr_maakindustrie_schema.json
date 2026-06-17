@@ -189,6 +189,36 @@
     ]
   },
 
+  "fact_recruitment": {
+    "df": "fact_recruitment",
+    "primary_key": "Recruitment_Key",
+    "types": {
+      "Recruitment_Key": "INT",
+      "Application_Date": "DATE",
+      "Decision_Date": "DATE",
+      "Role_Key": "INT",
+      "Department_Key": "INT",
+      "HireSource_Key": "INT",
+      "Status": "NVARCHAR(50)",
+      "Employee_Key": "INT",
+      "Vacancy_Reason": "NVARCHAR(50)",
+      "Candidate_Quality": "DECIMAL(3,2)",
+      "Days_To_Decision": "INT"
+    },
+    "foreign_keys": [
+      ["Role_Key", "dim_role", "Role_Key"],
+      ["Department_Key", "dim_department", "Department_Key"],
+      ["HireSource_Key", "dim_hire_source", "HireSource_Key"],
+      ["Employee_Key", "dim_employee", "Employee_Key"]
+    ],
+    "indexes": [
+      "Role_Key",
+      "Department_Key",
+      "Application_Date",
+      "Status"
+    ]
+  },
+
   "fact_performance_review": {
     "df": "fact_performance_review",
     "primary_key": "PerformanceReview_Key",

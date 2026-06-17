@@ -1,109 +1,51 @@
 import logging
-from datetime import datetime
 import random
+from datetime import datetime
 
-from src.generator.simulation import simulate_week
-from src.generator.config_loader import load_config
-from src.database.schema_loader import load_schema
-from src.database.load_state import load_current_state
-from src.database.simulation_state import (
+from src.application.simulation_runner import simulate_week
+from src.core.config_loader import ConfigLoader
+from src.infrastructure.database.schema_loader import load_schema
+from src.infrastructure.manager_builder import build_dim_manager
+from src.infrastructure.state.load_state import load_current_state
+from src.infrastructure.state.simulation_state import (
     get_simulation_state,
     update_simulation_state
 )
-from src.generator.manager_builder import build_dim_manager
 
 
 def run_incremental_simulation(engine, sector, seed):
-
     logging.info("Starting incremental HR simulation")
 
     rng = random.Random(seed)
+    config = ConfigLoader().load()
+    schema = load_schema(config.schema)
 
-    # -------------------------------------------------
-    # 1️⃣ Config + schema laden (IDENTIEK aan full run)
-    # -------------------------------------------------
-
-    config = load_config(sector)
-    schema = load_schema(config["schema"])
-
-    baseline_headcount = config["baseline_headcount"]
-
-    # 👉 zelfde growth config als full run
-    growth_cfg = config.get("growth", {})
-
+    baseline_headcount = config.baseline_headcount
+    growth_cfg = config.growth
     annual_growth_cfg = growth_cfg.get("annual_growth_rate", {})
-
     annual_growth_rate = rng.uniform(
         annual_growth_cfg.get("min", 0.02),
         annual_growth_cfg.get("max", 0.04)
     )
+    max_capacity = growth_cfg.get("max_capacity", baseline_headcount * 1.5)
+    weeks_before_peak_growth = growth_cfg.get("weeks_before_peak_growth", 100)
 
-    max_capacity = growth_cfg.get(
-        "max_capacity",
-        baseline_headcount * 1.5
-    )
-
-    weeks_before_peak_growth = growth_cfg.get(
-        "weeks_before_peak_growth",
-        100
-    )
-
-    # -------------------------------------------------
-    # Career events (zelfde als full)
-    # -------------------------------------------------
-
-    career_cfg = config.get("career_events", {})
-
+    career_cfg = config.career_events
     promotion_rate = career_cfg.get("promotion_rate", 0)
     transfer_rate = career_cfg.get("internal_transfer_rate", 0)
 
-    # -------------------------------------------------
-    # 2️⃣ State laden
-    # -------------------------------------------------
-
     state = load_current_state(engine, schema)
-
-    # Zorg dat vacancies bestaat (consistent met full run)
-    if "vacancies" not in state:
-        state["vacancies"] = 0
-
-    # -------------------------------------------------
-    # Fix date/datetime inconsistency
-    # -------------------------------------------------
-
-    for table_name, df in state.items():
-
-        if hasattr(df, "columns"):
-
-            for col in df.columns:
-
-                # alleen kolommen die op datum lijken
-                if "date" in col.lower() or "datum" in col.lower():
-
-                    df[col] = df[col].apply(
-                        lambda x: datetime.combine(x, datetime.min.time())
-                        if x is not None and not isinstance(x, datetime)
-                        else x
-                    )
-
-    # -------------------------------------------------
-    # 3️⃣ Laatste simulatiestatus ophalen
-    # -------------------------------------------------
+    state.setdefault("vacancies", 0)
+    _normalize_date_columns(state)
 
     year_current, week_current = get_simulation_state(engine)
-
     today = datetime.today()
 
     logging.info(
         f"Continuing simulation from year {year_current}, week {week_current}"
     )
 
-    # -------------------------------------------------
-    # 4️⃣ Weekly simulation (IDENTIEK aan full run)
-    # -------------------------------------------------
-
     while datetime.fromisocalendar(year_current, week_current, 1) <= today:
-
         state = simulate_week(
             state,
             config,
@@ -119,19 +61,10 @@ def run_incremental_simulation(engine, sector, seed):
             transfer_rate
         )
 
-        # ---------------------------------------------
-        # Week vooruit
-        # ---------------------------------------------
-
         week_current += 1
-
         if week_current > 52:
             week_current = 1
             year_current += 1
-
-    # -------------------------------------------------
-    # 5️⃣ Simulatiestatus bepalen
-    # -------------------------------------------------
 
     last_week = week_current - 1
     last_year = year_current
@@ -140,30 +73,24 @@ def run_incremental_simulation(engine, sector, seed):
         last_week = 52
         last_year -= 1
 
-    # -------------------------------------------------
-    # 6️⃣ Simulatiestatus opslaan
-    # -------------------------------------------------
-
-    update_simulation_state(
-        engine,
-        last_year,
-        last_week
-    )
-
-    logging.info(
-        f"Simulation state updated → year {last_year}, week {last_week}"
-    )
-
-    logging.info("Incremental HR simulation finished")
-
-    # -------------------------------------------------
-    # 7️⃣ dim_manager bouwen (consistent met full)
-    # -------------------------------------------------
-
+    update_simulation_state(engine, last_year, last_week)
     state = build_dim_manager(state)
 
-    # -------------------------------------------------
-    # 8️⃣ Resultaat retourneren
-    # -------------------------------------------------
-
+    logging.info("Incremental HR simulation finished")
     return state
+
+
+def _normalize_date_columns(state):
+    for df in state.values():
+        if not hasattr(df, "columns"):
+            continue
+
+        for col in df.columns:
+            if "date" not in col.lower() and "datum" not in col.lower():
+                continue
+
+            df[col] = df[col].apply(
+                lambda x: datetime.combine(x, datetime.min.time())
+                if x is not None and not isinstance(x, datetime)
+                else x
+            )

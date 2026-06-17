@@ -8,14 +8,16 @@
   "baseline_headcount": 50,
   "growth": {
     "max_capacity": 800,
-    "weeks_before_peak_growth": 150,
+    "weeks_before_peak_growth": 230,
     "annual_growth_rate": {
-      "min": 0.03,
-      "max": 0.1
+      "min": 0.9,
+      "max": 1.3
     },
-    "shock_probablity": 0.05,
-    "shock_min": -20,
-    "shock_max": 30
+    "max_weekly_hires": 8,
+    "max_weekly_growth_rate": 0.025,
+    "shock_probability": 0.02,
+    "shock_min": -8,
+    "shock_max": 10
   },
   "dim_location": {
     "Hoofdkantoor": 0.25,
@@ -159,6 +161,41 @@
     "Contract omgezet naar vast",
     "Contract verlengd"
   ],
+
+  "recruitment": {
+    "applications_per_hire_by_department": {
+      "Productie": 7,
+      "Techniek": 5,
+      "Kwaliteit": 4,
+      "Logistiek": 6,
+      "R&D": 3,
+      "IT": 4,
+      "Sales": 5,
+      "HR": 3,
+      "Finance": 3,
+      "Directie": 2
+    },
+    "extra_open_applications_by_department": {
+      "Productie": 3,
+      "Techniek": 2,
+      "Kwaliteit": 1,
+      "Logistiek": 2,
+      "R&D": 1,
+      "IT": 1,
+      "Sales": 2,
+      "HR": 1,
+      "Finance": 1,
+      "Directie": 0
+    },
+    "status_weights": {
+      "Afgewezen": 0.72,
+      "Geweigerd": 0.28
+    },
+    "decision_days": {
+      "min": 3,
+      "max": 28
+    }
+  },
 
   "seasonality": {
     "enabled": true,

@@ -1,5 +1,6 @@
 import pandas as pd
-from src.generator.record_builder import build_record
+from src.infrastructure.record_builder import build_record
+
 
 def generate_dimensions(config, schema):
 
@@ -10,10 +11,10 @@ def generate_dimensions(config, schema):
         if not table_name.startswith("dim_"):
             continue
 
-        if table_name not in config:
-            continue
+        values = config.get(table_name)
 
-        values = config[table_name]
+        if values is None:
+            continue
 
         rows = []
 

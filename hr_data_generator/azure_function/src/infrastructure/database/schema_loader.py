@@ -6,7 +6,7 @@ def load_schema(schema_name):
 
     # Bepaal project root (2 niveaus omhoog vanaf src/database)
     base_dir = os.path.abspath(
-        os.path.join(os.path.dirname(__file__), "..", "..")
+        os.path.join(os.path.dirname(__file__), "..", "..", "..")
     )
 
     path = os.path.join(

@@ -113,6 +113,16 @@ def get_table_write_order(schema_config):
 def reset_tables(engine, table_order):
 
     with engine.begin() as conn:
+        constraint_commands = _get_foreign_key_constraint_commands(
+            conn,
+            table_order
+        )
+
+        # SQL Server blocks parent deletes while FK constraints on child tables
+        # are active. During a full rebuild we intentionally empty all managed
+        # tables first, then insert a fresh consistent dataset.
+        for command in constraint_commands["disable"]:
+            conn.execute(text(command))
 
         for table in reversed(table_order):
 
@@ -120,6 +130,53 @@ def reset_tables(engine, table_order):
                 IF OBJECT_ID('{table}', 'U') IS NOT NULL
                 DELETE FROM {table}
             """))
+
+        for command in constraint_commands["enable"]:
+            conn.execute(text(command))
+
+
+def _get_foreign_key_constraint_commands(conn, table_order):
+    escaped_table_names = [
+        table.replace("'", "''")
+        for table in table_order
+    ]
+    table_values = ", ".join(
+        f"('{table}')"
+        for table in escaped_table_names
+    )
+
+    if not table_values:
+        return {"disable": [], "enable": []}
+
+    rows = conn.execute(text(f"""
+        WITH ManagedTables AS (
+            SELECT table_name
+            FROM (VALUES {table_values}) AS v(table_name)
+        )
+        SELECT DISTINCT
+            'ALTER TABLE '
+                + QUOTENAME(OBJECT_SCHEMA_NAME(fk.parent_object_id))
+                + '.'
+                + QUOTENAME(OBJECT_NAME(fk.parent_object_id))
+                + ' NOCHECK CONSTRAINT '
+                + QUOTENAME(fk.name) AS disable_sql,
+            'ALTER TABLE '
+                + QUOTENAME(OBJECT_SCHEMA_NAME(fk.parent_object_id))
+                + '.'
+                + QUOTENAME(OBJECT_NAME(fk.parent_object_id))
+                + ' WITH CHECK CHECK CONSTRAINT '
+                + QUOTENAME(fk.name) AS enable_sql
+        FROM sys.foreign_keys fk
+        JOIN ManagedTables parent_tables
+            ON OBJECT_NAME(fk.parent_object_id) = parent_tables.table_name
+        JOIN ManagedTables referenced_tables
+            ON OBJECT_NAME(fk.referenced_object_id) = referenced_tables.table_name
+    """)).fetchall()
+
+    return {
+        "disable": [row.disable_sql for row in rows],
+        "enable": [row.enable_sql for row in reversed(rows)]
+    }
 
 
 # =====================================================

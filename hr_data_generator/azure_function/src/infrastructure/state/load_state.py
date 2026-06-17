@@ -15,6 +15,10 @@ def load_current_state(engine, schema_config):
 
         query = f"SELECT * FROM {table_name}"
 
-        dataframes[df_name] = pd.read_sql(query, engine)
+        try:
+            dataframes[df_name] = pd.read_sql(query, engine)
+        except Exception:
+            columns = list(table_config.get("types", {}).keys())
+            dataframes[df_name] = pd.DataFrame(columns=columns)
 
     return dataframes

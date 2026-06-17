@@ -20,9 +20,9 @@ sys.path.append(
 
 from src.run_simulation import run_simulation
 from src.run_simulation_incremental import run_incremental_simulation
-from src.database.write_to_sql import write_dataset, get_engine
-from src.database.schema_loader import load_schema
-from src.generator.config_loader import load_config
+from src.infrastructure.database.write_to_sql import write_dataset, get_engine
+from src.infrastructure.database.schema_loader import load_schema
+from src.core.config_loader import ConfigLoader
 from config.runtime_config import load_runtime_config
 
 # -----------------------------------------------------
@@ -41,9 +41,9 @@ def run_hr_pipeline(mode: str):
     runtime_config = load_runtime_config()
 
     sector = runtime_config["sector"]
-    sector_config = load_config(sector)
+    sector_config = ConfigLoader().load()
 
-    database_name = sector_config.get("database")
+    database_name = sector_config.database
     seed = runtime_config["simulation_seed"]
 
     engine = get_engine(database_name)
@@ -55,7 +55,7 @@ def run_hr_pipeline(mode: str):
     # Schema laden
     # -------------------------------------------------
 
-    schema_name = sector_config.get("schema")
+    schema_name = sector_config.schema
 
     if not schema_name:
         raise ValueError("Sector config must contain a 'schema' field.")
