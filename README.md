@@ -1,20 +1,15 @@
-# Introduction 
-TODO: Give a short introduction of your project. Let this section explain the objectives or the motivation behind this project. 
+# Demo Dashboards
 
-# Getting Started
-TODO: Guide users through getting your code up and running on their own system. In this section you can talk about:
-1.	Installation process
-2.	Software dependencies
-3.	Latest releases
-4.	API references
+Deze repository bevat generatoren voor demo-data die in Power BI-dashboards
+wordt gebruikt.
 
-# Build and Test
-TODO: Describe and show how to build your code and run the tests. 
+## Projecten
 
-# Contribute
-TODO: Explain how other users and developers can contribute to make your code better. 
+- [HR Data Generator](hr_data_generator/README.md) - simuleert een
+  organisatie en schrijft HR-data naar Azure SQL via een Azure Function.
+- [Marketing Data Generator](marketing_data_generator/README.md) - genereert
+  campagne-, sessie- en interactiedata voor marketingdashboards.
 
-If you want to learn more about creating good readme files then refer the following [guidelines](https://docs.microsoft.com/en-us/azure/devops/repos/git/create-a-readme?view=azure-devops). You can also seek inspiration from the below readme files:
-- [ASP.NET Core](https://github.com/aspnet/Home)
-- [Visual Studio Code](https://github.com/Microsoft/vscode)
-- [Chakra Core](https://github.com/Microsoft/ChakraCore)
+Elk project heeft eigen configuratie, afhankelijkheden en een eigen README.
+Lokale secrets, virtuele omgevingen en Azurite-data worden niet in Git
+opgenomen.

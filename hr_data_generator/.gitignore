@@ -12,6 +12,7 @@ local.settings.json
 
 # Local Azure Functions and Azurite state
 /AzuriteConfig
+/\.azurite/
 /__azurite_db*__.json
 /__blobstorage__/
 /__queuestorage__/
