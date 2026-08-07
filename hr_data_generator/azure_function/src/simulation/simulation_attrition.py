@@ -1,5 +1,7 @@
 import math
 
+import pandas as pd
+
 
 class AttritionSimulator:
 
@@ -19,6 +21,11 @@ class AttritionSimulator:
         dim_role = state["dim_role"]
         dim_employee = state["dim_employee"]
         fact_employment = state["fact_employment"]
+
+        if "Datum_uitdienst" not in dim_employee.columns:
+            dim_employee["Datum_uitdienst"] = None
+        if "In_Dienst" not in dim_employee.columns:
+            dim_employee["In_Dienst"] = True
 
         active_employment = fact_employment[
             fact_employment["Dienstverband_status"] == "Actief"
@@ -51,16 +58,11 @@ class AttritionSimulator:
         # 🔁 Salary data
         # -------------------------------------------------
 
-        # Merge employee + employment om salary + role te koppelen
-        salary_df = fact_employment.merge(
-            dim_employee[["Employee_Key", "Salary"]],
-            on="Employee_Key",
-            how="left"
-        )
+        # Gemiddeld salaris per rol op basis van fact_employment
+        salary_df = fact_employment[["Employee_Key", "Role_Key", "Salaris"]].copy()
 
-        # Gemiddeld salaris per rol
         avg_salary_per_role = (
-            salary_df.groupby("Role_Key")["Salary"]
+            salary_df.groupby("Role_Key")["Salaris"]
             .mean()
             .to_dict()
         )
@@ -106,8 +108,7 @@ class AttritionSimulator:
             #  Salary effect
             # -------------------------------------------------
 
-            employee = employee_lookup.loc[row["Employee_Key"]]
-            salary = employee["Salary"]
+            salary = row["Salaris"]
 
             role_key = row["Role_Key"]
             avg_salary = avg_salary_per_role.get(role_key, salary)  # fallback
@@ -120,14 +121,6 @@ class AttritionSimulator:
                 weekly_attrition *= 1.15
             elif salary_ratio > 1.15:
                 weekly_attrition *= 0.85
-
-            elif reden == "Hoger salaris":
-                if salary_ratio < 0.9:
-                    weights.append(0.25)
-                elif salary_ratio < 1.0:
-                    weights.append(0.15)
-                else:
-                    weights.append(0.05)
 
             if perf > 4 and salary_ratio < 0.95:
                 weekly_attrition *= 1.2
@@ -146,7 +139,13 @@ class AttritionSimulator:
             # 🎯 Check exit
             # -------------------------------------------------
 
-            if self.rng.random() >= weekly_attrition:
+            retirement_probability = self._retirement_weekly_probability(
+                employee_lookup.loc[row["Employee_Key"]],
+                today
+            )
+            is_retirement = self.rng.random() < retirement_probability
+
+            if not is_retirement and self.rng.random() >= weekly_attrition:
                 continue
 
             # -------------------------------------------------
@@ -155,8 +154,21 @@ class AttritionSimulator:
 
             fact_employment.loc[idx, "Dienstverband_status"] = "Uit dienst"
             fact_employment.loc[idx, "Einddatum"] = today
+            dim_employee.loc[
+                dim_employee["Employee_Key"] == row["Employee_Key"],
+                "In_Dienst"
+            ] = False
+            dim_employee.loc[
+                dim_employee["Employee_Key"] == row["Employee_Key"],
+                "Datum_uitdienst"
+            ] = today
 
             state["vacancies"] = state.get("vacancies", 0) + 1
+            state.setdefault("_vacancy_requests", []).append({
+                "Role_Key": row["Role_Key"],
+                "Department_Key": role["Department_Key"],
+                "Vacancy_Reason": "Replacement"
+            })
 
             # -------------------------------------------------
             # 🧠 Categorie bepalen
@@ -192,10 +204,8 @@ class AttritionSimulator:
                     weights.append(0.05)
 
                 elif reden == "Pensioen":
-                    if tenure_years > 15:
-                        weights.append(0.15)
-                    else:
-                        weights.append(0.01)
+                    # Pension exits are handled by the age-based model above.
+                    weights.append(0.0)
 
                 elif reden == "Disfunctioneren":
                     weights.append(0.3 if perf < 2.5 else 0.05)
@@ -216,9 +226,48 @@ class AttritionSimulator:
 
             reden = self.rng.choices(redenen, weights=weights)[0]
 
-            fact_employment.loc[idx, "RedenVertrek_Key"] = self.reden_vertrek_map[reden]
+            if is_retirement:
+                reden = "Pensioen"
+
+            if reden in self.reden_vertrek_map:
+                reason_key = self.reden_vertrek_map[reden]
+            else:
+                reason_key = next(iter(self.reden_vertrek_map.values()))
+
+            fact_employment.loc[idx, "RedenVertrek_Key"] = reason_key
             fact_employment.loc[idx, "EventType_Key"] = self.event_type_map["Uit dienst"]
 
         state["fact_employment"] = fact_employment
+        state["dim_employee"] = dim_employee
 
         return state
+
+    def _retirement_weekly_probability(self, employee, today):
+        """Return the retirement probability for one simulation week.
+
+        Retirement is separated from ordinary attrition so ``Pensioen`` only
+        occurs from the configured minimum age onward.
+        """
+        config = getattr(self.config, "retirement", {})
+        birth_date = pd.to_datetime(
+            employee.get("Geboortedatum"), errors="coerce"
+        )
+        if pd.isna(birth_date):
+            return 0.0
+
+        reference_date = pd.Timestamp(today).normalize()
+        age = reference_date.year - birth_date.year - (
+            (reference_date.month, reference_date.day)
+            < (birth_date.month, birth_date.day)
+        )
+        if age < int(config.get("minimum_age", 50)):
+            return 0.0
+        if age >= int(config.get("forced_retirement_age", 67)):
+            return 1.0
+
+        for band in config.get("age_bands", []):
+            if band["min_age"] <= age <= band["max_age"]:
+                annual_probability = float(band["annual_probability"])
+                return 1 - (1 - annual_probability) ** (1 / 52)
+
+        return 0.0

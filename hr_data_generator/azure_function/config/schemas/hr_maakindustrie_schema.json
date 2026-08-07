@@ -72,6 +72,17 @@
     }
   },
 
+  "dim_salary_band": {
+    "df": "dim_salary_band",
+    "primary_key": "SalaryBand_Key",
+    "types": {
+      "SalaryBand_Key": "INT",
+      "SalaryBand_Name": "NVARCHAR(50)",
+      "Minimum_Salaris": "INT",
+      "Maximum_Salaris": "INT"
+    }
+  },
+
   "dim_employee": {
     "df": "dim_employee",
     "primary_key": "Employee_Key",
@@ -81,15 +92,19 @@
       "Achternaam": "NVARCHAR(100)",
       "Gender": "NVARCHAR(20)",
       "Geboortedatum": "DATE",
-      "Leeftijd": "INT",
       "Land": "NVARCHAR(100)",
       "HireSource_Key": "INT",
       "EducationLevel_Key": "INT",
       "Location_Key": "INT",
       "Bijzondere_Aanstelling": "NVARCHAR(100)",
       "Manager_Key": "INT",
-      "Performance_Score": "DECIMAL(3,2)"
+      "Performance_Score": "DECIMAL(3,2)",
+      "Eerste_Indienst_Datum": "DATE",
+      "Aaneengesloten_Indienst_Datum": "DATE",
+      "Datum_uitdienst": "DATE",
+      "In_Dienst": "BIT"
     },
+    "deprecated_columns": ["Leeftijd"],
     "foreign_keys": [
       ["HireSource_Key", "dim_hire_source", "HireSource_Key"],
       ["EducationLevel_Key", "dim_education_level", "EducationLevel_Key"],
@@ -175,17 +190,56 @@
       "Absence_Key": "INT",
       "Employee_Key": "INT",
       "AbsenceType_Key": "INT",
+      "Role_Key": "INT",
+      "Department_Key": "INT",
+      "Location_Key": "INT",
+      "SalaryBand_Key": "INT",
+      "Salaris_bij_aanvang": "INT",
       "Startdatum": "DATE",
       "Einddatum": "DATE",
       "Duur_dagen": "INT"
     },
     "foreign_keys": [
       ["Employee_Key", "dim_employee", "Employee_Key"],
-      ["AbsenceType_Key", "dim_absence_type", "AbsenceType_Key"]
+      ["AbsenceType_Key", "dim_absence_type", "AbsenceType_Key"],
+      ["Role_Key", "dim_role", "Role_Key"],
+      ["Department_Key", "dim_department", "Department_Key"],
+      ["Location_Key", "dim_location", "Location_Key"],
+      ["SalaryBand_Key", "dim_salary_band", "SalaryBand_Key"]
     ],
     "indexes": [
       "Employee_Key",
+      "Role_Key",
+      "Department_Key",
+      "SalaryBand_Key",
       "Startdatum"
+    ]
+  },
+
+  "fact_vacancy": {
+    "df": "fact_vacancy",
+    "primary_key": "Vacancy_Key",
+    "types": {
+      "Vacancy_Key": "INT",
+      "Created_Date": "DATE",
+      "Closed_Date": "DATE",
+      "Role_Key": "INT",
+      "Department_Key": "INT",
+      "Vacancy_Reason": "NVARCHAR(50)",
+      "Status": "NVARCHAR(50)",
+      "Target_Start_Date": "DATE",
+      "Filled_Employee_Key": "INT"
+    },
+    "foreign_keys": [
+      ["Role_Key", "dim_role", "Role_Key"],
+      ["Department_Key", "dim_department", "Department_Key"],
+      ["Filled_Employee_Key", "dim_employee", "Employee_Key"]
+    ],
+    "indexes": [
+      "Role_Key",
+      "Department_Key",
+      "Created_Date",
+      "Status"
     ]
   },
 
@@ -194,6 +248,7 @@
     "primary_key": "Recruitment_Key",
     "types": {
       "Recruitment_Key": "INT",
+      "Vacancy_Key": "INT",
       "Application_Date": "DATE",
       "Decision_Date": "DATE",
       "Role_Key": "INT",
@@ -206,6 +261,7 @@
       "Days_To_Decision": "INT"
     },
     "foreign_keys": [
+      ["Vacancy_Key", "fact_vacancy", "Vacancy_Key"],
       ["Role_Key", "dim_role", "Role_Key"],
       ["Department_Key", "dim_department", "Department_Key"],
       ["HireSource_Key", "dim_hire_source", "HireSource_Key"],
@@ -216,6 +272,32 @@
       "Department_Key",
       "Application_Date",
       "Status"
+    ]
+  },
+
+  "fact_salary_snapshot": {
+    "df": "fact_salary_snapshot",
+    "primary_key": "SalarySnapshot_Key",
+    "types": {
+      "SalarySnapshot_Key": "INT",
+      "Snapshot_Date": "DATE",
+      "Employee_Key": "INT",
+      "Employment_Key": "INT",
+      "Role_Key": "INT",
+      "Department_Key": "INT",
+      "Salaris": "INT"
+    },
+    "foreign_keys": [
+      ["Employee_Key", "dim_employee", "Employee_Key"],
+      ["Employment_Key", "fact_employment", "Employment_Key"],
+      ["Role_Key", "dim_role", "Role_Key"],
+      ["Department_Key", "dim_department", "Department_Key"]
+    ],
+    "indexes": [
+      "Snapshot_Date",
+      "Employee_Key",
+      "Role_Key",
+      "Department_Key"
     ]
   },
 

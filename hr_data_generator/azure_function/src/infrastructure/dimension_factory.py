@@ -26,9 +26,16 @@ def generate_dimensions(config, schema):
 
         for i, value in enumerate(values, start=1):
 
-            row = {pk: i}
+            if isinstance(value, dict):
+                row = {pk: value.get(pk, i)}
+                row.update({
+                    column: value.get(column)
+                    for column in value_columns
+                })
 
-            if isinstance(values, dict):
+            elif isinstance(values, dict):
+
+                row = {pk: i}
 
                 key = value
                 row[value_columns[0]] = key
@@ -38,6 +45,7 @@ def generate_dimensions(config, schema):
 
             else:
 
+                row = {pk: i}
                 row[value_columns[0]] = value
 
             rows.append(

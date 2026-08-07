@@ -20,6 +20,20 @@ def simulate_career_events(
         fact_employment["Dienstverband_status"] == "Actief"
     ]
 
+    fact_employment, salary_next_key = _simulate_salary_reviews(
+        fact_employment,
+        dim_employee,
+        dim_role,
+        config,
+        today,
+        rng,
+        event_type_map
+    )
+
+    active = fact_employment[
+        fact_employment["Dienstverband_status"] == "Actief"
+    ]
+
     # lookup helpers
     role_lookup = dim_role.set_index("Role_Key")
     dept_lookup = dim_department.set_index("Department_Key")
@@ -39,7 +53,7 @@ def simulate_career_events(
     }
 
     new_records = []
-    next_key = fact_employment["Employment_Key"].max() + 1
+    next_key = max(int(fact_employment["Employment_Key"].max()) + 1, salary_next_key)
 
     for idx, row in active.iterrows():
 
@@ -100,11 +114,12 @@ def simulate_career_events(
 
                 # salaris sprong binnen nieuwe band
                 new_salary = int(
-                    rng.uniform(
-                        new_role_row["Salaris_min"],
-                        new_role_row["Salaris_max"]
+                    max(
+                        current_salary * 1.08,
+                        new_role_row["Salaris_min"]
                     )
                 )
+                new_salary = min(new_salary, int(new_role_row["Salaris_max"] * 1.05))
 
                 new_records.append({
                     "Employment_Key": next_key,
@@ -118,6 +133,8 @@ def simulate_career_events(
                     "Salaris": new_salary,
                     "Contracttype": row["Contracttype"],
                     "Contracturen": row.get("Contracturen"),
+                    "Contract_einddatum": row.get("Contract_einddatum"),
+                    "Contract_ronde": row.get("Contract_ronde"),
                     "EventType_Key": event_type_map["Promotie"],
                     "RedenVertrek_Key": None
                 })
@@ -179,6 +196,8 @@ def simulate_career_events(
                 "Salaris": row["Salaris"],
                 "Contracttype": row["Contracttype"],
                 "Contracturen": row.get("Contracturen"),
+                "Contract_einddatum": row.get("Contract_einddatum"),
+                "Contract_ronde": row.get("Contract_ronde"),
                 "EventType_Key": event_type_map["Transfer"],
                 "RedenVertrek_Key": None
             })
@@ -186,9 +205,136 @@ def simulate_career_events(
             next_key += 1
 
     if new_records:
-        state["fact_employment"] = pd.concat(
+        fact_employment = pd.concat(
             [fact_employment, pd.DataFrame(new_records)],
             ignore_index=True
         )
 
+    state["fact_employment"] = fact_employment
+
     return state
+
+
+def _simulate_salary_reviews(
+    fact_employment,
+    dim_employee,
+    dim_role,
+    config,
+    today,
+    rng,
+    event_type_map
+):
+    salary_event_key = event_type_map.get("Salarisaanpassing")
+
+    if salary_event_key is None:
+        return fact_employment, int(fact_employment["Employment_Key"].max()) + 1
+
+    career_cfg = config.get("career_events", {})
+    salary_cfg = career_cfg.get("salary_growth", {})
+    salary_increase_rate = career_cfg.get("salary_increase_rate", 1.0)
+
+    inflation_min = salary_cfg.get("inflation_min", 0.018)
+    inflation_max = salary_cfg.get("inflation_max", 0.035)
+    performance_bonus_max = salary_cfg.get("performance_bonus_max", 0.018)
+    cap_multiplier = salary_cfg.get("role_band_cap_multiplier", 1.08)
+
+    active = fact_employment[
+        fact_employment["Dienstverband_status"] == "Actief"
+    ].copy()
+
+    if active.empty:
+        return fact_employment, int(fact_employment["Employment_Key"].max()) + 1
+
+    role_lookup = dim_role.set_index("Role_Key")
+    performance_lookup = dim_employee.set_index("Employee_Key")["Performance_Score"]
+    next_key = int(fact_employment["Employment_Key"].max()) + 1
+    new_records = []
+
+    for idx, row in active.iterrows():
+        employee_key = int(row["Employee_Key"])
+
+        if today.isocalendar()[1] != _salary_review_week(employee_key):
+            continue
+
+        if rng.random() > salary_increase_rate:
+            continue
+
+        if pd.Timestamp(row["Startdatum"]).year == today.year:
+            continue
+
+        if _already_reviewed_this_year(
+            fact_employment,
+            employee_key,
+            salary_event_key,
+            today.year
+        ):
+            continue
+
+        role = role_lookup.loc[row["Role_Key"]]
+        performance = performance_lookup.get(employee_key, 3.0)
+        inflation = rng.uniform(inflation_min, inflation_max)
+        performance_factor = max(0, min(1, (performance - 3.0) / 2.0))
+        raise_pct = inflation + performance_factor * performance_bonus_max
+        salary_cap = int(role["Salaris_max"] * cap_multiplier)
+        new_salary = min(int(round(row["Salaris"] * (1 + raise_pct))), salary_cap)
+
+        if new_salary <= row["Salaris"]:
+            continue
+
+        fact_employment.loc[idx, "Einddatum"] = today
+        fact_employment.loc[idx, "Dienstverband_status"] = "Inactief"
+
+        new_records.append({
+            "Employment_Key": next_key,
+            "Previous_Employment_Key": row["Employment_Key"],
+            "Employee_Key": employee_key,
+            "Role_Key": row["Role_Key"],
+            "Location_Key": row["Location_Key"],
+            "Startdatum": today,
+            "Einddatum": None,
+            "Dienstverband_status": "Actief",
+            "Salaris": new_salary,
+            "Contracttype": row["Contracttype"],
+            "Contracturen": row.get("Contracturen"),
+            "Contract_einddatum": row.get("Contract_einddatum"),
+            "Contract_ronde": row.get("Contract_ronde"),
+            "EventType_Key": salary_event_key,
+            "RedenVertrek_Key": None
+        })
+        next_key += 1
+
+    if new_records:
+        fact_employment = pd.concat(
+            [fact_employment, pd.DataFrame(new_records)],
+            ignore_index=True
+        )
+
+    return fact_employment, next_key
+
+
+def _salary_review_week(employee_key):
+    # Deterministic spread over the year. This avoids artificial BI spikes from
+    # all salary reviews landing in January.
+    return ((employee_key * 37) % 52) + 1
+
+
+def _already_reviewed_this_year(
+    fact_employment,
+    employee_key,
+    salary_event_key,
+    year
+):
+    employee_records = fact_employment[
+        (fact_employment["Employee_Key"] == employee_key)
+        & (fact_employment["EventType_Key"] == salary_event_key)
+    ]
+
+    if employee_records.empty:
+        return False
+
+    review_years = pd.to_datetime(
+        employee_records["Startdatum"],
+        errors="coerce"
+    ).dt.year
+
+    return (review_years == year).any()

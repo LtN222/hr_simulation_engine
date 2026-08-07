@@ -11,11 +11,11 @@ class PersonFactory:
         self.config = config
         self.rng = rng
 
-    def create(self, role_name, today):
+    def create(self, role_name, today, employment_start_date=None):
 
         gender, voornaam, achternaam = self._choose_gender_and_name()
 
-        _, geboortedatum = self._generate_age(today)
+        _, geboortedatum = self._generate_age(today, employment_start_date)
 
         bijzondere_aanstelling, land, voornaam, achternaam = (
             self._choose_special_arrangement(
@@ -56,14 +56,45 @@ class PersonFactory:
 
         return gender, voornaam, achternaam
 
-    def _generate_age(self, today):
+    def _generate_age(self, today, employment_start_date=None):
+        """Generate a date of birth compatible with employment start.
 
-        leeftijd = self.rng.randint(18, 67)
-
-        geboortedatum = today - pd.DateOffset(
-            years=leeftijd,
-            days=self.rng.randint(0, 365)
+        Initial-population contracts can predate the simulation start by many
+        years. Sampling an age relative to ``today`` alone can therefore make
+        a person a minor on their first employment date. The feasible birth
+        date range is bounded by both the current age distribution and the
+        legal minimum age at the start of employment.
+        """
+        today = pd.Timestamp(today).normalize()
+        minimum_current_age = 18
+        maximum_current_age = 67
+        minimum_hire_age = int(
+            getattr(self.config, "initial_population", {}).get(
+                "minimum_hire_age", 18
+            )
         )
+
+        oldest_birth_date = today - pd.DateOffset(years=maximum_current_age)
+        latest_birth_date = today - pd.DateOffset(years=minimum_current_age)
+
+        if employment_start_date is not None:
+            latest_birth_date = min(
+                latest_birth_date,
+                pd.Timestamp(employment_start_date).normalize()
+                - pd.DateOffset(years=minimum_hire_age)
+            )
+
+        if latest_birth_date < oldest_birth_date:
+            raise ValueError(
+                "Employment start date is incompatible with the configured "
+                "employee age range."
+            )
+
+        span_days = (latest_birth_date - oldest_birth_date).days
+        geboortedatum = oldest_birth_date + pd.Timedelta(
+            days=self.rng.randint(0, span_days)
+        )
+        leeftijd = (today - geboortedatum).days // 365
 
         return leeftijd, geboortedatum
 

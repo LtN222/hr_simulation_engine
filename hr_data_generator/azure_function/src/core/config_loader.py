@@ -32,5 +32,5 @@ class ConfigLoader:
             f"{sector}.json"
         )
 
-        with open(config_path, "r") as f:
+        with open(config_path, "r", encoding="utf-8") as f:
             return json.load(f)

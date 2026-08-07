@@ -30,13 +30,33 @@ class EmployeeFactory:
         role_name,
         department_name,
         today,
-        state
+        state,
+        employment_start_date=None
     ):
         # =====================================================
-        # 1️⃣ Person
+        # 1️⃣ Job + contract
         # =====================================================
 
-        person_data = self.person_factory.create(role_name, today)
+        # =====================================================
+        # 2️⃣ Person
+        # =====================================================
+
+
+        job, contract, performance = self.employment_factory.create(
+            role_row=role_row,
+            role_name=role_name,
+            department_name=department_name,
+            today=today,
+            employment_start_date=employment_start_date
+        )
+
+        # Contract start is needed to keep the person legally employable on
+        # their first day, including the historical initial population.
+        person_data = self.person_factory.create(
+            role_name,
+            today,
+            employment_start_date=contract.start_date
+        )
 
         person = Person(
             gender=person_data["gender"],
@@ -49,19 +69,7 @@ class EmployeeFactory:
         bijzondere_aanstelling = person_data["bijzondere_aanstelling"]
 
         # =====================================================
-        # 2️⃣ Job + contract
-        # =====================================================
-
-
-        job, contract, performance = self.employment_factory.create(
-            role_row=role_row,
-            role_name=role_name,
-            department_name=department_name,
-            today=today
-        )
-
-        # =====================================================
-        # 4️⃣ Keys / dimensions
+        # 3️⃣ Keys / dimensions
         # =====================================================
 
         hire_source_key = choose_hire_source(
@@ -84,7 +92,7 @@ class EmployeeFactory:
         )
 
         # =====================================================
-        # 5️⃣ Employee object
+        # 4️⃣ Employee object
         # =====================================================
 
         employee = Employee(

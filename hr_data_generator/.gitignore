@@ -9,3 +9,12 @@ __pycache__/
 local.settings.json
 .vscode/
 .DS_Store
+
+# Local Azure Functions and Azurite state
+/AzuriteConfig
+/__azurite_db*__.json
+/__blobstorage__/
+/__queuestorage__/
+
+# The Azure Functions host configuration lives in azure_function/.
+/host.json

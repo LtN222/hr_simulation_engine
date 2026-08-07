@@ -17,6 +17,7 @@ class Config:
         self.dim_education_level = data["dim_education_level"]
         self.dim_event_type = data["dim_event_type"]
         self.dim_absence_type = data["dim_absence_type"]
+        self.dim_salary_band = data["dim_salary_band"]
 
         self.education_distribution_by_role = data.get(
             "education_distribution_by_role", {}
@@ -28,6 +29,8 @@ class Config:
 
         self.structure = data["structure"]
         self.baseline_headcount = data["baseline_headcount"]
+        self.staffing = data.get("staffing", {})
+        self.initial_population = data.get("initial_population", {})
 
         self.schema = data["schema"]
         self.database = data.get("database")
@@ -35,6 +38,7 @@ class Config:
         self.dim_reden_vertrek = data["dim_reden_vertrek"]
         self.absence = data["absence"]
         self.attrition = data.get("attrition", {})
+        self.retirement = data.get("retirement", {})
         self.growth = data.get("growth", {})
         self.career_events = data.get("career_events", {})
         self.recruitment = data.get("recruitment", {})

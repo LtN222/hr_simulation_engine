@@ -20,17 +20,27 @@ from src.simulation.simulation_performance import PerformanceSimulator
 
 class WorkforceGenerator:
 
-    def __init__(self, sector="maakindustrie", seed=42):
+    def __init__(
+        self,
+        sector="maakindustrie",
+        seed=42,
+        initial_date=None,
+        initial_headcount=None
+    ):
 
         self.config = ConfigLoader().load()
         self.schema = load_schema(self.config.get("schema"))
 
         self.rng = random.Random(seed)
 
-        self.today = datetime(
+        self.today = initial_date or datetime(
             self.config.start_year_simulation,
             1,
             1
+        )
+        self.initial_headcount = initial_headcount or self.config.initial_population.get(
+            "headcount",
+            self.config.baseline_headcount
         )
         self.absence_simulator = AbsenceSimulator(
             self.config,
@@ -85,7 +95,8 @@ class WorkforceGenerator:
 
         role_allocations = allocate_headcount(
             self.config.structure,
-            self.config.baseline_headcount
+            self.initial_headcount,
+            self.config.staffing
         )
 
         state["role_allocations"] = role_allocations

@@ -1,4 +1,20 @@
 import math
+from datetime import date, datetime
+
+
+def economic_event_for_date(growth_config, today):
+    """Return the configured macro event active on ``today``, if any."""
+    if isinstance(today, datetime):
+        today = today.date()
+    elif not isinstance(today, date):
+        today = today.date()
+
+    for event in growth_config.get("economic_events", []):
+        start = date.fromisoformat(event["start_date"])
+        end = date.fromisoformat(event["end_date"])
+        if start <= today <= end:
+            return event
+    return None
 
 
 def calculate_growth_target(
@@ -13,12 +29,17 @@ def calculate_growth_target(
     rng
 ):
     start_year = sector_config["start_year_simulation"]
-    weeks_since_start = (year - start_year) * 52 + week
+    current_date = datetime.fromisocalendar(year, week, 1)
+    start_date = datetime(start_year, 1, 1)
+    years_since_start = max(
+        0.0,
+        (current_date - start_date).days / 365.2425
+    )
 
     growth_cfg = sector_config.get("growth", {})
     shock_probability = growth_cfg.get(
         "shock_probability",
-        growth_cfg.get("shock_probablity", 0.05)
+        growth_cfg.get("shock_probablity", 0.0)
     )
     shock_min = growth_cfg.get("shock_min", -20)
     shock_max = growth_cfg.get("shock_max", 30)
@@ -28,22 +49,20 @@ def calculate_growth_target(
     if not max_capacity:
         max_capacity = baseline_headcount * 1.5
 
-    # annual_growth_rate is a yearly curve speed. The model advances in weeks,
-    # so the logistic steepness is converted to a weekly value.
-    growth_speed = (annual_growth_rate / 52) * (
-        1 + 0.1 * (rng.random() - 0.5)
-    )
+    # A compound annual path is easier to calibrate than a logistic curve and
+    # does not imply that capacity must be reached within the visible horizon.
+    # ``weeks_before_peak_growth`` remains accepted for runtime compatibility.
+    _ = weeks_before_peak_growth
+    trend_target = round(min(
+        max_capacity,
+        baseline_headcount * math.pow(1 + annual_growth_rate, years_since_start)
+    ))
 
-    growth_factor = 1 / (
-        1 + math.exp(
-            -growth_speed * (weeks_since_start - weeks_before_peak_growth)
+    economic_event = economic_event_for_date(growth_cfg, current_date)
+    if economic_event:
+        trend_target = round(
+            trend_target * float(economic_event.get("target_multiplier", 1.0))
         )
-    )
-
-    trend_target = round(
-        baseline_headcount
-        + (max_capacity - baseline_headcount) * growth_factor
-    )
 
     seasonal_offset = 0
 
@@ -61,7 +80,7 @@ def calculate_growth_target(
             2 * math.pi * (52 - phase_shift) / 52
         )
         corrected_season = raw_season - raw_season_end
-        seasonal_offset = round(baseline_headcount * corrected_season)
+        seasonal_offset = round(trend_target * corrected_season)
 
     shock = 0
 

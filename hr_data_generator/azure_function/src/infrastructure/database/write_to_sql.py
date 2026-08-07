@@ -1,4 +1,5 @@
 import os
+import numpy as np
 import pandas as pd
 from sqlalchemy import create_engine, text, Integer, String, Date, Boolean, Numeric
 import urllib
@@ -16,9 +17,14 @@ STATIC_DIMENSIONS = {
     "dim_hire_source",
     "dim_education_level",
     "dim_absence_type",
+    "dim_salary_band",
     "dim_event_type",
     "dim_reden_vertrek"
 }
+
+# These dimensions represent the current employee state and therefore need a
+# Type 1 update on incremental runs. Facts remain append-only.
+MUTABLE_DIMENSIONS = {"dim_employee"}
 
 
 # =====================================================
@@ -107,6 +113,198 @@ def get_table_write_order(schema_config):
 
 
 # =====================================================
+# Helper: bestaande primary key waarden ophalen
+# =====================================================
+
+def _get_existing_primary_keys(engine, table, pk_column):
+    try:
+        with engine.begin() as conn:
+            result = conn.execute(text(
+                f"SELECT CAST({pk_column} AS NVARCHAR(255)) FROM {table}"
+            ))
+            return {
+                str(row[0])
+                for row in result.fetchall()
+                if row[0] is not None
+            }
+    except Exception as exc:
+        logging.warning(f"Could not read existing keys for {table}: {exc}")
+        return set()
+
+
+def _filter_existing_primary_key_rows(engine, df, table, cfg):
+    if df.empty:
+        return df
+
+    pk_column = cfg.get("primary_key")
+    if not pk_column or pk_column not in df.columns:
+        return df
+
+    existing_keys = _get_existing_primary_keys(engine, table, pk_column)
+    if not existing_keys:
+        return df
+
+    df = df.drop_duplicates(subset=[pk_column], keep="first")
+
+    def _normalize_value(value):
+        if pd.isna(value):
+            return None
+        return str(value)
+
+    normalized_values = df[pk_column].apply(_normalize_value)
+    mask = normalized_values.isin(existing_keys)
+    filtered_df = df.loc[~mask]
+
+    skipped = len(df) - len(filtered_df)
+    if skipped > 0:
+        logging.info(f"{table}: skipped {skipped} rows already present in SQL")
+
+    return filtered_df
+
+
+def _normalize_dataframe_for_sql(df, type_config=None):
+    normalized = df.copy()
+
+    def _normalize_scalar(value, sql_type=None):
+        if value is None:
+            return None
+
+        if pd.isna(value):
+            return None
+
+        if sql_type and sql_type.startswith("INT"):
+            return int(value)
+
+        if sql_type and sql_type.startswith("DECIMAL"):
+            return float(value)
+
+        if sql_type and sql_type.startswith("BIT"):
+            return bool(value)
+
+        if isinstance(value, (pd.Timestamp, pd.Timedelta)):
+            return value.to_pydatetime() if isinstance(value, pd.Timestamp) else value.to_pytimedelta()
+
+        if isinstance(value, np.datetime64):
+            return pd.Timestamp(value).to_pydatetime()
+
+        if isinstance(value, np.timedelta64):
+            return pd.Timedelta(value).to_pytimedelta()
+
+        if isinstance(value, np.generic):
+            return value.item()
+
+        if hasattr(value, "to_pydatetime") and callable(value.to_pydatetime):
+            return value.to_pydatetime()
+
+        if hasattr(value, "to_pytimedelta") and callable(value.to_pytimedelta):
+            return value.to_pytimedelta()
+
+        if hasattr(value, "item") and not isinstance(value, (str, bytes, bool, int, float, type(None))):
+            return value.item()
+
+        return value
+
+    for col in normalized.columns:
+        try:
+            sql_type = type_config.get(col) if type_config else None
+            normalized[col] = pd.Series(
+                [
+                    _normalize_scalar(value, sql_type)
+                    for value in normalized[col]
+                ],
+                index=normalized.index,
+                dtype=object
+            )
+        except Exception:
+            continue
+
+    return normalized
+
+
+def _ensure_table_columns(engine, table, cfg):
+    """Add missing nullable columns when the schema evolves.
+
+    Pandas creates tables on first write, but existing Azure SQL tables need an
+    ALTER TABLE before appending DataFrames with newly introduced columns.
+    """
+
+    type_config = cfg.get("types", {})
+    if not type_config:
+        return
+
+    with engine.begin() as conn:
+        for column, sql_type in type_config.items():
+            conn.execute(text(f"""
+                IF OBJECT_ID('{table}', 'U') IS NOT NULL
+                AND COL_LENGTH('{table}', '{column}') IS NULL
+                ALTER TABLE {table}
+                ADD {column} {sql_type} NULL
+            """))
+
+
+def _drop_deprecated_columns(engine, schema_config):
+    """Remove explicitly deprecated source columns from existing SQL tables."""
+    with engine.begin() as conn:
+        for table, cfg in schema_config.items():
+            for column in cfg.get("deprecated_columns", []):
+                conn.execute(text(f"""
+                    IF OBJECT_ID('{table}', 'U') IS NOT NULL
+                    AND COL_LENGTH('{table}', '{column}') IS NOT NULL
+                    ALTER TABLE [{table}] DROP COLUMN [{column}]
+                """))
+
+
+def _table_exists(engine, table):
+    with engine.begin() as conn:
+        return conn.execute(text(
+            "SELECT OBJECT_ID(:table_name, 'U')"
+        ), {"table_name": table}).scalar() is not None
+
+
+def _upsert_mutable_dimension(engine, table, dataframe, cfg):
+    """Insert new dimension members and update existing current-state rows."""
+    if dataframe.empty:
+        return
+
+    pk_column = cfg.get("primary_key")
+    columns = [
+        column
+        for column in cfg.get("types", {})
+        if column in dataframe.columns
+    ]
+    if not pk_column or pk_column not in columns:
+        raise ValueError(f"{table} requires a primary key for an upsert.")
+
+    update_columns = [column for column in columns if column != pk_column]
+    update_sql = ", ".join(
+        f"[{column}] = :{column}"
+        for column in update_columns
+    )
+    insert_columns = ", ".join(f"[{column}]" for column in columns)
+    insert_values = ", ".join(f":{column}" for column in columns)
+    update_statement = text(f"""
+        UPDATE {table}
+        SET {update_sql}
+        WHERE [{pk_column}] = :{pk_column}
+    """)
+    insert_statement = text(f"""
+        INSERT INTO {table} ({insert_columns})
+        VALUES ({insert_values})
+    """)
+
+    rows = dataframe.drop_duplicates(
+        subset=[pk_column],
+        keep="last"
+    )[columns].to_dict(orient="records")
+
+    with engine.begin() as conn:
+        for row in rows:
+            result = conn.execute(update_statement, row)
+            if result.rowcount == 0:
+                conn.execute(insert_statement, row)
+
+
+# =====================================================
 # Helper: tabellen resetten
 # =====================================================
 
@@ -190,11 +388,13 @@ def write_dataframes(engine, dataframes, schema_config, reset):
 
     for table in table_order:
 
-        if not reset and table in STATIC_DIMENSIONS:
+        cfg = schema_config[table]
+        _ensure_table_columns(engine, table, cfg)
+
+        if not reset and table in STATIC_DIMENSIONS and _table_exists(engine, table):
             logging.info(f"{table}: skipped (static dimension)")
             continue
 
-        cfg = schema_config[table]
         df_name = cfg["df"]
 
         if df_name not in dataframes:
@@ -203,6 +403,31 @@ def write_dataframes(engine, dataframes, schema_config, reset):
 
         df = dataframes[df_name]
 
+        if not reset and table in MUTABLE_DIMENSIONS:
+            new_rows = _filter_existing_primary_key_rows(engine, df, table, cfg)
+            _ensure_table_columns(engine, table, cfg)
+            normalized = _normalize_dataframe_for_sql(
+                df,
+                cfg.get("types")
+            )
+            _upsert_mutable_dimension(engine, table, normalized, cfg)
+
+            summary[table] = {
+                "added": len(new_rows),
+                "total": len(df)
+            }
+            logging.info(
+                f"{table}: +{len(new_rows)} rows, "
+                f"{len(df) - len(new_rows)} rows updated"
+            )
+            continue
+
+        used_primary_key_filter = False
+
+        if not reset:
+            df = _filter_existing_primary_key_rows(engine, df, table, cfg)
+            used_primary_key_filter = bool(cfg.get("primary_key"))
+
         try:
             with engine.begin() as conn:
                 result = conn.execute(text(f"SELECT COUNT(*) FROM {table}"))
@@ -210,11 +435,18 @@ def write_dataframes(engine, dataframes, schema_config, reset):
         except Exception:
             existing_rows = 0
 
-        dtype_map = map_sql_types(cfg["types"]) if "types" in cfg else None
-
-        df_to_insert = df.iloc[existing_rows:] if not reset else df
+        if reset or used_primary_key_filter:
+            df_to_insert = df
+        else:
+            df_to_insert = df.iloc[existing_rows:]
 
         if len(df_to_insert) > 0:
+            _ensure_table_columns(engine, table, cfg)
+            dtype_map = map_sql_types(cfg["types"]) if "types" in cfg else None
+            df_to_insert = _normalize_dataframe_for_sql(
+                df_to_insert,
+                cfg.get("types")
+            )
 
             df_to_insert.to_sql(
                 table,
@@ -320,6 +552,51 @@ def apply_retention(engine):
         # 1️⃣ Eerst attributes verwijderen (FK SAFE)
         # -------------------------------------------------
 
+        # Delete fact tables that depend on fact_employment before deleting
+        # old employment chains. This must stay in sync with schema FKs.
+        conn.execute(text("""
+        IF OBJECT_ID('fact_salary_snapshot', 'U') IS NOT NULL
+        BEGIN
+            ;WITH Chains AS (
+
+                SELECT
+                    Employment_Key,
+                    Previous_Employment_Key,
+                    Einddatum,
+                    Employment_Key AS Root_Key
+                FROM fact_employment
+                WHERE Previous_Employment_Key IS NULL
+
+                UNION ALL
+
+                SELECT
+                    fe.Employment_Key,
+                    fe.Previous_Employment_Key,
+                    fe.Einddatum,
+                    c.Root_Key
+                FROM fact_employment fe
+                JOIN Chains c
+                    ON fe.Previous_Employment_Key = c.Employment_Key
+            ),
+
+            OldChains AS (
+
+                SELECT Root_Key
+                FROM Chains
+                GROUP BY Root_Key
+                HAVING MAX(Einddatum) < DATEADD(year, -5, GETDATE())
+
+            )
+
+            DELETE fss
+            FROM fact_salary_snapshot fss
+            JOIN Chains c
+                ON fss.Employment_Key = c.Employment_Key
+            JOIN OldChains oc
+                ON c.Root_Key = oc.Root_Key
+        END
+        """))
+
         conn.execute(text("""
         WITH Chains AS (
 
@@ -417,6 +694,14 @@ def apply_retention(engine):
             )
         """))
 
+        conn.execute(text("""
+            IF OBJECT_ID('fact_salary_snapshot', 'U') IS NOT NULL
+            DELETE FROM fact_salary_snapshot
+            WHERE Employment_Key NOT IN (
+                SELECT Employment_Key FROM fact_employment
+            )
+        """))
+
 
 # =====================================================
 # 6️⃣ Dataset write orchestrator
@@ -425,6 +710,8 @@ def apply_retention(engine):
 def write_dataset(engine, state, schema_config, reset=False):
 
     logging.info("Writing dataset to SQL")
+
+    _drop_deprecated_columns(engine, schema_config)
 
     if reset:
         table_order = get_table_write_order(schema_config)

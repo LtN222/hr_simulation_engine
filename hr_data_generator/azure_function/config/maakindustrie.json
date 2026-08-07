@@ -6,18 +6,44 @@
   "start_year_simulation": 2020,
 
   "baseline_headcount": 50,
+  "staffing": {
+    "minimum_count_for_manager_role": 1,
+    "max_team_size": 22
+  },
+  "initial_population": {
+    "headcount": 50,
+    "burn_in_years": 3,
+    "minimum_hire_age": 18,
+    "tenure_years_distribution": {
+      "0-1": 0.40,
+      "1-3": 0.32,
+      "3-5": 0.18,
+      "5-10": 0.08,
+      "10-20": 0.02
+    }
+  },
   "growth": {
     "max_capacity": 800,
-    "weeks_before_peak_growth": 230,
     "annual_growth_rate": {
-      "min": 0.9,
-      "max": 1.3
+      "min": 0.20,
+      "max": 0.24
     },
-    "max_weekly_hires": 8,
-    "max_weekly_growth_rate": 0.025,
-    "shock_probability": 0.02,
-    "shock_min": -8,
-    "shock_max": 10
+    "max_weekly_hires": 4,
+    "max_weekly_growth_rate": 0.012,
+    "economic_events": [
+      {
+        "start_date": "2020-03-01",
+        "end_date": "2021-06-30",
+        "target_multiplier": 0.90,
+        "replacement_hiring_rate": 0.45
+      },
+      {
+        "start_date": "2023-09-01",
+        "end_date": "2024-06-30",
+        "target_multiplier": 0.97,
+        "replacement_hiring_rate": 0.80
+      }
+    ]
   },
   "dim_location": {
     "Hoofdkantoor": 0.25,
@@ -29,7 +55,23 @@
   "career_events": {
     "promotion_rate": 0.08,
     "internal_transfer_rate": 0.05,
-    "salary_increase_rate": 0.6,
+    "salary_increase_rate": 1.0,
+    "salary_growth": {
+      "inflation_min": 0.018,
+      "inflation_max": 0.028,
+      "performance_bonus_max": 0.01,
+      "role_band_cap_multiplier": 1.05,
+      "new_hire_band_position": {
+        "min": 0.32,
+        "max": 0.42
+      },
+      "initial_population_band_position": {
+        "min": 0.28,
+        "max": 0.40,
+        "tenure_increment_per_year": 0.035,
+        "max_position": 0.75
+      }
+    },
     "contract_change_rate": 0.03
   },
 
@@ -58,8 +100,18 @@
     "Vakantie": false,
     "Tijd voor tijd": false
   },
- "absence": {
+  "dim_salary_band": [
+    {"SalaryBand_Name": "Onder EUR 35.000", "Minimum_Salaris": 0, "Maximum_Salaris": 34999},
+    {"SalaryBand_Name": "EUR 35.000 - 44.999", "Minimum_Salaris": 35000, "Maximum_Salaris": 44999},
+    {"SalaryBand_Name": "EUR 45.000 - 59.999", "Minimum_Salaris": 45000, "Maximum_Salaris": 59999},
+    {"SalaryBand_Name": "EUR 60.000 - 79.999", "Minimum_Salaris": 60000, "Maximum_Salaris": 79999},
+    {"SalaryBand_Name": "EUR 80.000 - 99.999", "Minimum_Salaris": 80000, "Maximum_Salaris": 99999},
+    {"SalaryBand_Name": "EUR 100.000 en hoger", "Minimum_Salaris": 100000, "Maximum_Salaris": null}
+  ],
+  "absence": {
+    "annual_event_rate": 0.20,
     "base_probability": 0.20,
+    "minimum_tenure_days": 10,
     "age_multipliers": {
       "<30": 0.8,
       "30-45": 1.0,
@@ -73,6 +125,94 @@
         "3-ploeg": 1.35
       }
 
+    },
+    "type_weights": {
+      "Ziek": 0.78,
+      "Kort verzuim": 0.17,
+      "Lang verzuim": 0.05
+    },
+    "leave_type_rules": {
+      "Zwangerschap": {
+        "annual_probability": 0.018,
+        "genders": ["F"],
+        "min_age": 20,
+        "max_age": 45,
+        "max_events_per_year": 1
+      },
+      "Ouderschapsverlof": {
+        "annual_probability": 0.035,
+        "min_age": 22,
+        "max_age": 55,
+        "min_tenure_days": 90,
+        "max_events_per_year": 1
+      },
+      "Onbetaald verlof": {
+        "annual_probability": 0.012,
+        "min_tenure_days": 180,
+        "max_events_per_year": 1
+      },
+      "Bijzonder verlof": {
+        "annual_probability": 0.060,
+        "max_events_per_year": 2
+      },
+      "Vakantie": {
+        "annual_probability": 0.95,
+        "min_tenure_days": 30,
+        "max_events_per_year": 1
+      },
+      "Tijd voor tijd": {
+        "annual_probability": 0.20,
+        "min_tenure_days": 30,
+        "required_attribute": {
+          "name": "Ploegendienst",
+          "values": ["2-ploeg", "3-ploeg"]
+        },
+        "max_events_per_year": 4
+      }
+    },
+    "duration_distribution_by_type": {
+      "Ziek": {
+        "1": 0.48,
+        "2": 0.25,
+        "3": 0.15,
+        "5": 0.08,
+        "10": 0.04
+      },
+      "Kort verzuim": {
+        "1": 0.75,
+        "2": 0.20,
+        "3": 0.05
+      },
+      "Bijzonder verlof": {
+        "1": 0.85,
+        "2": 0.10,
+        "3": 0.05
+      },
+      "Tijd voor tijd": {
+        "1": 0.70,
+        "2": 0.25,
+        "3": 0.05
+      }
+    },
+    "duration_ranges_by_type": {
+      "Lang verzuim": [
+        {"min_days": 7, "mode_days": 10, "max_days": 14, "weight": 0.35},
+        {"min_days": 15, "mode_days": 20, "max_days": 30, "weight": 0.30},
+        {"min_days": 31, "mode_days": 40, "max_days": 60, "weight": 0.25},
+        {"min_days": 61, "mode_days": 90, "max_days": 120, "weight": 0.10}
+      ],
+      "Zwangerschap": [
+        {"min_days": 112, "mode_days": 119, "max_days": 140, "weight": 1.0}
+      ],
+      "Ouderschapsverlof": [
+        {"min_days": 5, "mode_days": 14, "max_days": 35, "weight": 1.0}
+      ],
+      "Onbetaald verlof": [
+        {"min_days": 5, "mode_days": 10, "max_days": 30, "weight": 1.0}
+      ],
+      "Vakantie": [
+        {"min_days": 14, "mode_days": 21, "max_days": 28, "weight": 1.0}
+      ]
     },
     "duration_distribution": {
       "1": 0.40,
@@ -153,10 +293,26 @@
     "tijdelijk": ["Contract niet verlengd", "Seizoenswerker"]
   },
 
+  "retirement": {
+    "minimum_age": 50,
+    "forced_retirement_age": 67,
+    "age_bands": [
+      {"min_age": 50, "max_age": 54, "annual_probability": 0.001},
+      {"min_age": 55, "max_age": 59, "annual_probability": 0.003},
+      {"min_age": 60, "max_age": 61, "annual_probability": 0.010},
+      {"min_age": 62, "max_age": 62, "annual_probability": 0.030},
+      {"min_age": 63, "max_age": 63, "annual_probability": 0.080},
+      {"min_age": 64, "max_age": 64, "annual_probability": 0.250},
+      {"min_age": 65, "max_age": 65, "annual_probability": 0.850},
+      {"min_age": 66, "max_age": 66, "annual_probability": 0.980}
+    ]
+  },
+
   "dim_event_type": [
     "Aangenomen",
     "Promotie",
     "Transfer",
+    "Salarisaanpassing",
     "Uit dienst",
     "Contract omgezet naar vast",
     "Contract verlengd"

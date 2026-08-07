@@ -82,14 +82,17 @@ def _generate_employee_records(
                         "Achternaam": employee_obj.person.last_name,
                         "Gender": employee_obj.person.gender,
                         "Geboortedatum": employee_obj.person.birth_date,
-                        "Leeftijd": employee_obj.person.age(today),
                         "Land": employee_obj.person.country,
                         "HireSource_Key": employee_obj.hire_source_key,
                         "EducationLevel_Key": employee_obj.education_key,
                         "Location_Key": employee_obj.location_key,
                         "Bijzondere_Aanstelling": employee_obj.bijzondere_aanstelling,
                         "Manager_Key": employee_obj.manager_key,
-                        "Performance_Score": employee_obj.performance
+                        "Performance_Score": employee_obj.performance,
+                        "Eerste_Indienst_Datum": employee_obj.contract.start_date,
+                        "Aaneengesloten_Indienst_Datum": employee_obj.contract.start_date,
+                        "Datum_uitdienst": None,
+                        "In_Dienst": True
                     }
                 )
             )
@@ -167,7 +170,8 @@ def generate_employees(state, config, schema, rng, today):
         dim_employee_df,
         fact_employment_df,
         state["dim_role"],
-        rng
+        rng,
+        staffing_rules=config.staffing
     )
 
     state["dim_employee"] = dim_employee_df

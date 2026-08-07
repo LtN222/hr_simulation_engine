@@ -2,11 +2,12 @@ import pandas as pd
 
 from src.generator.employee_attributes import generate_employment_attributes
 from src.generator.employee_factory import EmployeeFactory
+from src.infrastructure.manager_builder import assign_managers
 from src.infrastructure.record_builder import build_record
 
 
 class HiringSimulator:
-    """Fill open vacancies and add the resulting employees to HR state."""
+    """Convert accepted applications into employees and close vacancies."""
 
     def __init__(self, config, schema, rng, event_type_map):
         self.config = config
@@ -16,14 +17,12 @@ class HiringSimulator:
         self.employee_factory = EmployeeFactory(config, rng)
 
     def run(self, state, today):
-        vacancies = int(state.get("vacancies", 0))
+        accepted_applications = state.get("_accepted_applications", [])
 
-        if vacancies <= 0:
+        if not accepted_applications:
             state["_latest_hires"] = []
+            state["vacancies"] = self._open_vacancy_count(state)
             return state
-
-        fill_rate = self.rng.uniform(0.2, 0.6)
-        hires_this_week = min(vacancies, max(1, int(vacancies * fill_rate)))
 
         dim_employee = state["dim_employee"]
         fact_employment = state["fact_employment"]
@@ -36,10 +35,15 @@ class HiringSimulator:
         new_employments = []
         new_attributes = []
         latest_hires = []
+        recruitment_employee_updates = {}
+        vacancy_employee_updates = {}
 
-        for vacancy_reason in self._vacancy_reasons(state, hires_this_week):
-            role_row = self._choose_role_for_vacancy(state)
-            department_name = self._department_name_for_role(state, role_row)
+        for application in accepted_applications:
+            role_row = self._role_row(state, application["Role_Key"])
+            department_name = self._department_name(
+                state,
+                application["Department_Key"]
+            )
             role_name = role_row["Role_Name"]
 
             employee_obj = self.employee_factory.create(
@@ -48,8 +52,10 @@ class HiringSimulator:
                 role_name=role_name,
                 department_name=department_name,
                 today=today,
-                state=state
+                state=state,
+                employment_start_date=today
             )
+            employee_obj.hire_source_key = application["HireSource_Key"]
 
             new_employees.append(
                 build_record(
@@ -61,14 +67,17 @@ class HiringSimulator:
                         "Achternaam": employee_obj.person.last_name,
                         "Gender": employee_obj.person.gender,
                         "Geboortedatum": employee_obj.person.birth_date,
-                        "Leeftijd": employee_obj.person.age(today),
                         "Land": employee_obj.person.country,
                         "HireSource_Key": employee_obj.hire_source_key,
                         "EducationLevel_Key": employee_obj.education_key,
                         "Location_Key": employee_obj.location_key,
                         "Bijzondere_Aanstelling": employee_obj.bijzondere_aanstelling,
                         "Manager_Key": employee_obj.manager_key,
-                        "Performance_Score": employee_obj.performance
+                        "Performance_Score": employee_obj.performance,
+                        "Eerste_Indienst_Datum": today,
+                        "Aaneengesloten_Indienst_Datum": today,
+                        "Datum_uitdienst": None,
+                        "In_Dienst": True
                     }
                 )
             )
@@ -107,14 +116,19 @@ class HiringSimulator:
                     build_record(self.schema, "fact_employment_attribute", attr)
                 )
 
-            latest_hires.append(
-                {
-                    "Employee_Key": employee_obj.employee_key,
-                    "Role_Key": employee_obj.job.role_key,
-                    "Department_Key": role_row["Department_Key"],
-                    "HireSource_Key": employee_obj.hire_source_key,
-                    "Vacancy_Reason": vacancy_reason
-                }
+            latest_hires.append({
+                "Employee_Key": employee_obj.employee_key,
+                "Role_Key": employee_obj.job.role_key,
+                "Department_Key": role_row["Department_Key"],
+                "HireSource_Key": employee_obj.hire_source_key,
+                "Vacancy_Key": application["Vacancy_Key"],
+                "Vacancy_Reason": application["Vacancy_Reason"]
+            })
+            recruitment_employee_updates[application["Recruitment_Key"]] = (
+                employee_obj.employee_key
+            )
+            vacancy_employee_updates[application["Vacancy_Key"]] = (
+                employee_obj.employee_key
             )
 
             next_employee_key += 1
@@ -135,46 +149,63 @@ class HiringSimulator:
                 ignore_index=True
             )
 
-        state["vacancies"] = vacancies - hires_this_week
+        self._mark_recruitment_as_hired(state, recruitment_employee_updates)
+        self._close_filled_vacancies(state, vacancy_employee_updates, today)
+
+        state["dim_employee"] = assign_managers(
+            state["dim_employee"],
+            state["fact_employment"],
+            state["dim_role"],
+            self.rng,
+            staffing_rules=self.config.staffing
+        )
+        state["vacancies"] = self._open_vacancy_count(state)
         state["_latest_hires"] = latest_hires
+        state.pop("_accepted_applications", None)
         return state
 
-    def _vacancy_reasons(self, state, hires_this_week):
-        replacement_count = min(hires_this_week, int(state.get("_attrition_vacancies", 0)))
-        return (
-            ["Replacement"] * replacement_count
-            + ["Growth"] * (hires_this_week - replacement_count)
-        )
+    def _mark_recruitment_as_hired(self, state, recruitment_employee_updates):
+        recruitment = state.get("fact_recruitment", pd.DataFrame())
+        if recruitment.empty:
+            return
 
-    def _choose_role_for_vacancy(self, state):
-        dim_role = state["dim_role"]
-        active = state["fact_employment"][
-            state["fact_employment"]["Dienstverband_status"] == "Actief"
-        ]
+        for recruitment_key, employee_key in recruitment_employee_updates.items():
+            recruitment.loc[
+                recruitment["Recruitment_Key"] == recruitment_key,
+                "Employee_Key"
+            ] = employee_key
 
-        role_counts = active["Role_Key"].value_counts().to_dict()
+        state["fact_recruitment"] = recruitment
 
-        weighted_roles = []
-        weights = []
-        for _, role in dim_role.iterrows():
-            target_ratio = self._target_ratio_for_role(state, role)
-            current_count = role_counts.get(role["Role_Key"], 0)
-            gap_weight = max(0.2, target_ratio * 100 - current_count)
-            weighted_roles.append(role)
-            weights.append(gap_weight)
+    def _close_filled_vacancies(self, state, vacancy_employee_updates, today):
+        vacancy = state.get("fact_vacancy", pd.DataFrame())
+        if vacancy.empty:
+            return
 
-        return self.rng.choices(weighted_roles, weights=weights)[0]
+        for vacancy_key, employee_key in vacancy_employee_updates.items():
+            mask = vacancy["Vacancy_Key"] == vacancy_key
+            vacancy.loc[mask, "Status"] = "Closed"
+            vacancy.loc[mask, "Closed_Date"] = today
+            vacancy.loc[mask, "Filled_Employee_Key"] = employee_key
 
-    def _target_ratio_for_role(self, state, role_row):
-        department_name = self._department_name_for_role(state, role_row)
-        role_name = role_row["Role_Name"]
-        return self.config.structure[department_name][role_name].get("fte_ratio", 0.01)
+        state["fact_vacancy"] = vacancy
 
-    def _department_name_for_role(self, state, role_row):
-        department = state["dim_department"].loc[
-            state["dim_department"]["Department_Key"] == role_row["Department_Key"]
+    def _open_vacancy_count(self, state):
+        vacancy = state.get("fact_vacancy", pd.DataFrame())
+        if vacancy.empty or "Status" not in vacancy.columns:
+            return 0
+        return int((vacancy["Status"] == "Open").sum())
+
+    def _role_row(self, state, role_key):
+        return state["dim_role"].loc[
+            state["dim_role"]["Role_Key"] == role_key
         ].iloc[0]
-        return department["Department_Name"]
+
+    def _department_name(self, state, department_key):
+        return state["dim_department"].loc[
+            state["dim_department"]["Department_Key"] == department_key,
+            "Department_Name"
+        ].iloc[0]
 
 
 def simulate_hiring(state, sector_config, schema, today, rng, event_type_map):
