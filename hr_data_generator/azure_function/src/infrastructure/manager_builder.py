@@ -16,17 +16,27 @@ def assign_managers(
     today=None,
     staffing_rules=None
 ) -> pd.DataFrame:
-    """Assign managers as an acyclic hierarchy.
+    """Assign managers as an acyclic hierarchy, and refresh each employee's
+    current role/department alongside it.
 
     The hierarchy is intentionally simple and BI-friendly:
     CEO -> department heads -> team leads -> employees. Manager_Key is stored on
-    dim_employee because that is where the schema defines it.
+    dim_employee because that is where the schema defines it. Role_Key and
+    Department_Key are kept on dim_employee the same way and from the same
+    role context - a current-state convenience column for reporting that
+    needs "this employee's role right now" without joining through
+    fact_employment, not a replacement for that history. Like Manager_Key,
+    an employee with no active contract keeps their last known role rather
+    than going blank (see `_current_employment_rows`).
     """
 
     dim_employee_df = dim_employee_df.copy()
 
     if "Manager_Key" not in dim_employee_df.columns:
         dim_employee_df["Manager_Key"] = None
+    for column in ("Role_Key", "Department_Key"):
+        if column not in dim_employee_df.columns:
+            dim_employee_df[column] = None
 
     if fact_employment_df.empty or dim_role.empty or dim_employee_df.empty:
         return dim_employee_df
@@ -40,6 +50,8 @@ def assign_managers(
 
     if emp_roles.empty:
         dim_employee_df["Manager_Key"] = None
+        dim_employee_df["Role_Key"] = None
+        dim_employee_df["Department_Key"] = None
         return dim_employee_df
 
     staffing_rules = staffing_rules or {}
@@ -55,6 +67,14 @@ def assign_managers(
         dim_employee_df["Employee_Key"] == dim_employee_df["Manager_Key"],
         "Manager_Key"
     ] = None
+
+    current_role = emp_roles.set_index("Employee_Key")
+    dim_employee_df["Role_Key"] = dim_employee_df["Employee_Key"].map(
+        current_role["Role_Key"]
+    )
+    dim_employee_df["Department_Key"] = dim_employee_df["Employee_Key"].map(
+        current_role["Department_Key"]
+    )
 
     return dim_employee_df
 
@@ -329,7 +349,12 @@ def build_dim_manager(state):
         )
         return state
 
-    manager_keys = dim_employee["Manager_Key"].dropna().unique()
+    manager_keys = set(dim_employee["Manager_Key"].dropna().astype(int))
+    assignment_history = state.get("fact_manager_assignment", pd.DataFrame())
+    if not assignment_history.empty and "Manager_Key" in assignment_history.columns:
+        manager_keys.update(
+            assignment_history["Manager_Key"].dropna().astype(int)
+        )
     dim_manager = dim_employee[
         dim_employee["Employee_Key"].isin(manager_keys)
     ][[

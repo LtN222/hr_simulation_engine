@@ -1,9 +1,10 @@
 import pandas as pd
 
 from src.generator.employee_factory import EmployeeFactory
-from src.generator.employee_attributes import generate_employment_attributes
 from src.infrastructure.record_builder import build_record
 from src.infrastructure.manager_builder import assign_managers
+from src.infrastructure.avatar import AvatarAssigner, avatar_fields
+from src.infrastructure.relevant_experience import initial_relevant_experience
 
 
 # =====================================================
@@ -46,11 +47,12 @@ def _generate_employee_records(
 
     employees = []
     employment = []
-    employment_attributes = []
+    qualifications = []
 
     emp_key, employment_key = _get_start_keys(state)
 
     factory = EmployeeFactory(config, rng)
+    avatar_assigner = AvatarAssigner(config)
 
     for allocation in role_allocations:
 
@@ -81,14 +83,21 @@ def _generate_employee_records(
                         "Voornaam": employee_obj.person.first_name,
                         "Achternaam": employee_obj.person.last_name,
                         "Gender": employee_obj.person.gender,
+                        **avatar_fields(
+                            config,
+                            employee_obj.employee_key,
+                            employee_obj.person.gender,
+                            avatar_assigner,
+                        ),
                         "Geboortedatum": employee_obj.person.birth_date,
                         "Land": employee_obj.person.country,
                         "HireSource_Key": employee_obj.hire_source_key,
-                        "EducationLevel_Key": employee_obj.education_key,
+                        "Education_Key": employee_obj.education_key,
                         "Location_Key": employee_obj.location_key,
                         "Bijzondere_Aanstelling": employee_obj.bijzondere_aanstelling,
                         "Manager_Key": employee_obj.manager_key,
                         "Performance_Score": employee_obj.performance,
+                        "Initial_Performance_Score": employee_obj.performance,
                         "Eerste_Indienst_Datum": employee_obj.contract.start_date,
                         "Aaneengesloten_Indienst_Datum": employee_obj.contract.start_date,
                         "Datum_uitdienst": None,
@@ -106,8 +115,17 @@ def _generate_employee_records(
                         "Employment_Key": employment_key,
                         "Previous_Employment_Key": None,
                         "Employee_Key": employee_obj.employee_key,
+                        "HireSource_Key": employee_obj.hire_source_key,
                         "Role_Key": employee_obj.job.role_key,
                         "Location_Key": employee_obj.location_key,
+                        "Shift_Key": employee_obj.job.ploegendienst_key,
+                        "SalaryScale_Key": role_row["SalaryScale_Key"],
+                        "Target_Compa_Ratio": employee_obj.job.target_compa_ratio,
+                        "Relevante_Ervaring_Jaren_Bij_Start": initial_relevant_experience(
+                            employee_obj.person.birth_date,
+                            employee_obj.contract.start_date,
+                            rng,
+                        ),
                         "Startdatum": employee_obj.contract.start_date,
                         "Einddatum": None,
                         "Dienstverband_status": "Actief",
@@ -117,32 +135,25 @@ def _generate_employee_records(
                         "Contract_einddatum": employee_obj.contract.end_date,
                         "Contract_ronde": employee_obj.contract.contract_round,
                         "EventType_Key": event_type_map.get("Aangenomen"),
-                        "RedenVertrek_Key": None
+                        "DepartureReason_Key": None,
+                        "Tevredenheid_Score_Bij_Uitdienst": None,
+                        "SatisfactionBand_Key_Bij_Uitdienst": None,
                     }
                 )
             )
+            qualifications.append(build_record(schema, "fact_employee_qualification", {
+                "EmployeeQualification_Key": len(qualifications) + 1,
+                "Employee_Key": employee_obj.employee_key,
+                "Education_Key": employee_obj.education_key,
+                "Behaald_Datum": employee_obj.contract.start_date,
+                "Verkregen_Tijdens_Dienstverband": False,
+            }))
 
             # 🔹 attributes
-            attrs = generate_employment_attributes(
-                employment_key,
-                role_row,
-                config.employment_attributes,
-                rng
-            )
-
-            for attr in attrs:
-                employment_attributes.append(
-                    build_record(
-                        schema,
-                        "fact_employment_attribute",
-                        attr
-                    )
-                )
-
             emp_key += 1
             employment_key += 1
 
-    return employees, employment, employment_attributes
+    return employees, employment, qualifications
 
 
 # =====================================================
@@ -151,7 +162,7 @@ def _generate_employee_records(
 
 def generate_employees(state, config, schema, rng, today):
 
-    employees, employment, employment_attributes = (
+    employees, employment, qualifications = (
         _generate_employee_records(
             state,
             config,
@@ -163,7 +174,6 @@ def generate_employees(state, config, schema, rng, today):
 
     dim_employee_df = pd.DataFrame(employees)
     fact_employment_df = pd.DataFrame(employment)
-    fact_employment_attribute_df = pd.DataFrame(employment_attributes)
 
     # 🔹 manager logica (nu netjes extern)
     dim_employee_df = assign_managers(
@@ -176,6 +186,6 @@ def generate_employees(state, config, schema, rng, today):
 
     state["dim_employee"] = dim_employee_df
     state["fact_employment"] = fact_employment_df
-    state["fact_employment_attribute"] = fact_employment_attribute_df
+    state["fact_employee_qualification"] = pd.DataFrame(qualifications)
 
     return state

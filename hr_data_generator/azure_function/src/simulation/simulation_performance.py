@@ -1,6 +1,16 @@
 import pandas as pd
 
 from src.infrastructure.record_builder import build_record
+from src.infrastructure.engagement import (
+    EngagementModel,
+    score_employee_engagement,
+)
+from src.infrastructure.satisfaction import (
+    SatisfactionModel,
+    score_employee_satisfaction,
+)
+from src.infrastructure.driver_selection import driver_key_for
+from src.infrastructure.relevant_experience import experience_as_of
 
 
 class PerformanceSimulator:
@@ -19,10 +29,10 @@ class PerformanceSimulator:
         dim_employee = state["dim_employee"]
         fact_employment = state["fact_employment"]
         dim_role = state["dim_role"]
-        dim_education_level = state["dim_education_level"]
+        dim_education = state["dim_education"]
 
         role_lookup = dim_role.set_index("Role_Key")
-        edu_lookup = dim_education_level.set_index("EducationLevel_Key")
+        edu_lookup = dim_education.set_index("Education_Key")
 
         records = []
         review_key = 1
@@ -38,8 +48,8 @@ class PerformanceSimulator:
             role = role_lookup.loc[employment_row["Role_Key"]]
 
             education = edu_lookup.loc[
-                emp["EducationLevel_Key"]
-            ]["EducationLevel"]
+                emp["Education_Key"]
+            ]["Education_Level"]
 
             startdatum = employment_row["Startdatum"]
 
@@ -49,7 +59,9 @@ class PerformanceSimulator:
                 role,
                 education,
                 today,
-                review_key
+                review_key,
+                employment_row,
+                state,
             )
 
             records.extend(reviews["records"])
@@ -67,7 +79,7 @@ class PerformanceSimulator:
         dim_employee = state["dim_employee"]
         fact_employment = state["fact_employment"]
         dim_role = state["dim_role"]
-        dim_education_level = state["dim_education_level"]
+        dim_education = state["dim_education"]
 
         active = fact_employment[
             fact_employment["Dienstverband_status"] == "Actief"
@@ -80,8 +92,10 @@ class PerformanceSimulator:
         active = active.drop_duplicates(subset=["Employee_Key"], keep="last")
 
         role_lookup = dim_role.set_index("Role_Key")
-        edu_lookup = dim_education_level.set_index("EducationLevel_Key")
+        edu_lookup = dim_education.set_index("Education_Key")
         employee_lookup = dim_employee.set_index("Employee_Key")
+        satisfaction_model = SatisfactionModel(self.config)
+        engagement_model = EngagementModel(self.config)
         review_key = (
             int(existing["PerformanceReview_Key"].max()) + 1
             if not existing.empty and "PerformanceReview_Key" in existing.columns
@@ -100,18 +114,42 @@ class PerformanceSimulator:
 
             emp = employee_lookup.loc[employee_key]
             role = role_lookup.loc[employment["Role_Key"]]
-            education = edu_lookup.loc[emp["EducationLevel_Key"]]["EducationLevel"]
+            education = edu_lookup.loc[emp["Education_Key"]]["Education_Level"]
             tenure_days = (today - employment["Startdatum"]).days
 
             if tenure_days < 180:
                 continue
 
             previous_score = self._latest_score(existing, emp)
+            satisfaction = score_employee_satisfaction(
+                satisfaction_model,
+                state,
+                emp,
+                employment,
+                today,
+                performance_score=previous_score,
+            )
+            engagement = score_employee_engagement(
+                engagement_model,
+                state,
+                emp,
+                employment,
+                today,
+                satisfaction_score=satisfaction,
+                performance_score=previous_score,
+            )
             score = self._calculate_score(
                 tenure_days / 365,
                 education,
                 role["Leidinggevend"],
-                previous_score=previous_score
+                previous_score=previous_score,
+                engagement_effect=self._engagement_review_effect(engagement),
+                relevant_experience=experience_as_of(employment, today),
+                employee_key=employee_key,
+            )
+            driver_key = self._performance_driver_key(
+                state, employee_key, today, role["Leidinggevend"],
+                experience_as_of(employment, today), engagement,
             )
 
             records.append(
@@ -122,7 +160,8 @@ class PerformanceSimulator:
                         "PerformanceReview_Key": review_key,
                         "Employee_Key": employee_key,
                         "Review_Datum": today,
-                        "Performance_Score": score
+                        "Performance_Score": score,
+                        "PerformanceDriver_Key": driver_key,
                     }
                 )
             )
@@ -150,7 +189,9 @@ class PerformanceSimulator:
         role,
         education,
         today,
-        review_key_start
+        review_key_start,
+        employment,
+        state,
     ):
 
         records = []
@@ -182,9 +223,11 @@ class PerformanceSimulator:
                 continue
 
             score = self._calculate_score(
-                tenure_years,
+                (review_date - pd.Timestamp(startdatum)).days / 365.2425,
                 education,
-                role["Leidinggevend"]
+                role["Leidinggevend"],
+                relevant_experience=experience_as_of(employment, review_date),
+                employee_key=employee_key,
             )
 
             records.append(
@@ -195,7 +238,15 @@ class PerformanceSimulator:
                         "PerformanceReview_Key": review_key,
                         "Employee_Key": employee_key,
                         "Review_Datum": review_date,
-                        "Performance_Score": score
+                        "Performance_Score": score,
+                        "PerformanceDriver_Key": self._performance_driver_key(
+                            state,
+                            employee_key,
+                            review_date,
+                            role["Leidinggevend"],
+                            experience_as_of(employment, review_date),
+                            None,
+                        ),
                     }
                 )
             )
@@ -212,21 +263,30 @@ class PerformanceSimulator:
         tenure_years,
         education,
         is_manager,
-        previous_score=None
+        previous_score=None,
+        engagement_effect=0.0,
+        relevant_experience=0.0,
+        employee_key=None,
     ):
 
         latent_score = previous_score if previous_score is not None else 3.4
         score = 0.75 * latent_score + 0.25 * self.rng.normalvariate(3.4, 0.6)
 
-        # Minder ervaren medewerkers iets lagere score
-        if tenure_years < 2:
-            score -= 0.3
+        # Relevant vakmanschap grows from prior and in-role experience.
+        score += min(0.30, max(0.0, float(relevant_experience)) * 0.04)
+        if tenure_years < 0.5 and relevant_experience < 1:
+            score -= 0.15
 
-        # Opleidingseffect
-        if education == "WO":
-            score += 0.1
-        elif education == "PhD":
-            score += 0.2
+        # These are bounded role-normalised behavioural signals; they do not
+        # reward overtime, availability, absence, or a raw effort proxy.
+        if employee_key is not None:
+            stable = EngagementModel(None)._stable_value
+            score += stable(employee_key, "execution") * 0.16
+            score += stable(employee_key, "collaboration") * 0.10
+            score += stable(employee_key, "initiative") * 0.10
+            score += stable(employee_key, "coaching") * (
+                0.14 if is_manager else 0.08
+            )
 
         # Leidinggevenden iets hoger
         if is_manager:
@@ -238,8 +298,44 @@ class PerformanceSimulator:
         # 🔥 NIEUW: kleine jaarlijkse fluctuatie
         score += self.rng.normalvariate(0, 0.1)
 
+        # Keep engagement's forward effect small to avoid a feedback loop.
+        score += max(-0.12, min(0.12, float(engagement_effect)))
+
         # Clamp tussen 1 en 5
         return round(max(1, min(5, score)), 2)
+
+    def _performance_driver_key(
+        self, state, employee_key, review_date, is_manager,
+        relevant_experience, engagement,
+    ):
+        """Explain a review with one bounded, work-relevant dominant factor."""
+        stable = EngagementModel(None)._stable_value
+        candidates = {
+            "Resultaat en werkuitvoering": stable(employee_key, "execution"),
+            "Vakmanschap en relevante ervaring": min(1.0, relevant_experience / 8),
+            "Samenwerking en flexibiliteit": stable(employee_key, "collaboration"),
+            "Initiatief en verbeteren": stable(employee_key, "initiative"),
+            "Coachen, kennisdeling en ontwikkeling van anderen": (
+                stable(employee_key, "coaching") * (1.35 if is_manager else 1.0)
+            ),
+        }
+        # No education-direction attribute exists yet. Consequently the
+        # start-qualification driver is deliberately not inferred from level.
+        if engagement is not None:
+            candidates["Initiatief en verbeteren"] += max(
+                -0.20, min(0.20, (float(engagement) - 6.7) * 0.08)
+            )
+        name = max(candidates, key=lambda candidate: abs(candidates[candidate]))
+        return driver_key_for(
+            state.get("dim_performance_driver", pd.DataFrame()), name
+        )
+
+    def _engagement_review_effect(self, engagement):
+        coefficient = float(getattr(self.config, "engagement", {}).get(
+            "performance_review_effect",
+            0.08,
+        ))
+        return (float(engagement) - 6.7) * coefficient
 
     def _review_week(self, employee_key):
         return ((int(employee_key) * 31) % 52) + 1

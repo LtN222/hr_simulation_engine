@@ -68,10 +68,6 @@ def print_sample(state):
     print("\n=== FACT EMPLOYMENT ===")
     print(state["fact_employment"].head())
 
-    if "fact_employment_attribute" in state:
-        print("\n=== ATTRIBUTES ===")
-        print(state["fact_employment_attribute"].head())
-
     if "fact_absence" in state:
         print("\n=== ABSENCE ===")
         print(state["fact_absence"].head())

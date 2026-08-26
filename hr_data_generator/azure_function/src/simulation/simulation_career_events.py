@@ -1,5 +1,11 @@
 import pandas as pd
 
+from src.infrastructure.salary_policy import SalaryPolicy
+from src.infrastructure.shift_assignment import assign_ploegendienst_key
+from src.infrastructure.relevant_experience import carried_experience
+from src.infrastructure.role_eligibility import eligible_internal
+from src.infrastructure.location_assignment import resolve_location, effective_role_capacity
+
 
 def simulate_career_events(
     state,
@@ -11,19 +17,23 @@ def simulate_career_events(
     promotion_rate,
     transfer_rate
 ):
+    """Create salary, promotion and transfer employment events.
+
+    Every new employment row carries the same conformed shift, salary-scale
+    and target-compa fields. This makes the row self-contained for historical
+    reporting and prevents later events from losing their pay context.
+    """
     dim_role = state["dim_role"]
     dim_employee = state["dim_employee"]
     dim_department = state["dim_department"]
     fact_employment = state["fact_employment"]
-
-    active = fact_employment[
-        fact_employment["Dienstverband_status"] == "Actief"
-    ]
+    salary_policy = SalaryPolicy(config, state["dim_salary_scale"])
 
     fact_employment, salary_next_key = _simulate_salary_reviews(
         fact_employment,
         dim_employee,
         dim_role,
+        salary_policy,
         config,
         today,
         rng,
@@ -32,186 +42,138 @@ def simulate_career_events(
 
     active = fact_employment[
         fact_employment["Dienstverband_status"] == "Actief"
-    ]
+    ].copy()
+    if active.empty:
+        state["fact_employment"] = fact_employment
+        return state
 
-    # lookup helpers
     role_lookup = dim_role.set_index("Role_Key")
-    dept_lookup = dim_department.set_index("Department_Key")
-
-    # 🔗 definieer logische transfers (simpel maar effectief)
-    allowed_transfers = {
-        "Productie": ["Techniek", "Logistiek"],
-        "Techniek": ["Productie", "R&D"],
-        "Logistiek": ["Productie"],
-        "Kwaliteit": ["Productie", "R&D"],
-        "R&D": ["Techniek", "Kwaliteit", "IT"],
-        "IT": ["Finance", "R&D"],
-        "Finance": ["Sales", "HR"],
-        "HR": ["Finance", "Sales"],
-        "Sales": ["Finance", "HR"],
-        "Directie": []  # geen transfers omhoog
-    }
-
-    new_records = []
+    department_lookup = dim_department.set_index("Department_Key")
+    employee_lookup = dim_employee.set_index("Employee_Key")
     next_key = max(int(fact_employment["Employment_Key"].max()) + 1, salary_next_key)
+    new_records = []
+    # Tracks capacity-relevant role counts as promotions/transfers happen
+    # within this same pass, so a second move into an already-just-filled
+    # capped role (e.g. two Teamleiders promoted to the same Manager seat
+    # in one week) is correctly refused, not just the first.
+    role_counts = active["Role_Key"].value_counts().to_dict()
 
     for idx, row in active.iterrows():
+        employee_key = int(row["Employee_Key"])
+        role = role_lookup.loc[row["Role_Key"]]
+        department_key = role["Department_Key"]
+        department_name = department_lookup.loc[department_key, "Department_Name"]
+        performance = employee_lookup.loc[employee_key, "Performance_Score"]
+        service_start = employee_lookup.loc[
+            employee_key,
+            "Aaneengesloten_Indienst_Datum"
+        ]
+        target_ratio = _target_ratio_for_row(
+            row,
+            salary_policy,
+            role,
+            service_start,
+            today
+        )
 
-        employee_key = row["Employee_Key"]
-        role_key = row["Role_Key"]
-
-        role = role_lookup.loc[role_key]
-        dept_key = role["Department_Key"]
-        dept_name = dept_lookup.loc[dept_key]["Department_Name"]
-
-        current_salary = row["Salaris"]
-
-        # performance ophalen
-        performance = dim_employee.loc[
-            dim_employee["Employee_Key"] == employee_key,
-            "Performance_Score"
-        ].values[0]
-
-        # -------------------------------------------------
-        # 🎯 PROMOTIE (binnen afdeling)
-        # -------------------------------------------------
-
-        # performance multiplier
-        perf_factor = 1.0
-        if performance >= 4:
-            perf_factor = 1.8
-        elif performance >= 3.5:
-            perf_factor = 1.3
-        elif performance < 2.5:
-            perf_factor = 0.5
-
-        promotion_prob = (promotion_rate / 52) * perf_factor
-
-        if rng.random() < promotion_prob:
-
-            # alleen binnen dezelfde afdeling
-            dept_roles = dim_role[
-                dim_role["Department_Key"] == dept_key
-            ]
-
-            # alleen rollen met hogere salarisband
-            possible_roles = dept_roles[
-                dept_roles["Salaris_min"] > role["Salaris_min"]
-            ]
-
-            if len(possible_roles) > 0:
-
-                new_role_row = possible_roles.sample(
+        promotion_probability = (promotion_rate / 52) * _performance_factor(performance)
+        if rng.random() < promotion_probability:
+            target_names = config.role_career_paths.get(
+                role["Role_Name"], {}
+            ).get("logische_doorgroei", [])
+            candidates = dim_role[dim_role["Role_Name"].isin(target_names)]
+            candidates = candidates[candidates.apply(lambda target: eligible_internal(config, state, employee_key, role, target, today, performance), axis=1)]
+            candidates = candidates[candidates.apply(
+                lambda target: _under_capacity(
+                    state, config, department_lookup, role_counts, target
+                ),
+                axis=1
+            )]
+            if not candidates.empty:
+                new_role = candidates.sample(
                     n=1,
                     random_state=rng.randint(0, 100000)
                 ).iloc[0]
-
-                new_role_key = new_role_row["Role_Key"]
-
-                # huidige employment afsluiten
-                fact_employment.loc[idx, "Einddatum"] = today
-                fact_employment.loc[idx, "Dienstverband_status"] = "Inactief"
-
-                # salaris sprong binnen nieuwe band
-                new_salary = int(
-                    max(
-                        current_salary * 1.08,
-                        new_role_row["Salaris_min"]
-                    )
+                promoted_ratio = salary_policy.clamp_ratio(
+                    target_ratio + 0.015 + max(0, float(performance) - 3.5) * 0.01
                 )
-                new_salary = min(new_salary, int(new_role_row["Salaris_max"] * 1.05))
-
-                new_records.append({
-                    "Employment_Key": next_key,
-                    "Previous_Employment_Key": row["Employment_Key"],
-                    "Employee_Key": employee_key,
-                    "Role_Key": new_role_key,
-                    "Location_Key": row["Location_Key"],
-                    "Startdatum": today,
-                    "Einddatum": None,
-                    "Dienstverband_status": "Actief",
-                    "Salaris": new_salary,
-                    "Contracttype": row["Contracttype"],
-                    "Contracturen": row.get("Contracturen"),
-                    "Contract_einddatum": row.get("Contract_einddatum"),
-                    "Contract_ronde": row.get("Contract_ronde"),
-                    "EventType_Key": event_type_map["Promotie"],
-                    "RedenVertrek_Key": None
-                })
-
+                new_department_name = department_lookup.loc[
+                    new_role["Department_Key"], "Department_Name"
+                ]
+                new_location_key = resolve_location(
+                    state, config, rng, new_department_name, new_role["Role_Name"],
+                    preferred_location_key=row["Location_Key"],
+                )
+                _close_employment(fact_employment, idx, today)
+                new_records.append(_new_employment_record(
+                    row,
+                    next_key,
+                    new_role,
+                    today,
+                    event_type_map["Promotie"],
+                    salary_policy,
+                    config,
+                    service_start,
+                    promoted_ratio,
+                    assign_ploegendienst_key(new_role, state, config, rng),
+                    previous_department_key=department_key,
+                    location_key=new_location_key,
+                ))
                 next_key += 1
+                role_counts[new_role["Role_Key"]] = role_counts.get(
+                    new_role["Role_Key"], 0
+                ) + 1
                 continue
 
-        # -------------------------------------------------
-        # 🔁 TRANSFER (tussen afdelingen)
-        # -------------------------------------------------
+        target_names = config.role_career_paths.get(role["Role_Name"], {}).get("laterale_transfers", [])
+        if rng.random() >= transfer_rate / 52 or not target_names:
+            continue
+        candidates = dim_role[dim_role["Role_Name"].isin(target_names)]
+        candidates = candidates[candidates.apply(lambda target: eligible_internal(config, state, employee_key, role, target, today, performance), axis=1)]
+        candidates = candidates[candidates.apply(
+            lambda target: _under_capacity(
+                state, config, department_lookup, role_counts, target
+            ),
+            axis=1
+        )]
+        if candidates.empty:
+            continue
 
-        transfer_prob = transfer_rate / 52
-
-        if rng.random() < transfer_prob:
-
-            possible_depts = allowed_transfers.get(dept_name, [])
-
-            if not possible_depts:
-                continue
-
-            target_dept = rng.choice(possible_depts)
-
-            target_dept_key = dim_department.loc[
-                dim_department["Department_Name"] == target_dept,
-                "Department_Key"
-            ].values[0]
-
-            # kies rol met vergelijkbare salary range
-            candidate_roles = dim_role[
-                dim_role["Department_Key"] == target_dept_key
-            ]
-
-            candidate_roles = candidate_roles[
-                (candidate_roles["Salaris_min"] <= role["Salaris_max"] * 1.2) &
-                (candidate_roles["Salaris_max"] >= role["Salaris_min"] * 0.8)
-            ]
-
-            if len(candidate_roles) == 0:
-                continue
-
-            new_role_row = candidate_roles.sample(
-                n=1,
-                random_state=rng.randint(0, 100000)
-            ).iloc[0]
-
-            # huidige afsluiten
-            fact_employment.loc[idx, "Einddatum"] = today
-            fact_employment.loc[idx, "Dienstverband_status"] = "Inactief"
-
-            new_records.append({
-                "Employment_Key": next_key,
-                "Previous_Employment_Key": row["Employment_Key"],
-                "Employee_Key": employee_key,
-                "Role_Key": new_role_row["Role_Key"],
-                "Location_Key": row["Location_Key"],
-                "Startdatum": today,
-                "Einddatum": None,
-                "Dienstverband_status": "Actief",
-                "Salaris": row["Salaris"],
-                "Contracttype": row["Contracttype"],
-                "Contracturen": row.get("Contracturen"),
-                "Contract_einddatum": row.get("Contract_einddatum"),
-                "Contract_ronde": row.get("Contract_ronde"),
-                "EventType_Key": event_type_map["Transfer"],
-                "RedenVertrek_Key": None
-            })
-
-            next_key += 1
+        new_role = candidates.sample(
+            n=1,
+            random_state=rng.randint(0, 100000)
+        ).iloc[0]
+        new_department_name = department_lookup.loc[
+            new_role["Department_Key"], "Department_Name"
+        ]
+        new_location_key = resolve_location(
+            state, config, rng, new_department_name, new_role["Role_Name"],
+            preferred_location_key=row["Location_Key"],
+        )
+        _close_employment(fact_employment, idx, today)
+        new_records.append(_new_employment_record(
+            row,
+            next_key,
+            new_role,
+            today,
+            event_type_map["Transfer"],
+            salary_policy,
+            config,
+            service_start,
+            target_ratio,
+            assign_ploegendienst_key(new_role, state, config, rng),
+            previous_department_key=department_key,
+            location_key=new_location_key,
+        ))
+        next_key += 1
+        role_counts[new_role["Role_Key"]] = role_counts.get(new_role["Role_Key"], 0) + 1
 
     if new_records:
         fact_employment = pd.concat(
             [fact_employment, pd.DataFrame(new_records)],
             ignore_index=True
         )
-
     state["fact_employment"] = fact_employment
-
     return state
 
 
@@ -219,88 +181,74 @@ def _simulate_salary_reviews(
     fact_employment,
     dim_employee,
     dim_role,
+    salary_policy,
     config,
     today,
     rng,
     event_type_map
 ):
     salary_event_key = event_type_map.get("Salarisaanpassing")
-
     if salary_event_key is None:
         return fact_employment, int(fact_employment["Employment_Key"].max()) + 1
 
-    career_cfg = config.get("career_events", {})
-    salary_cfg = career_cfg.get("salary_growth", {})
-    salary_increase_rate = career_cfg.get("salary_increase_rate", 1.0)
-
-    inflation_min = salary_cfg.get("inflation_min", 0.018)
-    inflation_max = salary_cfg.get("inflation_max", 0.035)
-    performance_bonus_max = salary_cfg.get("performance_bonus_max", 0.018)
-    cap_multiplier = salary_cfg.get("role_band_cap_multiplier", 1.08)
-
+    increase_rate = config.career_events.get("salary_increase_rate", 1.0)
     active = fact_employment[
         fact_employment["Dienstverband_status"] == "Actief"
     ].copy()
-
     if active.empty:
         return fact_employment, int(fact_employment["Employment_Key"].max()) + 1
 
-    role_lookup = dim_role.set_index("Role_Key")
-    performance_lookup = dim_employee.set_index("Employee_Key")["Performance_Score"]
+    roles = dim_role.set_index("Role_Key")
+    employees = dim_employee.set_index("Employee_Key")
     next_key = int(fact_employment["Employment_Key"].max()) + 1
     new_records = []
 
     for idx, row in active.iterrows():
         employee_key = int(row["Employee_Key"])
-
         if today.isocalendar()[1] != _salary_review_week(employee_key):
             continue
-
-        if rng.random() > salary_increase_rate:
+        if rng.random() > increase_rate or pd.Timestamp(row["Startdatum"]).year == today.year:
+            continue
+        if _already_reviewed_this_year(fact_employment, employee_key, salary_event_key, today.year):
             continue
 
-        if pd.Timestamp(row["Startdatum"]).year == today.year:
+        role = roles.loc[row["Role_Key"]]
+        service_start = employees.loc[employee_key, "Aaneengesloten_Indienst_Datum"]
+        performance = employees.loc[employee_key, "Performance_Score"]
+        target_ratio = _target_ratio_for_row(
+            row,
+            salary_policy,
+            role,
+            service_start,
+            today
+        )
+        new_salary, new_target_ratio = salary_policy.review_salary(
+            role,
+            None,
+            service_start,
+            today,
+            int(row["Salaris"]),
+            target_ratio,
+            performance
+        )
+        if new_salary <= int(row["Salaris"]):
             continue
 
-        if _already_reviewed_this_year(
-            fact_employment,
-            employee_key,
+        _close_employment(fact_employment, idx, today)
+        new_records.append(_new_employment_record(
+            row,
+            next_key,
+            role,
+            today,
             salary_event_key,
-            today.year
-        ):
-            continue
-
-        role = role_lookup.loc[row["Role_Key"]]
-        performance = performance_lookup.get(employee_key, 3.0)
-        inflation = rng.uniform(inflation_min, inflation_max)
-        performance_factor = max(0, min(1, (performance - 3.0) / 2.0))
-        raise_pct = inflation + performance_factor * performance_bonus_max
-        salary_cap = int(role["Salaris_max"] * cap_multiplier)
-        new_salary = min(int(round(row["Salaris"] * (1 + raise_pct))), salary_cap)
-
-        if new_salary <= row["Salaris"]:
-            continue
-
-        fact_employment.loc[idx, "Einddatum"] = today
-        fact_employment.loc[idx, "Dienstverband_status"] = "Inactief"
-
-        new_records.append({
-            "Employment_Key": next_key,
-            "Previous_Employment_Key": row["Employment_Key"],
-            "Employee_Key": employee_key,
-            "Role_Key": row["Role_Key"],
-            "Location_Key": row["Location_Key"],
-            "Startdatum": today,
-            "Einddatum": None,
-            "Dienstverband_status": "Actief",
-            "Salaris": new_salary,
-            "Contracttype": row["Contracttype"],
-            "Contracturen": row.get("Contracturen"),
-            "Contract_einddatum": row.get("Contract_einddatum"),
-            "Contract_ronde": row.get("Contract_ronde"),
-            "EventType_Key": salary_event_key,
-            "RedenVertrek_Key": None
-        })
+            salary_policy,
+            config,
+            service_start,
+            new_target_ratio,
+            row.get("Shift_Key"),
+            salary_override=new_salary,
+            previous_department_key=role["Department_Key"],
+        ))
         next_key += 1
 
     if new_records:
@@ -308,33 +256,108 @@ def _simulate_salary_reviews(
             [fact_employment, pd.DataFrame(new_records)],
             ignore_index=True
         )
-
     return fact_employment, next_key
 
 
+def _new_employment_record(
+    previous_row,
+    employment_key,
+    role,
+    today,
+    event_type_key,
+    salary_policy,
+    config,
+    service_start,
+    target_ratio,
+    ploegendienst_key,
+    salary_override=None,
+    previous_department_key=None,
+    location_key=None,
+):
+    benchmark = salary_policy.employee_benchmark(role, today, service_start)
+    salary = salary_override or int(round(
+        benchmark["Benchmark_Salaris"] * target_ratio
+    ))
+    return {
+        "Employment_Key": employment_key,
+        "Previous_Employment_Key": previous_row["Employment_Key"],
+        "Employee_Key": previous_row["Employee_Key"],
+        "HireSource_Key": previous_row.get("HireSource_Key"),
+        "Role_Key": role.get("Role_Key", role.name),
+        "Location_Key": (
+            previous_row["Location_Key"] if location_key is None else location_key
+        ),
+        "Shift_Key": ploegendienst_key,
+        "SalaryScale_Key": role["SalaryScale_Key"],
+        "Target_Compa_Ratio": target_ratio,
+        "Relevante_Ervaring_Jaren_Bij_Start": carried_experience(
+            previous_row,
+            today,
+            previous_department_key == role["Department_Key"],
+            config,
+        ),
+        "Startdatum": today,
+        "Einddatum": None,
+        "Dienstverband_status": "Actief",
+        "Salaris": salary,
+        "Contracttype": previous_row["Contracttype"],
+        "Contracturen": previous_row.get("Contracturen"),
+        "Contract_einddatum": previous_row.get("Contract_einddatum"),
+        "Contract_ronde": previous_row.get("Contract_ronde"),
+        "EventType_Key": event_type_key,
+        "DepartureReason_Key": None,
+        "Tevredenheid_Score_Bij_Uitdienst": None,
+        "SatisfactionBand_Key_Bij_Uitdienst": None,
+    }
+
+
+def _under_capacity(state, config, department_lookup, role_counts, target_role):
+    """Whether promoting/transferring someone into `target_role` is still
+    allowed - i.e. it has no hard ceiling, or hasn't reached it yet."""
+    department_name = department_lookup.loc[
+        target_role["Department_Key"], "Department_Name"
+    ]
+    capacity = effective_role_capacity(
+        state, config, department_name, target_role["Role_Name"]
+    )
+    if capacity is None:
+        return True
+    return role_counts.get(target_role["Role_Key"], 0) < capacity
+
+
+def _target_ratio_for_row(row, salary_policy, role, service_start, today):
+    value = pd.to_numeric(row.get("Target_Compa_Ratio"), errors="coerce")
+    if pd.notna(value):
+        return salary_policy.clamp_ratio(value)
+    benchmark = salary_policy.employee_benchmark(role, today, service_start)
+    return salary_policy.clamp_ratio(int(row["Salaris"]) / benchmark["Benchmark_Salaris"])
+
+
+def _close_employment(fact_employment, index, today):
+    fact_employment.loc[index, "Einddatum"] = today
+    fact_employment.loc[index, "Dienstverband_status"] = "Inactief"
+
+
+def _performance_factor(performance):
+    if performance >= 4:
+        return 1.8
+    if performance >= 3.5:
+        return 1.3
+    if performance < 2.5:
+        return 0.5
+    return 1.0
+
+
 def _salary_review_week(employee_key):
-    # Deterministic spread over the year. This avoids artificial BI spikes from
-    # all salary reviews landing in January.
     return ((employee_key * 37) % 52) + 1
 
 
-def _already_reviewed_this_year(
-    fact_employment,
-    employee_key,
-    salary_event_key,
-    year
-):
-    employee_records = fact_employment[
+def _already_reviewed_this_year(fact_employment, employee_key, salary_event_key, year):
+    rows = fact_employment[
         (fact_employment["Employee_Key"] == employee_key)
         & (fact_employment["EventType_Key"] == salary_event_key)
     ]
-
-    if employee_records.empty:
+    if rows.empty:
         return False
-
-    review_years = pd.to_datetime(
-        employee_records["Startdatum"],
-        errors="coerce"
-    ).dt.year
-
+    review_years = pd.to_datetime(rows["Startdatum"], errors="coerce").dt.year
     return (review_years == year).any()

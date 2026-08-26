@@ -1,21 +1,68 @@
 {
-"sector": "maakindustrie",
-"database": "db_hr_demo",
+  "sector": "maakindustrie",
+  "database": "db_hr_demo",
   "beschrijving": "Middelgroot productiebedrijf met ploegendienst en lichte jaarlijkse groei",
   "schema": "hr_maakindustrie_schema",
-  "start_year_simulation": 2020,
-
-  "baseline_headcount": 50,
+  "start_year_simulation": 2023,
+  "avatar": {
+    "base_url": "https://stdemodashboards.blob.core.windows.net/hr-data/images",
+    "assignment_seed": "hr-demo-avatar-v1",
+    "neutral_probability_for_binary_gender": 0.05,
+    "male_images": [
+      "male1.png",
+      "male2.png",
+      "male3.png",
+      "male4.png"
+    ],
+    "female_images": [
+      "female1.png",
+      "female2.png",
+      "female3.png",
+      "female4.png"
+    ],
+    "neutral_images": [
+      "neutral1.png",
+      "neutral2.png"
+    ],
+    "auto_discover_from_blob": true,
+    "blob_container": "hr-data",
+    "blob_prefix": "images/",
+    "reassign_existing_avatars": true
+  },
+  "baseline_headcount": 100,
   "staffing": {
     "minimum_count_for_manager_role": 1,
-    "max_team_size": 22
+    "max_team_size": 10,
+    "minimum_count_by_role": {
+      "HR": {
+        "HR Medewerker": 1
+      },
+      "Finance": {
+        "Financieel Medewerker": 1
+      }
+    }
+  },
+  "workforce_planning": {
+    "department_target_weights": {
+      "Productie": 52,
+      "Logistiek": 14,
+      "Techniek": 10,
+      "Kwaliteit": 7,
+      "R&D": 4,
+      "Sales": 2,
+      "Finance": 2,
+      "HR": 2,
+      "IT": 1,
+      "Directie": 1,
+      "QHSE": 1,
+      "Marketing": 2
+    }
   },
   "initial_population": {
-    "headcount": 50,
-    "burn_in_years": 3,
+    "burn_in_years": 2,
     "minimum_hire_age": 18,
     "tenure_years_distribution": {
-      "0-1": 0.40,
+      "0-1": 0.4,
       "1-3": 0.32,
       "3-5": 0.18,
       "5-10": 0.08,
@@ -25,7 +72,7 @@
   "growth": {
     "max_capacity": 800,
     "annual_growth_rate": {
-      "min": 0.20,
+      "min": 0.2,
       "max": 0.24
     },
     "max_weekly_hires": 4,
@@ -34,27 +81,55 @@
       {
         "start_date": "2020-03-01",
         "end_date": "2021-06-30",
-        "target_multiplier": 0.90,
+        "target_multiplier": 0.9,
         "replacement_hiring_rate": 0.45
       },
       {
         "start_date": "2023-09-01",
         "end_date": "2024-06-30",
         "target_multiplier": 0.97,
-        "replacement_hiring_rate": 0.80
+        "replacement_hiring_rate": 0.8
       }
     ]
   },
   "dim_location": {
-    "Hoofdkantoor": 0.25,
-    "Fabriek Noord": 0.40,
-    "Fabriek Zuid": 0.25,
-    "DC": 0.10
+    "Fabriek Noord": {
+      "weight": 1.0,
+      "is_initial": true,
+      "is_production_site": true,
+      "capacity": 300,
+      "capacity_streak_weeks": 8
+    },
+    "Fabriek Zuid": {
+      "weight": 1.0,
+      "is_production_site": true,
+      "opens_after_location_at_capacity": "Fabriek Noord"
+    },
+    "DC": {
+      "weight": 0.3,
+      "active_from_scope": "department",
+      "active_from_department": "Logistiek",
+      "active_from_headcount": 40,
+      "capacity_bonus_amount": 80
+    },
+    "Hoofdkantoor": {
+      "weight": 0.3,
+      "active_from_scope": "department_group",
+      "active_from_departments": [
+        "Finance",
+        "HR",
+        "Sales",
+        "Marketing",
+        "Directie",
+        "IT"
+      ],
+      "active_from_headcount": 40
+    }
   },
-
   "career_events": {
     "promotion_rate": 0.08,
     "internal_transfer_rate": 0.05,
+    "relevant_experience_transfer_ratio": 0.45,
     "salary_increase_rate": 1.0,
     "salary_growth": {
       "inflation_min": 0.018,
@@ -67,50 +142,1015 @@
       },
       "initial_population_band_position": {
         "min": 0.28,
-        "max": 0.40,
+        "max": 0.4,
         "tenure_increment_per_year": 0.035,
         "max_position": 0.75
       }
     },
-    "contract_change_rate": 0.03
+    "contract_change_rate": 0.03,
+    "location_transfer_rate": 0.03,
+    "new_site_pull_rate": 0.15,
+    "new_site_pull_weeks": 12
   },
-
   "dim_hire_source": [
-    "Referral",
-    "Vacaturebank",
-    "Recruiter",
-    "Campus",
-    "Interne mobiliteit"
+    {
+      "HireSource_Key": 1,
+      "HireSource_Name": "Referral",
+      "Source_Group": "Extern",
+      "Source_Description": "Aangedragen door een bestaande medewerker",
+      "Is_Internal": false
+    },
+    {
+      "HireSource_Key": 2,
+      "HireSource_Name": "Vacaturebank",
+      "Source_Group": "Extern",
+      "Source_Description": "Sollicitatie via een online vacatureplatform",
+      "Is_Internal": false
+    },
+    {
+      "HireSource_Key": 3,
+      "HireSource_Name": "Interne recruiter",
+      "Source_Group": "Extern",
+      "Source_Description": "Actief benaderd door het interne recruitmentteam",
+      "Is_Internal": false
+    },
+    {
+      "HireSource_Key": 4,
+      "HireSource_Name": "Campus",
+      "Source_Group": "Extern",
+      "Source_Description": "School-, campus- of traineeshiprecruitment",
+      "Is_Internal": false
+    },
+    {
+      "HireSource_Key": 5,
+      "HireSource_Name": "Interne mobiliteit",
+      "Source_Group": "Intern",
+      "Source_Description": "Bestaande medewerker solliciteert op een interne vacature",
+      "Is_Internal": true
+    },
+    {
+      "HireSource_Key": 6,
+      "HireSource_Name": "Recruitmentbureau",
+      "Source_Group": "Extern",
+      "Source_Description": "Kandidaat voorgedragen door een extern recruitmentbureau",
+      "Is_Internal": false
+    }
   ],
-
-  "dim_education_level": [
-    "MBO",
-    "HBO",
-    "WO",
-    "PhD"
+  "dim_recruitment_status": [
+    {
+      "RecruitmentStatus_Key": 1,
+      "Status_Name": "Aangenomen",
+      "Status_Verbose": "Kandidaat heeft het aanbod geaccepteerd",
+      "Status_Group": "Succesvol",
+      "Is_Final": true,
+      "Counts_As_Hire": true,
+      "Sort_Order": 1
+    },
+    {
+      "RecruitmentStatus_Key": 2,
+      "Status_Name": "Afgewezen",
+      "Status_Verbose": "Kandidaat is afgewezen door de werkgever",
+      "Status_Group": "Afwijzing werkgever",
+      "Is_Final": true,
+      "Counts_As_Hire": false,
+      "Sort_Order": 2
+    },
+    {
+      "RecruitmentStatus_Key": 3,
+      "Status_Name": "Geweigerd",
+      "Status_Verbose": "Kandidaat heeft het aanbod geweigerd",
+      "Status_Group": "Afwijzing kandidaat",
+      "Is_Final": true,
+      "Counts_As_Hire": false,
+      "Sort_Order": 3
+    },
+    {
+      "RecruitmentStatus_Key": 4,
+      "Status_Name": "In behandeling",
+      "Status_Verbose": "Sollicitatie doorloopt de wervingsfunnel",
+      "Status_Group": "In behandeling",
+      "Is_Final": false,
+      "Counts_As_Hire": false,
+      "Sort_Order": 0
+    }
+  ],
+  "dim_education": [
+    {
+      "Education_Key": 1,
+      "Education_Name": "Interne vakopleiding",
+      "Education_Level": "Certificaat",
+      "Education_Direction": "Rolrelevant"
+    },
+    {
+      "Education_Key": 2,
+      "Education_Name": "MBO Productietechniek",
+      "Education_Level": "MBO",
+      "Education_Direction": "Rolrelevant"
+    },
+    {
+      "Education_Key": 3,
+      "Education_Name": "MBO Procestechniek",
+      "Education_Level": "MBO",
+      "Education_Direction": "Rolrelevant"
+    },
+    {
+      "Education_Key": 4,
+      "Education_Name": "MBO Procesoperator A / VAPRO A",
+      "Education_Level": "MBO",
+      "Education_Direction": "Rolrelevant"
+    },
+    {
+      "Education_Key": 5,
+      "Education_Name": "MBO Procesoperator B / VAPRO B",
+      "Education_Level": "MBO",
+      "Education_Direction": "Rolrelevant"
+    },
+    {
+      "Education_Key": 6,
+      "Education_Name": "MBO Procesoperator C / VAPRO C",
+      "Education_Level": "MBO",
+      "Education_Direction": "Rolrelevant"
+    },
+    {
+      "Education_Key": 7,
+      "Education_Name": "HBO Technische Bedrijfskunde",
+      "Education_Level": "HBO",
+      "Education_Direction": "Rolrelevant"
+    },
+    {
+      "Education_Key": 8,
+      "Education_Name": "HBO/WO Procestechnologie",
+      "Education_Level": "HBO",
+      "Education_Direction": "Rolrelevant"
+    },
+    {
+      "Education_Key": 9,
+      "Education_Name": "HBO Voedingsmiddelentechnologie",
+      "Education_Level": "HBO",
+      "Education_Direction": "Rolrelevant"
+    },
+    {
+      "Education_Key": 10,
+      "Education_Name": "WO Food Technology",
+      "Education_Level": "WO",
+      "Education_Direction": "Rolrelevant"
+    },
+    {
+      "Education_Key": 11,
+      "Education_Name": "HBO/WO Technische Bedrijfskunde",
+      "Education_Level": "HBO",
+      "Education_Direction": "Rolrelevant"
+    },
+    {
+      "Education_Key": 12,
+      "Education_Name": "WO Bedrijfskunde",
+      "Education_Level": "WO",
+      "Education_Direction": "Rolrelevant"
+    },
+    {
+      "Education_Key": 13,
+      "Education_Name": "MBO Mechatronica",
+      "Education_Level": "MBO",
+      "Education_Direction": "Rolrelevant"
+    },
+    {
+      "Education_Key": 14,
+      "Education_Name": "MBO Werktuigbouwkunde",
+      "Education_Level": "MBO",
+      "Education_Direction": "Rolrelevant"
+    },
+    {
+      "Education_Key": 15,
+      "Education_Name": "MBO Elektrotechniek",
+      "Education_Level": "MBO",
+      "Education_Direction": "Rolrelevant"
+    },
+    {
+      "Education_Key": 16,
+      "Education_Name": "MBO/HBO Mechatronica",
+      "Education_Level": "MBO",
+      "Education_Direction": "Rolrelevant"
+    },
+    {
+      "Education_Key": 17,
+      "Education_Name": "MBO/HBO Werktuigbouwkunde",
+      "Education_Level": "MBO",
+      "Education_Direction": "Rolrelevant"
+    },
+    {
+      "Education_Key": 18,
+      "Education_Name": "MBO/HBO Elektrotechniek",
+      "Education_Level": "MBO",
+      "Education_Direction": "Rolrelevant"
+    },
+    {
+      "Education_Key": 19,
+      "Education_Name": "MBO Voedingsmiddelentechnologie / Food",
+      "Education_Level": "MBO",
+      "Education_Direction": "Rolrelevant"
+    },
+    {
+      "Education_Key": 20,
+      "Education_Name": "MBO Kwaliteitsmedewerker",
+      "Education_Level": "MBO",
+      "Education_Direction": "Rolrelevant"
+    },
+    {
+      "Education_Key": 21,
+      "Education_Name": "Interne HACCP/GMP opleiding",
+      "Education_Level": "Certificaat",
+      "Education_Direction": "Rolrelevant"
+    },
+    {
+      "Education_Key": 22,
+      "Education_Name": "HBO Chemie",
+      "Education_Level": "HBO",
+      "Education_Direction": "Rolrelevant"
+    },
+    {
+      "Education_Key": 23,
+      "Education_Name": "HBO Life Sciences",
+      "Education_Level": "HBO",
+      "Education_Direction": "Rolrelevant"
+    },
+    {
+      "Education_Key": 24,
+      "Education_Name": "HBO Kwaliteitsmanagement",
+      "Education_Level": "HBO",
+      "Education_Direction": "Rolrelevant"
+    },
+    {
+      "Education_Key": 25,
+      "Education_Name": "WO Chemie",
+      "Education_Level": "WO",
+      "Education_Direction": "Rolrelevant"
+    },
+    {
+      "Education_Key": 26,
+      "Education_Name": "MBO Logistiek",
+      "Education_Level": "MBO",
+      "Education_Direction": "Rolrelevant"
+    },
+    {
+      "Education_Key": 27,
+      "Education_Name": "HBO Logistics Management",
+      "Education_Level": "HBO",
+      "Education_Direction": "Rolrelevant"
+    },
+    {
+      "Education_Key": 28,
+      "Education_Name": "HBO Supply Chain Management",
+      "Education_Level": "HBO",
+      "Education_Direction": "Rolrelevant"
+    },
+    {
+      "Education_Key": 29,
+      "Education_Name": "HBO Food Innovation",
+      "Education_Level": "HBO",
+      "Education_Direction": "Rolrelevant"
+    },
+    {
+      "Education_Key": 30,
+      "Education_Name": "HBO/WO Chemische Technologie",
+      "Education_Level": "HBO",
+      "Education_Direction": "Rolrelevant"
+    },
+    {
+      "Education_Key": 31,
+      "Education_Name": "WO Chemische Technologie",
+      "Education_Level": "WO",
+      "Education_Direction": "Rolrelevant"
+    },
+    {
+      "Education_Key": 32,
+      "Education_Name": "MBO ICT",
+      "Education_Level": "MBO",
+      "Education_Direction": "Rolrelevant"
+    },
+    {
+      "Education_Key": 33,
+      "Education_Name": "HBO-ICT",
+      "Education_Level": "HBO",
+      "Education_Direction": "Rolrelevant"
+    },
+    {
+      "Education_Key": 34,
+      "Education_Name": "relevante applicatiecertificering",
+      "Education_Level": "Certificaat",
+      "Education_Direction": "Rolrelevant"
+    },
+    {
+      "Education_Key": 35,
+      "Education_Name": "HBO Business IT & Management",
+      "Education_Level": "HBO",
+      "Education_Direction": "Rolrelevant"
+    },
+    {
+      "Education_Key": 36,
+      "Education_Name": "HBO Bedrijfskunde met IT-specialisatie",
+      "Education_Level": "HBO",
+      "Education_Direction": "Rolrelevant"
+    },
+    {
+      "Education_Key": 37,
+      "Education_Name": "HBO/WO Informatica",
+      "Education_Level": "HBO",
+      "Education_Direction": "Rolrelevant"
+    },
+    {
+      "Education_Key": 38,
+      "Education_Name": "HBO Commerciële Economie",
+      "Education_Level": "HBO",
+      "Education_Direction": "Rolrelevant"
+    },
+    {
+      "Education_Key": 39,
+      "Education_Name": "HBO Food Business",
+      "Education_Level": "HBO",
+      "Education_Direction": "Rolrelevant"
+    },
+    {
+      "Education_Key": 40,
+      "Education_Name": "HBO/WO Commerciële Economie",
+      "Education_Level": "HBO",
+      "Education_Direction": "Rolrelevant"
+    },
+    {
+      "Education_Key": 41,
+      "Education_Name": "MBO Human Resource Support",
+      "Education_Level": "MBO",
+      "Education_Direction": "Rolrelevant"
+    },
+    {
+      "Education_Key": 42,
+      "Education_Name": "HBO Human Resource Management",
+      "Education_Level": "HBO",
+      "Education_Direction": "Rolrelevant"
+    },
+    {
+      "Education_Key": 43,
+      "Education_Name": "WO Arbeids- en Organisatiepsychologie",
+      "Education_Level": "WO",
+      "Education_Direction": "Rolrelevant"
+    },
+    {
+      "Education_Key": 44,
+      "Education_Name": "MBO Bedrijfsadministratie",
+      "Education_Level": "MBO",
+      "Education_Direction": "Rolrelevant"
+    },
+    {
+      "Education_Key": 45,
+      "Education_Name": "HBO Finance & Control",
+      "Education_Level": "HBO",
+      "Education_Direction": "Rolrelevant"
+    },
+    {
+      "Education_Key": 46,
+      "Education_Name": "HBO Accountancy",
+      "Education_Level": "HBO",
+      "Education_Direction": "Rolrelevant"
+    },
+    {
+      "Education_Key": 47,
+      "Education_Name": "WO Bedrijfseconomie",
+      "Education_Level": "WO",
+      "Education_Direction": "Rolrelevant"
+    },
+    {
+      "Education_Key": 48,
+      "Education_Name": "relevante technische of operationele HBO/WO-opleiding",
+      "Education_Level": "Certificaat",
+      "Education_Direction": "Rolrelevant"
+    },
+    {
+      "Education_Key": 49,
+      "Education_Name": "technische of bedrijfskundige HBO/WO-opleiding",
+      "Education_Level": "Certificaat",
+      "Education_Direction": "Rolrelevant"
+    },
+    {
+      "Education_Key": 50,
+      "Education_Name": "HBO/WO Werktuigbouwkunde",
+      "Education_Level": "HBO",
+      "Education_Direction": "Rolrelevant"
+    },
+    {
+      "Education_Key": 51,
+      "Education_Name": "HBO/WO Mechatronica",
+      "Education_Level": "HBO",
+      "Education_Direction": "Rolrelevant"
+    },
+    {
+      "Education_Key": 52,
+      "Education_Name": "HBO/WO Elektrotechniek",
+      "Education_Level": "HBO",
+      "Education_Direction": "Rolrelevant"
+    },
+    {
+      "Education_Key": 53,
+      "Education_Name": "HBO Werktuigbouwkunde",
+      "Education_Level": "HBO",
+      "Education_Direction": "Rolrelevant"
+    },
+    {
+      "Education_Key": 54,
+      "Education_Name": "HBO Mechatronica",
+      "Education_Level": "HBO",
+      "Education_Direction": "Rolrelevant"
+    },
+    {
+      "Education_Key": 55,
+      "Education_Name": "HBO Elektrotechniek",
+      "Education_Level": "HBO",
+      "Education_Direction": "Rolrelevant"
+    },
+    {
+      "Education_Key": 56,
+      "Education_Name": "relevante maintenance/reliability-certificering",
+      "Education_Level": "Certificaat",
+      "Education_Direction": "Rolrelevant"
+    },
+    {
+      "Education_Key": 57,
+      "Education_Name": "MBO Laboratoriumtechniek",
+      "Education_Level": "MBO",
+      "Education_Direction": "Rolrelevant"
+    },
+    {
+      "Education_Key": 58,
+      "Education_Name": "MBO Chemisch-Fysisch Analist",
+      "Education_Level": "MBO",
+      "Education_Direction": "Rolrelevant"
+    },
+    {
+      "Education_Key": 59,
+      "Education_Name": "MBO Allround Laborant",
+      "Education_Level": "MBO",
+      "Education_Direction": "Rolrelevant"
+    },
+    {
+      "Education_Key": 60,
+      "Education_Name": "HBO/WO Supply Chain Management",
+      "Education_Level": "HBO",
+      "Education_Direction": "Rolrelevant"
+    },
+    {
+      "Education_Key": 61,
+      "Education_Name": "HBO/WO Packaging Technology",
+      "Education_Level": "HBO",
+      "Education_Direction": "Rolrelevant"
+    },
+    {
+      "Education_Key": 62,
+      "Education_Name": "HBO/WO Materiaalkunde",
+      "Education_Level": "HBO",
+      "Education_Direction": "Rolrelevant"
+    },
+    {
+      "Education_Key": 63,
+      "Education_Name": "relevante applicatie- en integratiecertificering",
+      "Education_Level": "Certificaat",
+      "Education_Direction": "Rolrelevant"
+    },
+    {
+      "Education_Key": 64,
+      "Education_Name": "HBO Integrale Veiligheidskunde",
+      "Education_Level": "HBO",
+      "Education_Direction": "Rolrelevant"
+    },
+    {
+      "Education_Key": 65,
+      "Education_Name": "MBO/HBO Milieukunde",
+      "Education_Level": "MBO",
+      "Education_Direction": "Rolrelevant"
+    },
+    {
+      "Education_Key": 66,
+      "Education_Name": "relevante QHSE-certificering",
+      "Education_Level": "Certificaat",
+      "Education_Direction": "Rolrelevant"
+    },
+    {
+      "Education_Key": 67,
+      "Education_Name": "HVK",
+      "Education_Level": "Certificaat",
+      "Education_Direction": "Rolrelevant"
+    },
+    {
+      "Education_Key": 68,
+      "Education_Name": "HBO/WO Milieukunde",
+      "Education_Level": "HBO",
+      "Education_Direction": "Rolrelevant"
+    },
+    {
+      "Education_Key": 69,
+      "Education_Name": "HBO/WO Integrale Veiligheidskunde",
+      "Education_Level": "HBO",
+      "Education_Direction": "Rolrelevant"
+    }
   ],
   "dim_absence_type": {
-    "Ziek": true,
     "Kort verzuim": true,
+    "Middellang verzuim": true,
     "Lang verzuim": true,
     "Zwangerschap": false,
     "Ouderschapsverlof": false,
     "Onbetaald verlof": false,
     "Bijzonder verlof": false,
     "Vakantie": false,
-    "Tijd voor tijd": false
+    "Tijd voor tijd": false,
+    "Calamiteitenverzuim": false,
+    "Bedrijfsongeval": true
   },
-  "dim_salary_band": [
-    {"SalaryBand_Name": "Onder EUR 35.000", "Minimum_Salaris": 0, "Maximum_Salaris": 34999},
-    {"SalaryBand_Name": "EUR 35.000 - 44.999", "Minimum_Salaris": 35000, "Maximum_Salaris": 44999},
-    {"SalaryBand_Name": "EUR 45.000 - 59.999", "Minimum_Salaris": 45000, "Maximum_Salaris": 59999},
-    {"SalaryBand_Name": "EUR 60.000 - 79.999", "Minimum_Salaris": 60000, "Maximum_Salaris": 79999},
-    {"SalaryBand_Name": "EUR 80.000 - 99.999", "Minimum_Salaris": 80000, "Maximum_Salaris": 99999},
-    {"SalaryBand_Name": "EUR 100.000 en hoger", "Minimum_Salaris": 100000, "Maximum_Salaris": null}
+  "dim_satisfaction_band": [
+    {
+      "SatisfactionBand_Name": "Zeer laag",
+      "Minimum_Score": 1.0,
+      "Maximum_Score": 4.49
+    },
+    {
+      "SatisfactionBand_Name": "Laag",
+      "Minimum_Score": 4.5,
+      "Maximum_Score": 5.99
+    },
+    {
+      "SatisfactionBand_Name": "Neutraal",
+      "Minimum_Score": 6.0,
+      "Maximum_Score": 7.49
+    },
+    {
+      "SatisfactionBand_Name": "Hoog",
+      "Minimum_Score": 7.5,
+      "Maximum_Score": 8.49
+    },
+    {
+      "SatisfactionBand_Name": "Zeer hoog",
+      "Minimum_Score": 8.5,
+      "Maximum_Score": 10.0
+    }
   ],
+  "dim_satisfaction_driver": [
+    {
+      "SatisfactionDriver_Key": 1,
+      "Driver_Name": "Beloning",
+      "Direction": "Negatief"
+    },
+    {
+      "SatisfactionDriver_Key": 2,
+      "Driver_Name": "Beloning",
+      "Direction": "Positief"
+    },
+    {
+      "SatisfactionDriver_Key": 3,
+      "Driver_Name": "Leiderschap",
+      "Direction": "Negatief"
+    },
+    {
+      "SatisfactionDriver_Key": 4,
+      "Driver_Name": "Leiderschap",
+      "Direction": "Positief"
+    },
+    {
+      "SatisfactionDriver_Key": 5,
+      "Driver_Name": "Teamdynamiek",
+      "Direction": "Negatief"
+    },
+    {
+      "SatisfactionDriver_Key": 6,
+      "Driver_Name": "Teamdynamiek",
+      "Direction": "Positief"
+    },
+    {
+      "SatisfactionDriver_Key": 7,
+      "Driver_Name": "Cultuur en verbondenheid",
+      "Direction": "Negatief"
+    },
+    {
+      "SatisfactionDriver_Key": 8,
+      "Driver_Name": "Cultuur en verbondenheid",
+      "Direction": "Positief"
+    },
+    {
+      "SatisfactionDriver_Key": 9,
+      "Driver_Name": "Carriere en opleidingsmogelijkheden",
+      "Direction": "Negatief"
+    },
+    {
+      "SatisfactionDriver_Key": 10,
+      "Driver_Name": "Carriere en opleidingsmogelijkheden",
+      "Direction": "Positief"
+    },
+    {
+      "SatisfactionDriver_Key": 11,
+      "Driver_Name": "Werkcontext",
+      "Direction": "Negatief"
+    },
+    {
+      "SatisfactionDriver_Key": 12,
+      "Driver_Name": "Werkcontext",
+      "Direction": "Positief"
+    },
+    {
+      "SatisfactionDriver_Key": 13,
+      "Driver_Name": "Geen dominant aandachtspunt",
+      "Direction": "Neutraal"
+    }
+  ],
+  "dim_engagement_band": [
+    {
+      "EngagementBand_Name": "Zeer laag",
+      "Minimum_Score": 1.0,
+      "Maximum_Score": 4.49
+    },
+    {
+      "EngagementBand_Name": "Laag",
+      "Minimum_Score": 4.5,
+      "Maximum_Score": 5.99
+    },
+    {
+      "EngagementBand_Name": "Neutraal",
+      "Minimum_Score": 6.0,
+      "Maximum_Score": 7.49
+    },
+    {
+      "EngagementBand_Name": "Hoog",
+      "Minimum_Score": 7.5,
+      "Maximum_Score": 8.49
+    },
+    {
+      "EngagementBand_Name": "Zeer hoog",
+      "Minimum_Score": 8.5,
+      "Maximum_Score": 10.0
+    }
+  ],
+  "dim_performance_driver": [
+    {
+      "Driver_Name": "Resultaat en werkuitvoering"
+    },
+    {
+      "Driver_Name": "Vakmanschap en relevante ervaring"
+    },
+    {
+      "Driver_Name": "Samenwerking en flexibiliteit"
+    },
+    {
+      "Driver_Name": "Initiatief en verbeteren"
+    },
+    {
+      "Driver_Name": "Coachen, kennisdeling en ontwikkeling van anderen"
+    },
+    {
+      "Driver_Name": "Relevante startkwalificatie"
+    }
+  ],
+  "dim_engagement_driver": [
+    {
+      "Driver_Name": "Initiatief en verbeteren"
+    },
+    {
+      "Driver_Name": "Kennisdeling en mentoring"
+    },
+    {
+      "Driver_Name": "Samenwerking buiten de eigen rol"
+    },
+    {
+      "Driver_Name": "Medewerkersstem en participatie"
+    },
+    {
+      "Driver_Name": "Organisatieverbondenheid"
+    },
+    {
+      "Driver_Name": "Rolverbondenheid/eigenaarschap"
+    },
+    {
+      "Driver_Name": "Geen dominant aandachtspunt"
+    }
+  ],
+  "dim_candidate_quality_driver": [
+    {
+      "Driver_Name": "Relevante werkervaring"
+    },
+    {
+      "Driver_Name": "Relevante opleiding"
+    },
+    {
+      "Driver_Name": "Technische vaardigheden en kwalificaties"
+    },
+    {
+      "Driver_Name": "Rolrelevante soft skills"
+    },
+    {
+      "Driver_Name": "Motivatie en voorbereiding"
+    },
+    {
+      "Driver_Name": "Gebalanceerd profiel"
+    }
+  ],
+  "dim_salary_band": [
+    {
+      "SalaryBand_Name": "Onder EUR 35.000",
+      "Minimum_Salaris": 0,
+      "Maximum_Salaris": 34999
+    },
+    {
+      "SalaryBand_Name": "EUR 35.000 - 44.999",
+      "Minimum_Salaris": 35000,
+      "Maximum_Salaris": 44999
+    },
+    {
+      "SalaryBand_Name": "EUR 45.000 - 59.999",
+      "Minimum_Salaris": 45000,
+      "Maximum_Salaris": 59999
+    },
+    {
+      "SalaryBand_Name": "EUR 60.000 - 79.999",
+      "Minimum_Salaris": 60000,
+      "Maximum_Salaris": 79999
+    },
+    {
+      "SalaryBand_Name": "EUR 80.000 - 99.999",
+      "Minimum_Salaris": 80000,
+      "Maximum_Salaris": 99999
+    },
+    {
+      "SalaryBand_Name": "EUR 100.000 en hoger",
+      "Minimum_Salaris": 100000,
+      "Maximum_Salaris": null
+    }
+  ],
+  "dim_salary_scale": [
+    {
+      "SalaryScale_Key": 1,
+      "SalaryScale_Code": "A",
+      "SalaryScale_Name": "Schaal A",
+      "Minimum_Salaris": 29000,
+      "Maximum_Salaris": 38000,
+      "Aantal_Treden": 10
+    },
+    {
+      "SalaryScale_Key": 2,
+      "SalaryScale_Code": "B",
+      "SalaryScale_Name": "Schaal B",
+      "Minimum_Salaris": 32000,
+      "Maximum_Salaris": 50000,
+      "Aantal_Treden": 10
+    },
+    {
+      "SalaryScale_Key": 3,
+      "SalaryScale_Code": "C",
+      "SalaryScale_Name": "Schaal C",
+      "Minimum_Salaris": 40000,
+      "Maximum_Salaris": 60000,
+      "Aantal_Treden": 10
+    },
+    {
+      "SalaryScale_Key": 4,
+      "SalaryScale_Code": "D",
+      "SalaryScale_Name": "Schaal D",
+      "Minimum_Salaris": 47000,
+      "Maximum_Salaris": 80000,
+      "Aantal_Treden": 10
+    },
+    {
+      "SalaryScale_Key": 5,
+      "SalaryScale_Code": "E",
+      "SalaryScale_Name": "Schaal E",
+      "Minimum_Salaris": 60000,
+      "Maximum_Salaris": 100000,
+      "Aantal_Treden": 10
+    },
+    {
+      "SalaryScale_Key": 6,
+      "SalaryScale_Code": "F",
+      "SalaryScale_Name": "Schaal F",
+      "Minimum_Salaris": 85000,
+      "Maximum_Salaris": 120000,
+      "Aantal_Treden": 10
+    },
+    {
+      "SalaryScale_Key": 7,
+      "SalaryScale_Code": "G",
+      "SalaryScale_Name": "Schaal G",
+      "Minimum_Salaris": 105000,
+      "Maximum_Salaris": 190000,
+      "Aantal_Treden": 10
+    }
+  ],
+  "satisfaction": {
+    "baseline_mean": 7.0,
+    "individual_spread": 0.45,
+    "performance_midpoint": 3.4,
+    "performance_effect": 0.25,
+    "compa_ratio_adjustments": {
+      "ver_onder": -1.15,
+      "onder": -0.55,
+      "rond": 0.0,
+      "boven": 0.15,
+      "ver_boven": 0.25
+    },
+    "manager_effect_spread": 0.45,
+    "team_effect_spread": 0.2,
+    "culture_effect_spread": 0.15,
+    "tenure_adjustments": {
+      "under_half_year": 0.15,
+      "under_two_years": 0.05,
+      "two_to_five_years": -0.1,
+      "five_years_or_more": 0.0
+    },
+    "department_adjustments": {
+      "Productie": -0.1,
+      "Logistiek": -0.05,
+      "Techniek": 0.0,
+      "R&D": 0.1,
+      "IT": 0.1,
+      "Sales": 0.05,
+      "Directie": 0.1
+    },
+    "career_momentum": {
+      "momentum_months": 12,
+      "promotion_max_effect": 0.18,
+      "transfer_max_effect": 0.08,
+      "high_performer_stagnation_after_years": 3,
+      "high_performer_stagnation_effect": -0.18
+    },
+    "driver_selection": {
+      "minimum_absolute_impact": 0.12,
+      "low_score": 6.0,
+      "high_score": 7.5
+    },
+    "minimum_score": 1.0,
+    "maximum_score": 10.0
+  },
+  "workforce": {
+    "full_time_weekly_hours": 40
+  },
+  "engagement": {
+    "baseline_mean": 6.7,
+    "individual_spread": 0.45,
+    "satisfaction_effect": 0.5,
+    "performance_midpoint": 3.4,
+    "performance_effect": 0.22,
+    "manager_effect_spread": 0.35,
+    "constructive_contribution_effect": 0.7,
+    "driver_dominance_threshold": 0.7,
+    "compa_ratio_adjustments": {
+      "ver_onder": -0.45,
+      "onder": -0.2,
+      "rond": 0.0,
+      "boven": 0.08,
+      "ver_boven": 0.12
+    },
+    "career_momentum": {
+      "promotion_max_effect": 0.35,
+      "transfer_max_effect": 0.15,
+      "momentum_months": 12,
+      "high_performer_stagnation_after_years": 3,
+      "high_performer_stagnation_effect": -0.3
+    },
+    "department_adjustments": {
+      "Productie": -0.1,
+      "Logistiek": -0.08,
+      "Techniek": -0.03,
+      "R&D": 0.1,
+      "IT": 0.1,
+      "Sales": 0.05,
+      "Directie": 0.1
+    },
+    "minimum_score": 1.0,
+    "maximum_score": 10.0,
+    "performance_review_effect": 0.08
+  },
+  "salary_benchmark": {
+    "base_date": "2020-01-01",
+    "annual_market_growth_rate": 0.025,
+    "market_percentile_spread": 0.1,
+    "years_per_step": 3,
+    "benchmark_status_thresholds": {
+      "ver_onder": 0.8,
+      "onder": 0.9,
+      "boven": 1.1,
+      "ver_boven": 1.2
+    },
+    "compa_ratio": {
+      "minimum_ratio": 0.75,
+      "maximum_ratio": 1.3,
+      "performance_midpoint": 3.5,
+      "annual_performance_ratio_movement": 0.004,
+      "minimum_annual_raise": 0.005,
+      "initial_population_distribution": [
+        {
+          "minimum": 0.75,
+          "maximum": 0.8,
+          "weight": 0.03
+        },
+        {
+          "minimum": 0.8,
+          "maximum": 0.9,
+          "weight": 0.17
+        },
+        {
+          "minimum": 0.9,
+          "maximum": 1.1,
+          "weight": 0.55
+        },
+        {
+          "minimum": 1.1,
+          "maximum": 1.2,
+          "weight": 0.2
+        },
+        {
+          "minimum": 1.2,
+          "maximum": 1.3,
+          "weight": 0.05
+        }
+      ],
+      "new_hire_distribution": [
+        {
+          "minimum": 0.8,
+          "maximum": 0.9,
+          "weight": 0.25
+        },
+        {
+          "minimum": 0.9,
+          "maximum": 1.1,
+          "weight": 0.7
+        },
+        {
+          "minimum": 1.1,
+          "maximum": 1.2,
+          "weight": 0.05
+        }
+      ],
+      "department_adjustments": {
+        "Productie": -0.01,
+        "Logistiek": -0.01,
+        "Techniek": 0.01,
+        "R&D": 0.01,
+        "IT": 0.02,
+        "Sales": 0.01,
+        "Directie": 0.04
+      }
+    },
+    "market_median_by_role": {
+      "Productiemedewerker": 33000,
+      "Operator A": 39000,
+      "Operator B": 44500,
+      "Teamleider Productie": 56000,
+      "Productiemanager": 78000,
+      "Plant Manager": 102500,
+      "Monteur": 44000,
+      "Teamleider Technische Dienst": 59000,
+      "Hoofd Technische Dienst": 71000,
+      "QC Medewerker": 40000,
+      "QC Engineer": 49500,
+      "QA Officer": 51500,
+      "Teamleider Kwaliteit": 63000,
+      "QA Manager": 78000,
+      "Magazijnmedewerker": 33000,
+      "Teamleider Logistiek": 54000,
+      "Supply Chain Planner": 46000,
+      "Logistiek Manager": 69000,
+      "Productontwikkelaar": 51500,
+      "Procestechnoloog": 57500,
+      "R&D Teamleider": 71000,
+      "R&D Manager": 86500,
+      "Applicatiebeheerder": 49000,
+      "Functioneel Beheerder": 50500,
+      "IT Manager": 86500,
+      "Accountmanager": 47500,
+      "Key Accountmanager": 63500,
+      "Sales Manager": 82500,
+      "HR Medewerker": 38000,
+      "HR Adviseur": 52500,
+      "HR Manager": 75000,
+      "Financieel Medewerker": 37000,
+      "Assistent Controller": 49000,
+      "Controller": 60000,
+      "Finance Manager": 85000,
+      "Operations Director": 127500,
+      "Managing Director": 162500,
+      "Operator C": 52500,
+      "Werkvoorbereider Technische Dienst": 50000,
+      "Project Engineer": 59000,
+      "Maintenance Engineer": 61000,
+      "QC Laborant": 39000,
+      "Senior QA Officer": 60000,
+      "Productieplanner": 47500,
+      "Inkoper": 47500,
+      "Supply Chain Manager": 79000,
+      "Senior Productontwikkelaar": 60000,
+      "Verpakkingstechnoloog": 55000,
+      "Senior Applicatiebeheerder": 60000,
+      "Senior Functioneel Beheerder": 62000,
+      "Senior HR Adviseur": 62500,
+      "QHSE Officer": 52500,
+      "Senior QHSE Officer": 63500,
+      "QHSE Manager": 81000
+    }
+  },
   "absence": {
-    "annual_event_rate": 0.20,
-    "base_probability": 0.20,
+    "annual_sickness_episode_rate": 0.95,
     "minimum_tenure_days": 10,
     "age_multipliers": {
       "<30": 0.8,
@@ -118,23 +1158,60 @@
       "45-55": 1.2,
       "55+": 1.5
     },
-    "attribute_multipliers": {
-      "Ploegendienst": {
-        "Dag": 1.0,
-        "2-ploeg": 1.2,
-        "3-ploeg": 1.35
-      }
-
+    "ploegendienst_multipliers": {
+      "Niet van toepassing": 1.0,
+      "Dag": 1.0,
+      "2-ploeg": 1.2,
+      "3-ploeg": 1.35
+    },
+    "department_multipliers": {
+      "Productie": 1.25,
+      "Logistiek": 1.2,
+      "Techniek": 1.15,
+      "Kwaliteit": 1.05,
+      "R&D": 0.9,
+      "IT": 0.85,
+      "Sales": 0.95,
+      "HR": 0.95,
+      "Finance": 0.9,
+      "Directie": 0.75
+    },
+    "gender_multipliers": {
+      "F": 1.15,
+      "M": 0.9,
+      "Anders": 1.0,
+      "Onbekend": 1.0
+    },
+    "seasonal_multipliers": {
+      "1": 1.3,
+      "2": 1.2,
+      "3": 1.05,
+      "4": 0.95,
+      "5": 0.9,
+      "6": 0.8,
+      "7": 0.75,
+      "8": 0.8,
+      "9": 0.95,
+      "10": 1.0,
+      "11": 1.1,
+      "12": 1.3
+    },
+    "satisfaction_incident_multipliers": {
+      "low": 1.12,
+      "neutral": 1.0,
+      "high": 0.94
     },
     "type_weights": {
-      "Ziek": 0.78,
-      "Kort verzuim": 0.17,
-      "Lang verzuim": 0.05
+      "Kort verzuim": 0.72,
+      "Middellang verzuim": 0.2,
+      "Lang verzuim": 0.08
     },
     "leave_type_rules": {
       "Zwangerschap": {
         "annual_probability": 0.018,
-        "genders": ["F"],
+        "genders": [
+          "F"
+        ],
         "min_age": 20,
         "max_age": 45,
         "max_events_per_year": 1
@@ -152,7 +1229,7 @@
         "max_events_per_year": 1
       },
       "Bijzonder verlof": {
-        "annual_probability": 0.060,
+        "annual_probability": 0.06,
         "max_events_per_year": 2
       },
       "Vakantie": {
@@ -161,153 +1238,1384 @@
         "max_events_per_year": 1
       },
       "Tijd voor tijd": {
-        "annual_probability": 0.20,
+        "annual_probability": 0.2,
         "min_tenure_days": 30,
-        "required_attribute": {
-          "name": "Ploegendienst",
-          "values": ["2-ploeg", "3-ploeg"]
-        },
+        "required_ploegendienst": [
+          "2-ploeg",
+          "3-ploeg"
+        ],
         "max_events_per_year": 4
+      },
+      "Calamiteitenverzuim": {
+        "annual_probability": 0.03,
+        "max_events_per_year": 2
       }
     },
     "duration_distribution_by_type": {
-      "Ziek": {
-        "1": 0.48,
-        "2": 0.25,
-        "3": 0.15,
-        "5": 0.08,
-        "10": 0.04
-      },
-      "Kort verzuim": {
-        "1": 0.75,
-        "2": 0.20,
-        "3": 0.05
-      },
       "Bijzonder verlof": {
         "1": 0.85,
-        "2": 0.10,
+        "2": 0.1,
         "3": 0.05
       },
       "Tijd voor tijd": {
-        "1": 0.70,
+        "1": 0.7,
         "2": 0.25,
         "3": 0.05
+      },
+      "Calamiteitenverzuim": {
+        "1": 0.95,
+        "2": 0.05
       }
     },
     "duration_ranges_by_type": {
+      "Kort verzuim": [
+        {
+          "min_days": 1,
+          "mode_days": 2,
+          "max_days": 4,
+          "weight": 0.8
+        },
+        {
+          "min_days": 4,
+          "mode_days": 5,
+          "max_days": 6,
+          "weight": 0.2
+        }
+      ],
+      "Middellang verzuim": [
+        {
+          "min_days": 7,
+          "mode_days": 12,
+          "max_days": 21,
+          "weight": 0.65
+        },
+        {
+          "min_days": 22,
+          "mode_days": 30,
+          "max_days": 41,
+          "weight": 0.35
+        }
+      ],
       "Lang verzuim": [
-        {"min_days": 7, "mode_days": 10, "max_days": 14, "weight": 0.35},
-        {"min_days": 15, "mode_days": 20, "max_days": 30, "weight": 0.30},
-        {"min_days": 31, "mode_days": 40, "max_days": 60, "weight": 0.25},
-        {"min_days": 61, "mode_days": 90, "max_days": 120, "weight": 0.10}
+        {
+          "min_days": 42,
+          "mode_days": 60,
+          "max_days": 90,
+          "weight": 0.4
+        },
+        {
+          "min_days": 91,
+          "mode_days": 125,
+          "max_days": 180,
+          "weight": 0.35
+        },
+        {
+          "min_days": 181,
+          "mode_days": 240,
+          "max_days": 365,
+          "weight": 0.2
+        },
+        {
+          "min_days": 366,
+          "mode_days": 420,
+          "max_days": 540,
+          "weight": 0.05
+        }
       ],
       "Zwangerschap": [
-        {"min_days": 112, "mode_days": 119, "max_days": 140, "weight": 1.0}
+        {
+          "min_days": 112,
+          "mode_days": 119,
+          "max_days": 140,
+          "weight": 1.0
+        }
       ],
       "Ouderschapsverlof": [
-        {"min_days": 5, "mode_days": 14, "max_days": 35, "weight": 1.0}
+        {
+          "min_days": 5,
+          "mode_days": 14,
+          "max_days": 35,
+          "weight": 1.0
+        }
       ],
       "Onbetaald verlof": [
-        {"min_days": 5, "mode_days": 10, "max_days": 30, "weight": 1.0}
+        {
+          "min_days": 5,
+          "mode_days": 10,
+          "max_days": 30,
+          "weight": 1.0
+        }
       ],
       "Vakantie": [
-        {"min_days": 14, "mode_days": 21, "max_days": 28, "weight": 1.0}
+        {
+          "min_days": 14,
+          "mode_days": 21,
+          "max_days": 28,
+          "weight": 1.0
+        }
       ]
     },
     "duration_distribution": {
-      "1": 0.40,
+      "1": 0.4,
       "2": 0.25,
-      "3": 0.20,
-      "5": 0.10,
+      "3": 0.2,
+      "5": 0.1,
       "10": 0.05
     }
   },
-
-  "education_distribution_by_role": {
-
-    "Productiemedewerker": {"MBO": 0.90, "HBO": 0.09, "WO": 0.01},
-    "Operator A": {"MBO": 0.85, "HBO": 0.14, "WO": 0.01},
-    "Operator B": {"MBO": 0.80, "HBO": 0.18, "WO": 0.02},
-    "Teamleider Productie": {"MBO": 0.50, "HBO": 0.45, "WO": 0.05},
-
-    "Monteur": {"MBO": 0.85, "HBO": 0.14, "WO": 0.01},
-    "Hoofd Technische Dienst": {"HBO": 0.70, "WO": 0.30},
-
-    "QC Medewerker": {"MBO": 0.70, "HBO": 0.25, "WO": 0.05},
-    "QC Engineer": {"HBO": 0.70, "WO": 0.30},
-    "QA Officer": {"HBO": 0.60, "WO": 0.40},
-    "QA Manager": {"HBO": 0.50, "WO": 0.50},
-
-    "Magazijnmedewerker": {"MBO": 0.90, "HBO": 0.10},
-    "Supply Chain Planner": {"HBO": 0.70, "WO": 0.30},
-    "Logistiek Manager": {"HBO": 0.60, "WO": 0.40},
-
-    "Productontwikkelaar": {"HBO": 0.50, "WO": 0.45, "PhD": 0.05},
-    "Procestechnoloog": {"HBO": 0.40, "WO": 0.50, "PhD": 0.10},
-    "R&D Manager": {"WO": 0.80, "PhD": 0.20},
-
-    "IT Support": {"MBO": 0.50, "HBO": 0.45, "WO": 0.05},
-    "Applicatiebeheerder": {"HBO": 0.70, "WO": 0.30},
-    "Functioneel Beheerder": {"HBO": 0.60, "WO": 0.40},
-    "IT Manager": {"HBO": 0.40, "WO": 0.60},
-
-    "Accountmanager": {"HBO": 0.80, "WO": 0.20},
-    "Sales Manager": {"HBO": 0.50, "WO": 0.50},
-
-    "HR Medewerker": {"HBO": 0.80, "WO": 0.20},
-    "HR Manager": {"HBO": 0.50, "WO": 0.50},
-
-    "Financieel Medewerker": {"MBO": 0.40, "HBO": 0.60},
-    "Controller": {"HBO": 0.50, "WO": 0.50},
-    "Finance Manager": {"WO": 1.0},
-
-    "Operations Director": {"WO": 1.0},
-    "Managing Director": {"WO": 0.90, "PhD": 0.10}
+  "role_career_paths": {
+    "Productiemedewerker": {
+      "relevante_opleidingen": [
+        "Interne vakopleiding",
+        "MBO Productietechniek",
+        "MBO Procestechniek"
+      ],
+      "logische_doorgroei": [
+        "Operator A"
+      ],
+      "laterale_transfers": [
+        "Magazijnmedewerker"
+      ],
+      "min_relevante_ervaring_jr": 0.0,
+      "formele_kwalificatie_verplicht": false,
+      "min_opleidingsniveau": "Geen",
+      "min_leidinggevende_ervaring_jr": 0.0
+    },
+    "Operator A": {
+      "relevante_opleidingen": [
+        "MBO Procesoperator A / VAPRO A",
+        "MBO Procestechniek"
+      ],
+      "logische_doorgroei": [
+        "Operator B"
+      ],
+      "laterale_transfers": [
+        "QC Medewerker"
+      ],
+      "min_relevante_ervaring_jr": 0.0,
+      "formele_kwalificatie_verplicht": true,
+      "min_opleidingsniveau": "MBO",
+      "min_leidinggevende_ervaring_jr": 0.0
+    },
+    "Operator B": {
+      "relevante_opleidingen": [
+        "MBO Procesoperator B / VAPRO B",
+        "MBO Procestechniek"
+      ],
+      "logische_doorgroei": [
+        "Operator C"
+      ],
+      "laterale_transfers": [],
+      "min_relevante_ervaring_jr": 2.0,
+      "formele_kwalificatie_verplicht": true,
+      "min_opleidingsniveau": "MBO",
+      "min_leidinggevende_ervaring_jr": 0.0
+    },
+    "Teamleider Productie": {
+      "relevante_opleidingen": [
+        "MBO Procestechniek",
+        "MBO Procesoperator C / VAPRO C",
+        "HBO Technische Bedrijfskunde"
+      ],
+      "logische_doorgroei": [
+        "Productiemanager"
+      ],
+      "laterale_transfers": [
+        "Teamleider Logistiek"
+      ],
+      "min_relevante_ervaring_jr": 3.0,
+      "formele_kwalificatie_verplicht": false,
+      "min_opleidingsniveau": "MBO",
+      "min_leidinggevende_ervaring_jr": 2.0
+    },
+    "Productiemanager": {
+      "relevante_opleidingen": [
+        "HBO Technische Bedrijfskunde",
+        "HBO/WO Procestechnologie",
+        "HBO Voedingsmiddelentechnologie",
+        "WO Food Technology"
+      ],
+      "logische_doorgroei": [
+        "Plant Manager"
+      ],
+      "laterale_transfers": [],
+      "min_relevante_ervaring_jr": 6.0,
+      "formele_kwalificatie_verplicht": false,
+      "min_opleidingsniveau": "HBO",
+      "min_leidinggevende_ervaring_jr": 2.0
+    },
+    "Plant Manager": {
+      "relevante_opleidingen": [
+        "HBO/WO Technische Bedrijfskunde",
+        "HBO/WO Procestechnologie",
+        "HBO Voedingsmiddelentechnologie",
+        "WO Food Technology",
+        "WO Bedrijfskunde"
+      ],
+      "logische_doorgroei": [
+        "Operations Director"
+      ],
+      "laterale_transfers": [],
+      "min_relevante_ervaring_jr": 10.0,
+      "formele_kwalificatie_verplicht": false,
+      "min_opleidingsniveau": "HBO",
+      "min_leidinggevende_ervaring_jr": 5.0
+    },
+    "Monteur": {
+      "relevante_opleidingen": [
+        "MBO Mechatronica",
+        "MBO Werktuigbouwkunde",
+        "MBO Elektrotechniek"
+      ],
+      "logische_doorgroei": [
+        "Werkvoorbereider Technische Dienst"
+      ],
+      "laterale_transfers": [],
+      "min_relevante_ervaring_jr": 2.0,
+      "formele_kwalificatie_verplicht": false,
+      "min_opleidingsniveau": "MBO",
+      "min_leidinggevende_ervaring_jr": 0.0
+    },
+    "Teamleider Technische Dienst": {
+      "relevante_opleidingen": [
+        "MBO/HBO Mechatronica",
+        "MBO/HBO Werktuigbouwkunde",
+        "MBO/HBO Elektrotechniek"
+      ],
+      "logische_doorgroei": [
+        "Hoofd Technische Dienst"
+      ],
+      "laterale_transfers": [],
+      "min_relevante_ervaring_jr": 3.0,
+      "formele_kwalificatie_verplicht": false,
+      "min_opleidingsniveau": "MBO",
+      "min_leidinggevende_ervaring_jr": 2.0
+    },
+    "Hoofd Technische Dienst": {
+      "relevante_opleidingen": [
+        "MBO/HBO Mechatronica",
+        "MBO/HBO Werktuigbouwkunde",
+        "MBO/HBO Elektrotechniek",
+        "HBO Technische Bedrijfskunde"
+      ],
+      "logische_doorgroei": [
+        "Plant Manager"
+      ],
+      "laterale_transfers": [],
+      "min_relevante_ervaring_jr": 7.0,
+      "formele_kwalificatie_verplicht": false,
+      "min_opleidingsniveau": "MBO",
+      "min_leidinggevende_ervaring_jr": 3.0
+    },
+    "QC Medewerker": {
+      "relevante_opleidingen": [
+        "MBO Voedingsmiddelentechnologie / Food",
+        "MBO Procestechniek",
+        "MBO Kwaliteitsmedewerker",
+        "Interne HACCP/GMP opleiding"
+      ],
+      "logische_doorgroei": [
+        "QC Engineer",
+        "QA Officer"
+      ],
+      "laterale_transfers": [
+        "QC Laborant",
+        "Operator A"
+      ],
+      "min_relevante_ervaring_jr": 1.0,
+      "formele_kwalificatie_verplicht": false,
+      "min_opleidingsniveau": "MBO",
+      "min_leidinggevende_ervaring_jr": 0.0
+    },
+    "QC Engineer": {
+      "relevante_opleidingen": [
+        "HBO Chemie",
+        "HBO Voedingsmiddelentechnologie",
+        "WO Food Technology",
+        "HBO Life Sciences",
+        "HBO Kwaliteitsmanagement"
+      ],
+      "logische_doorgroei": [
+        "Senior QA Officer",
+        "Teamleider Kwaliteit"
+      ],
+      "laterale_transfers": [
+        "QA Officer",
+        "Productontwikkelaar"
+      ],
+      "min_relevante_ervaring_jr": 2.0,
+      "formele_kwalificatie_verplicht": true,
+      "min_opleidingsniveau": "HBO",
+      "min_leidinggevende_ervaring_jr": 0.0
+    },
+    "QA Officer": {
+      "relevante_opleidingen": [
+        "HBO Voedingsmiddelentechnologie",
+        "WO Food Technology",
+        "HBO Kwaliteitsmanagement",
+        "HBO Life Sciences",
+        "HBO Chemie"
+      ],
+      "logische_doorgroei": [
+        "Senior QA Officer",
+        "Teamleider Kwaliteit"
+      ],
+      "laterale_transfers": [
+        "QC Engineer",
+        "Productontwikkelaar",
+        "QHSE Officer"
+      ],
+      "min_relevante_ervaring_jr": 2.0,
+      "formele_kwalificatie_verplicht": true,
+      "min_opleidingsniveau": "HBO",
+      "min_leidinggevende_ervaring_jr": 0.0
+    },
+    "Teamleider Kwaliteit": {
+      "relevante_opleidingen": [
+        "HBO Voedingsmiddelentechnologie",
+        "WO Food Technology",
+        "HBO Kwaliteitsmanagement",
+        "HBO Chemie"
+      ],
+      "logische_doorgroei": [
+        "QA Manager"
+      ],
+      "laterale_transfers": [],
+      "min_relevante_ervaring_jr": 3.0,
+      "formele_kwalificatie_verplicht": false,
+      "min_opleidingsniveau": "HBO",
+      "min_leidinggevende_ervaring_jr": 2.0
+    },
+    "QA Manager": {
+      "relevante_opleidingen": [
+        "HBO Voedingsmiddelentechnologie",
+        "WO Food Technology",
+        "HBO Kwaliteitsmanagement",
+        "WO Chemie"
+      ],
+      "logische_doorgroei": [
+        "Operations Director"
+      ],
+      "laterale_transfers": [
+        "QHSE Manager"
+      ],
+      "min_relevante_ervaring_jr": 6.0,
+      "formele_kwalificatie_verplicht": false,
+      "min_opleidingsniveau": "HBO",
+      "min_leidinggevende_ervaring_jr": 3.0
+    },
+    "Magazijnmedewerker": {
+      "relevante_opleidingen": [
+        "MBO Logistiek"
+      ],
+      "logische_doorgroei": [
+        "Teamleider Logistiek"
+      ],
+      "laterale_transfers": [
+        "Productiemedewerker"
+      ],
+      "min_relevante_ervaring_jr": 0.0,
+      "formele_kwalificatie_verplicht": false,
+      "min_opleidingsniveau": "Geen",
+      "min_leidinggevende_ervaring_jr": 0.0
+    },
+    "Teamleider Logistiek": {
+      "relevante_opleidingen": [
+        "MBO Logistiek",
+        "HBO Logistics Management"
+      ],
+      "logische_doorgroei": [
+        "Logistiek Manager"
+      ],
+      "laterale_transfers": [
+        "Teamleider Productie"
+      ],
+      "min_relevante_ervaring_jr": 3.0,
+      "formele_kwalificatie_verplicht": false,
+      "min_opleidingsniveau": "MBO",
+      "min_leidinggevende_ervaring_jr": 2.0
+    },
+    "Supply Chain Planner": {
+      "relevante_opleidingen": [
+        "HBO Logistics Management",
+        "HBO Supply Chain Management",
+        "HBO Technische Bedrijfskunde"
+      ],
+      "logische_doorgroei": [
+        "Supply Chain Manager"
+      ],
+      "laterale_transfers": [
+        "Productieplanner",
+        "Inkoper"
+      ],
+      "min_relevante_ervaring_jr": 2.0,
+      "formele_kwalificatie_verplicht": false,
+      "min_opleidingsniveau": "HBO",
+      "min_leidinggevende_ervaring_jr": 0.0
+    },
+    "Logistiek Manager": {
+      "relevante_opleidingen": [
+        "HBO Logistics Management",
+        "HBO Supply Chain Management",
+        "HBO Technische Bedrijfskunde"
+      ],
+      "logische_doorgroei": [
+        "Supply Chain Manager"
+      ],
+      "laterale_transfers": [],
+      "min_relevante_ervaring_jr": 6.0,
+      "formele_kwalificatie_verplicht": false,
+      "min_opleidingsniveau": "HBO",
+      "min_leidinggevende_ervaring_jr": 2.0
+    },
+    "Productontwikkelaar": {
+      "relevante_opleidingen": [
+        "HBO Voedingsmiddelentechnologie",
+        "HBO Food Innovation",
+        "WO Food Technology"
+      ],
+      "logische_doorgroei": [
+        "Senior Productontwikkelaar"
+      ],
+      "laterale_transfers": [
+        "QC Engineer",
+        "QA Officer"
+      ],
+      "min_relevante_ervaring_jr": 1.0,
+      "formele_kwalificatie_verplicht": true,
+      "min_opleidingsniveau": "HBO",
+      "min_leidinggevende_ervaring_jr": 0.0
+    },
+    "Procestechnoloog": {
+      "relevante_opleidingen": [
+        "HBO Voedingsmiddelentechnologie",
+        "WO Food Technology",
+        "HBO/WO Chemische Technologie",
+        "HBO/WO Procestechnologie"
+      ],
+      "logische_doorgroei": [
+        "R&D Teamleider"
+      ],
+      "laterale_transfers": [
+        "Senior Productontwikkelaar",
+        "Verpakkingstechnoloog",
+        "Project Engineer"
+      ],
+      "min_relevante_ervaring_jr": 2.0,
+      "formele_kwalificatie_verplicht": true,
+      "min_opleidingsniveau": "HBO",
+      "min_leidinggevende_ervaring_jr": 0.0
+    },
+    "R&D Teamleider": {
+      "relevante_opleidingen": [
+        "HBO Voedingsmiddelentechnologie",
+        "WO Food Technology",
+        "WO Chemische Technologie",
+        "HBO/WO Procestechnologie"
+      ],
+      "logische_doorgroei": [
+        "R&D Manager"
+      ],
+      "laterale_transfers": [],
+      "min_relevante_ervaring_jr": 5.0,
+      "formele_kwalificatie_verplicht": false,
+      "min_opleidingsniveau": "HBO",
+      "min_leidinggevende_ervaring_jr": 2.0
+    },
+    "R&D Manager": {
+      "relevante_opleidingen": [
+        "HBO Voedingsmiddelentechnologie",
+        "WO Food Technology",
+        "WO Chemische Technologie",
+        "HBO/WO Procestechnologie"
+      ],
+      "logische_doorgroei": [
+        "Operations Director"
+      ],
+      "laterale_transfers": [],
+      "min_relevante_ervaring_jr": 7.0,
+      "formele_kwalificatie_verplicht": false,
+      "min_opleidingsniveau": "HBO",
+      "min_leidinggevende_ervaring_jr": 3.0
+    },
+    "Applicatiebeheerder": {
+      "relevante_opleidingen": [
+        "MBO ICT",
+        "HBO-ICT",
+        "relevante applicatiecertificering"
+      ],
+      "logische_doorgroei": [
+        "Senior Applicatiebeheerder"
+      ],
+      "laterale_transfers": [
+        "Functioneel Beheerder"
+      ],
+      "min_relevante_ervaring_jr": 2.0,
+      "formele_kwalificatie_verplicht": false,
+      "min_opleidingsniveau": "MBO",
+      "min_leidinggevende_ervaring_jr": 0.0
+    },
+    "Functioneel Beheerder": {
+      "relevante_opleidingen": [
+        "HBO-ICT",
+        "HBO Business IT & Management",
+        "HBO Bedrijfskunde met IT-specialisatie"
+      ],
+      "logische_doorgroei": [
+        "Senior Functioneel Beheerder"
+      ],
+      "laterale_transfers": [
+        "Applicatiebeheerder"
+      ],
+      "min_relevante_ervaring_jr": 2.0,
+      "formele_kwalificatie_verplicht": false,
+      "min_opleidingsniveau": "HBO",
+      "min_leidinggevende_ervaring_jr": 0.0
+    },
+    "IT Manager": {
+      "relevante_opleidingen": [
+        "HBO/WO Informatica",
+        "HBO-ICT",
+        "HBO Business IT & Management",
+        "HBO Technische Bedrijfskunde"
+      ],
+      "logische_doorgroei": [],
+      "laterale_transfers": [],
+      "min_relevante_ervaring_jr": 7.0,
+      "formele_kwalificatie_verplicht": false,
+      "min_opleidingsniveau": "HBO",
+      "min_leidinggevende_ervaring_jr": 3.0
+    },
+    "Accountmanager": {
+      "relevante_opleidingen": [
+        "HBO Commerciële Economie",
+        "HBO Food Business",
+        "HBO Technische Bedrijfskunde"
+      ],
+      "logische_doorgroei": [
+        "Key Accountmanager"
+      ],
+      "laterale_transfers": [],
+      "min_relevante_ervaring_jr": 1.0,
+      "formele_kwalificatie_verplicht": false,
+      "min_opleidingsniveau": "HBO",
+      "min_leidinggevende_ervaring_jr": 0.0
+    },
+    "Key Accountmanager": {
+      "relevante_opleidingen": [
+        "HBO Commerciële Economie",
+        "HBO Food Business",
+        "HBO Technische Bedrijfskunde"
+      ],
+      "logische_doorgroei": [
+        "Sales Manager"
+      ],
+      "laterale_transfers": [],
+      "min_relevante_ervaring_jr": 4.0,
+      "formele_kwalificatie_verplicht": false,
+      "min_opleidingsniveau": "HBO",
+      "min_leidinggevende_ervaring_jr": 0.0
+    },
+    "Sales Manager": {
+      "relevante_opleidingen": [
+        "HBO/WO Commerciële Economie",
+        "WO Bedrijfskunde",
+        "HBO Food Business"
+      ],
+      "logische_doorgroei": [
+        "Commercial Director"
+      ],
+      "laterale_transfers": [],
+      "min_relevante_ervaring_jr": 7.0,
+      "formele_kwalificatie_verplicht": false,
+      "min_opleidingsniveau": "HBO",
+      "min_leidinggevende_ervaring_jr": 3.0
+    },
+    "HR Medewerker": {
+      "relevante_opleidingen": [
+        "MBO Human Resource Support",
+        "HBO Human Resource Management"
+      ],
+      "logische_doorgroei": [
+        "HR Adviseur"
+      ],
+      "laterale_transfers": [],
+      "min_relevante_ervaring_jr": 0.0,
+      "formele_kwalificatie_verplicht": false,
+      "min_opleidingsniveau": "MBO",
+      "min_leidinggevende_ervaring_jr": 0.0
+    },
+    "HR Adviseur": {
+      "relevante_opleidingen": [
+        "HBO Human Resource Management",
+        "WO Arbeids- en Organisatiepsychologie",
+        "WO Bedrijfskunde"
+      ],
+      "logische_doorgroei": [
+        "Senior HR Adviseur"
+      ],
+      "laterale_transfers": [],
+      "min_relevante_ervaring_jr": 2.0,
+      "formele_kwalificatie_verplicht": true,
+      "min_opleidingsniveau": "HBO",
+      "min_leidinggevende_ervaring_jr": 0.0
+    },
+    "HR Manager": {
+      "relevante_opleidingen": [
+        "HBO Human Resource Management",
+        "WO Arbeids- en Organisatiepsychologie",
+        "WO Bedrijfskunde"
+      ],
+      "logische_doorgroei": [],
+      "laterale_transfers": [],
+      "min_relevante_ervaring_jr": 7.0,
+      "formele_kwalificatie_verplicht": false,
+      "min_opleidingsniveau": "HBO",
+      "min_leidinggevende_ervaring_jr": 3.0
+    },
+    "Financieel Medewerker": {
+      "relevante_opleidingen": [
+        "MBO Bedrijfsadministratie",
+        "HBO Finance & Control"
+      ],
+      "logische_doorgroei": [
+        "Assistent Controller"
+      ],
+      "laterale_transfers": [],
+      "min_relevante_ervaring_jr": 0.0,
+      "formele_kwalificatie_verplicht": false,
+      "min_opleidingsniveau": "MBO",
+      "min_leidinggevende_ervaring_jr": 0.0
+    },
+    "Assistent Controller": {
+      "relevante_opleidingen": [
+        "HBO Finance & Control",
+        "HBO Accountancy",
+        "WO Bedrijfseconomie"
+      ],
+      "logische_doorgroei": [
+        "Controller"
+      ],
+      "laterale_transfers": [],
+      "min_relevante_ervaring_jr": 2.0,
+      "formele_kwalificatie_verplicht": false,
+      "min_opleidingsniveau": "HBO",
+      "min_leidinggevende_ervaring_jr": 0.0
+    },
+    "Controller": {
+      "relevante_opleidingen": [
+        "HBO Finance & Control",
+        "HBO Accountancy",
+        "WO Bedrijfseconomie"
+      ],
+      "logische_doorgroei": [
+        "Finance Manager"
+      ],
+      "laterale_transfers": [],
+      "min_relevante_ervaring_jr": 4.0,
+      "formele_kwalificatie_verplicht": false,
+      "min_opleidingsniveau": "HBO",
+      "min_leidinggevende_ervaring_jr": 0.0
+    },
+    "Finance Manager": {
+      "relevante_opleidingen": [
+        "HBO Finance & Control",
+        "HBO Accountancy",
+        "WO Bedrijfseconomie",
+        "WO Bedrijfskunde"
+      ],
+      "logische_doorgroei": [
+        "CFO"
+      ],
+      "laterale_transfers": [],
+      "min_relevante_ervaring_jr": 7.0,
+      "formele_kwalificatie_verplicht": false,
+      "min_opleidingsniveau": "HBO",
+      "min_leidinggevende_ervaring_jr": 3.0
+    },
+    "Operations Director": {
+      "relevante_opleidingen": [
+        "HBO/WO Technische Bedrijfskunde",
+        "WO Bedrijfskunde",
+        "relevante technische of operationele HBO/WO-opleiding"
+      ],
+      "logische_doorgroei": [
+        "Managing Director"
+      ],
+      "laterale_transfers": [],
+      "min_relevante_ervaring_jr": 12.0,
+      "formele_kwalificatie_verplicht": false,
+      "min_opleidingsniveau": "HBO",
+      "min_leidinggevende_ervaring_jr": 5.0
+    },
+    "Managing Director": {
+      "relevante_opleidingen": [
+        "WO Bedrijfskunde",
+        "technische of bedrijfskundige HBO/WO-opleiding"
+      ],
+      "logische_doorgroei": [],
+      "laterale_transfers": [],
+      "min_relevante_ervaring_jr": 15.0,
+      "formele_kwalificatie_verplicht": false,
+      "min_opleidingsniveau": "HBO",
+      "min_leidinggevende_ervaring_jr": 8.0
+    },
+    "Operator C": {
+      "relevante_opleidingen": [
+        "MBO Procesoperator C / VAPRO C",
+        "MBO Procestechniek"
+      ],
+      "logische_doorgroei": [
+        "Teamleider Productie"
+      ],
+      "laterale_transfers": [],
+      "min_relevante_ervaring_jr": 4.0,
+      "formele_kwalificatie_verplicht": true,
+      "min_opleidingsniveau": "MBO",
+      "min_leidinggevende_ervaring_jr": 0.0
+    },
+    "Werkvoorbereider Technische Dienst": {
+      "relevante_opleidingen": [
+        "MBO/HBO Werktuigbouwkunde",
+        "MBO/HBO Mechatronica",
+        "MBO/HBO Elektrotechniek"
+      ],
+      "logische_doorgroei": [
+        "Maintenance Engineer",
+        "Teamleider Technische Dienst"
+      ],
+      "laterale_transfers": [],
+      "min_relevante_ervaring_jr": 3.0,
+      "formele_kwalificatie_verplicht": false,
+      "min_opleidingsniveau": "MBO",
+      "min_leidinggevende_ervaring_jr": 0.0
+    },
+    "Project Engineer": {
+      "relevante_opleidingen": [
+        "HBO/WO Werktuigbouwkunde",
+        "HBO/WO Mechatronica",
+        "HBO/WO Elektrotechniek",
+        "HBO Technische Bedrijfskunde"
+      ],
+      "logische_doorgroei": [
+        "Hoofd Technische Dienst"
+      ],
+      "laterale_transfers": [
+        "Maintenance Engineer",
+        "Procestechnoloog"
+      ],
+      "min_relevante_ervaring_jr": 2.0,
+      "formele_kwalificatie_verplicht": true,
+      "min_opleidingsniveau": "HBO",
+      "min_leidinggevende_ervaring_jr": 0.0
+    },
+    "Maintenance Engineer": {
+      "relevante_opleidingen": [
+        "HBO Werktuigbouwkunde",
+        "HBO Mechatronica",
+        "HBO Elektrotechniek",
+        "relevante maintenance/reliability-certificering"
+      ],
+      "logische_doorgroei": [
+        "Hoofd Technische Dienst"
+      ],
+      "laterale_transfers": [
+        "Project Engineer"
+      ],
+      "min_relevante_ervaring_jr": 3.0,
+      "formele_kwalificatie_verplicht": true,
+      "min_opleidingsniveau": "HBO",
+      "min_leidinggevende_ervaring_jr": 0.0
+    },
+    "QC Laborant": {
+      "relevante_opleidingen": [
+        "MBO Laboratoriumtechniek",
+        "MBO Chemisch-Fysisch Analist",
+        "MBO Allround Laborant",
+        "MBO Voedingsmiddelentechnologie / Food",
+        "HBO Voedingsmiddelentechnologie",
+        "HBO Chemie",
+        "HBO Life Sciences"
+      ],
+      "logische_doorgroei": [
+        "QC Engineer"
+      ],
+      "laterale_transfers": [
+        "QC Medewerker"
+      ],
+      "min_relevante_ervaring_jr": 0.0,
+      "formele_kwalificatie_verplicht": true,
+      "min_opleidingsniveau": "MBO",
+      "min_leidinggevende_ervaring_jr": 0.0
+    },
+    "Senior QA Officer": {
+      "relevante_opleidingen": [
+        "HBO Voedingsmiddelentechnologie",
+        "WO Food Technology",
+        "HBO Kwaliteitsmanagement",
+        "HBO Life Sciences",
+        "HBO Chemie"
+      ],
+      "logische_doorgroei": [
+        "QA Manager",
+        "Teamleider Kwaliteit"
+      ],
+      "laterale_transfers": [],
+      "min_relevante_ervaring_jr": 5.0,
+      "formele_kwalificatie_verplicht": true,
+      "min_opleidingsniveau": "HBO",
+      "min_leidinggevende_ervaring_jr": 0.0
+    },
+    "Productieplanner": {
+      "relevante_opleidingen": [
+        "HBO Logistics Management",
+        "HBO Supply Chain Management",
+        "HBO Technische Bedrijfskunde"
+      ],
+      "logische_doorgroei": [
+        "Supply Chain Manager"
+      ],
+      "laterale_transfers": [
+        "Supply Chain Planner",
+        "Inkoper"
+      ],
+      "min_relevante_ervaring_jr": 2.0,
+      "formele_kwalificatie_verplicht": false,
+      "min_opleidingsniveau": "HBO",
+      "min_leidinggevende_ervaring_jr": 0.0
+    },
+    "Inkoper": {
+      "relevante_opleidingen": [
+        "HBO Commerciële Economie",
+        "HBO Supply Chain Management",
+        "HBO Technische Bedrijfskunde"
+      ],
+      "logische_doorgroei": [
+        "Supply Chain Manager"
+      ],
+      "laterale_transfers": [
+        "Productieplanner",
+        "Supply Chain Planner"
+      ],
+      "min_relevante_ervaring_jr": 2.0,
+      "formele_kwalificatie_verplicht": false,
+      "min_opleidingsniveau": "HBO",
+      "min_leidinggevende_ervaring_jr": 0.0
+    },
+    "Supply Chain Manager": {
+      "relevante_opleidingen": [
+        "HBO/WO Supply Chain Management",
+        "HBO Logistics Management",
+        "HBO Technische Bedrijfskunde"
+      ],
+      "logische_doorgroei": [
+        "Operations Director"
+      ],
+      "laterale_transfers": [],
+      "min_relevante_ervaring_jr": 7.0,
+      "formele_kwalificatie_verplicht": false,
+      "min_opleidingsniveau": "HBO",
+      "min_leidinggevende_ervaring_jr": 3.0
+    },
+    "Senior Productontwikkelaar": {
+      "relevante_opleidingen": [
+        "HBO Voedingsmiddelentechnologie",
+        "WO Food Technology"
+      ],
+      "logische_doorgroei": [
+        "R&D Teamleider"
+      ],
+      "laterale_transfers": [
+        "Procestechnoloog",
+        "Verpakkingstechnoloog"
+      ],
+      "min_relevante_ervaring_jr": 5.0,
+      "formele_kwalificatie_verplicht": true,
+      "min_opleidingsniveau": "HBO",
+      "min_leidinggevende_ervaring_jr": 0.0
+    },
+    "Verpakkingstechnoloog": {
+      "relevante_opleidingen": [
+        "HBO/WO Packaging Technology",
+        "HBO Voedingsmiddelentechnologie",
+        "WO Food Technology",
+        "HBO/WO Materiaalkunde"
+      ],
+      "logische_doorgroei": [
+        "R&D Teamleider"
+      ],
+      "laterale_transfers": [
+        "Senior Productontwikkelaar",
+        "Procestechnoloog"
+      ],
+      "min_relevante_ervaring_jr": 2.0,
+      "formele_kwalificatie_verplicht": true,
+      "min_opleidingsniveau": "HBO",
+      "min_leidinggevende_ervaring_jr": 0.0
+    },
+    "Senior Applicatiebeheerder": {
+      "relevante_opleidingen": [
+        "MBO ICT",
+        "HBO-ICT",
+        "relevante applicatie- en integratiecertificering"
+      ],
+      "logische_doorgroei": [
+        "IT Manager"
+      ],
+      "laterale_transfers": [
+        "Senior Functioneel Beheerder"
+      ],
+      "min_relevante_ervaring_jr": 5.0,
+      "formele_kwalificatie_verplicht": true,
+      "min_opleidingsniveau": "MBO",
+      "min_leidinggevende_ervaring_jr": 0.0
+    },
+    "Senior Functioneel Beheerder": {
+      "relevante_opleidingen": [
+        "HBO Business IT & Management",
+        "HBO-ICT",
+        "HBO Bedrijfskunde met IT-specialisatie"
+      ],
+      "logische_doorgroei": [
+        "IT Manager"
+      ],
+      "laterale_transfers": [
+        "Senior Applicatiebeheerder"
+      ],
+      "min_relevante_ervaring_jr": 5.0,
+      "formele_kwalificatie_verplicht": true,
+      "min_opleidingsniveau": "HBO",
+      "min_leidinggevende_ervaring_jr": 0.0
+    },
+    "Senior HR Adviseur": {
+      "relevante_opleidingen": [
+        "HBO Human Resource Management",
+        "WO Arbeids- en Organisatiepsychologie",
+        "WO Bedrijfskunde"
+      ],
+      "logische_doorgroei": [
+        "HR Manager"
+      ],
+      "laterale_transfers": [],
+      "min_relevante_ervaring_jr": 5.0,
+      "formele_kwalificatie_verplicht": true,
+      "min_opleidingsniveau": "HBO",
+      "min_leidinggevende_ervaring_jr": 0.0
+    },
+    "QHSE Officer": {
+      "relevante_opleidingen": [
+        "HBO Integrale Veiligheidskunde",
+        "MBO/HBO Milieukunde",
+        "HBO Voedingsmiddelentechnologie",
+        "WO Food Technology",
+        "relevante QHSE-certificering"
+      ],
+      "logische_doorgroei": [
+        "Senior QHSE Officer"
+      ],
+      "laterale_transfers": [
+        "QA Officer"
+      ],
+      "min_relevante_ervaring_jr": 2.0,
+      "formele_kwalificatie_verplicht": true,
+      "min_opleidingsniveau": "MBO",
+      "min_leidinggevende_ervaring_jr": 0.0
+    },
+    "Senior QHSE Officer": {
+      "relevante_opleidingen": [
+        "HBO Integrale Veiligheidskunde",
+        "HVK",
+        "HBO/WO Milieukunde",
+        "HBO Voedingsmiddelentechnologie",
+        "WO Food Technology"
+      ],
+      "logische_doorgroei": [
+        "QHSE Manager"
+      ],
+      "laterale_transfers": [],
+      "min_relevante_ervaring_jr": 5.0,
+      "formele_kwalificatie_verplicht": true,
+      "min_opleidingsniveau": "HBO",
+      "min_leidinggevende_ervaring_jr": 0.0
+    },
+    "QHSE Manager": {
+      "relevante_opleidingen": [
+        "HBO/WO Integrale Veiligheidskunde",
+        "HVK",
+        "HBO/WO Milieukunde",
+        "HBO Voedingsmiddelentechnologie",
+        "WO Food Technology"
+      ],
+      "logische_doorgroei": [
+        "Operations Director"
+      ],
+      "laterale_transfers": [
+        "QA Manager"
+      ],
+      "min_relevante_ervaring_jr": 7.0,
+      "formele_kwalificatie_verplicht": true,
+      "min_opleidingsniveau": "HBO",
+      "min_leidinggevende_ervaring_jr": 3.0
+    },
+    "Product Manager": {
+      "relevante_opleidingen": [
+        "HBO Commerciële Economie",
+        "HBO Food Business",
+        "HBO Technische Bedrijfskunde"
+      ],
+      "logische_doorgroei": [],
+      "laterale_transfers": [],
+      "min_relevante_ervaring_jr": 3.0,
+      "formele_kwalificatie_verplicht": false,
+      "min_opleidingsniveau": "HBO",
+      "min_leidinggevende_ervaring_jr": 0.0
+    },
+    "CFO": {
+      "relevante_opleidingen": [
+        "HBO Finance & Control",
+        "HBO Accountancy",
+        "WO Bedrijfseconomie",
+        "WO Bedrijfskunde"
+      ],
+      "logische_doorgroei": [],
+      "laterale_transfers": [],
+      "min_relevante_ervaring_jr": 10.0,
+      "formele_kwalificatie_verplicht": false,
+      "min_opleidingsniveau": "HBO",
+      "min_leidinggevende_ervaring_jr": 5.0
+    },
+    "Commercial Director": {
+      "relevante_opleidingen": [
+        "HBO/WO Commerciële Economie",
+        "WO Bedrijfskunde",
+        "HBO Food Business"
+      ],
+      "logische_doorgroei": [],
+      "laterale_transfers": [],
+      "min_relevante_ervaring_jr": 10.0,
+      "formele_kwalificatie_verplicht": false,
+      "min_opleidingsniveau": "HBO",
+      "min_leidinggevende_ervaring_jr": 5.0
+    }
   },
-
+  "education_distribution_by_role": {
+    "Productiemedewerker": {
+      "MBO": 0.75,
+      "HBO": 0.22,
+      "WO": 0.03
+    },
+    "Operator A": {
+      "MBO": 0.75,
+      "HBO": 0.22,
+      "WO": 0.03
+    },
+    "Operator B": {
+      "MBO": 0.75,
+      "HBO": 0.22,
+      "WO": 0.03
+    },
+    "Teamleider Productie": {
+      "MBO": 0.75,
+      "HBO": 0.22,
+      "WO": 0.03
+    },
+    "Productiemanager": {
+      "HBO": 0.7,
+      "WO": 0.3
+    },
+    "Plant Manager": {
+      "HBO": 0.7,
+      "WO": 0.3
+    },
+    "Monteur": {
+      "MBO": 0.75,
+      "HBO": 0.22,
+      "WO": 0.03
+    },
+    "Teamleider Technische Dienst": {
+      "MBO": 0.75,
+      "HBO": 0.22,
+      "WO": 0.03
+    },
+    "Hoofd Technische Dienst": {
+      "MBO": 0.75,
+      "HBO": 0.22,
+      "WO": 0.03
+    },
+    "QC Medewerker": {
+      "MBO": 0.75,
+      "HBO": 0.22,
+      "WO": 0.03
+    },
+    "QC Engineer": {
+      "HBO": 0.7,
+      "WO": 0.3
+    },
+    "QA Officer": {
+      "HBO": 0.7,
+      "WO": 0.3
+    },
+    "Teamleider Kwaliteit": {
+      "HBO": 0.7,
+      "WO": 0.3
+    },
+    "QA Manager": {
+      "HBO": 0.7,
+      "WO": 0.3
+    },
+    "Magazijnmedewerker": {
+      "MBO": 0.75,
+      "HBO": 0.22,
+      "WO": 0.03
+    },
+    "Teamleider Logistiek": {
+      "MBO": 0.75,
+      "HBO": 0.22,
+      "WO": 0.03
+    },
+    "Supply Chain Planner": {
+      "HBO": 0.7,
+      "WO": 0.3
+    },
+    "Logistiek Manager": {
+      "HBO": 0.7,
+      "WO": 0.3
+    },
+    "Productontwikkelaar": {
+      "HBO": 0.7,
+      "WO": 0.3
+    },
+    "Procestechnoloog": {
+      "HBO": 0.7,
+      "WO": 0.3
+    },
+    "R&D Teamleider": {
+      "HBO": 0.7,
+      "WO": 0.3
+    },
+    "R&D Manager": {
+      "HBO": 0.7,
+      "WO": 0.3
+    },
+    "Applicatiebeheerder": {
+      "MBO": 0.75,
+      "HBO": 0.22,
+      "WO": 0.03
+    },
+    "Functioneel Beheerder": {
+      "HBO": 0.7,
+      "WO": 0.3
+    },
+    "IT Manager": {
+      "HBO": 0.7,
+      "WO": 0.3
+    },
+    "Accountmanager": {
+      "HBO": 0.7,
+      "WO": 0.3
+    },
+    "Key Accountmanager": {
+      "HBO": 0.7,
+      "WO": 0.3
+    },
+    "Sales Manager": {
+      "HBO": 0.7,
+      "WO": 0.3
+    },
+    "HR Medewerker": {
+      "MBO": 0.75,
+      "HBO": 0.22,
+      "WO": 0.03
+    },
+    "HR Adviseur": {
+      "HBO": 0.7,
+      "WO": 0.3
+    },
+    "HR Manager": {
+      "HBO": 0.7,
+      "WO": 0.3
+    },
+    "Financieel Medewerker": {
+      "MBO": 0.75,
+      "HBO": 0.22,
+      "WO": 0.03
+    },
+    "Assistent Controller": {
+      "HBO": 0.7,
+      "WO": 0.3
+    },
+    "Controller": {
+      "HBO": 0.7,
+      "WO": 0.3
+    },
+    "Finance Manager": {
+      "HBO": 0.7,
+      "WO": 0.3
+    },
+    "Operations Director": {
+      "HBO": 0.7,
+      "WO": 0.3
+    },
+    "Managing Director": {
+      "HBO": 0.7,
+      "WO": 0.3
+    },
+    "Operator C": {
+      "MBO": 0.75,
+      "HBO": 0.22,
+      "WO": 0.03
+    },
+    "Werkvoorbereider Technische Dienst": {
+      "MBO": 0.75,
+      "HBO": 0.22,
+      "WO": 0.03
+    },
+    "Project Engineer": {
+      "HBO": 0.7,
+      "WO": 0.3
+    },
+    "Maintenance Engineer": {
+      "HBO": 0.7,
+      "WO": 0.3
+    },
+    "QC Laborant": {
+      "MBO": 0.75,
+      "HBO": 0.22,
+      "WO": 0.03
+    },
+    "Senior QA Officer": {
+      "HBO": 0.7,
+      "WO": 0.3
+    },
+    "Productieplanner": {
+      "HBO": 0.7,
+      "WO": 0.3
+    },
+    "Inkoper": {
+      "HBO": 0.7,
+      "WO": 0.3
+    },
+    "Supply Chain Manager": {
+      "HBO": 0.7,
+      "WO": 0.3
+    },
+    "Senior Productontwikkelaar": {
+      "HBO": 0.7,
+      "WO": 0.3
+    },
+    "Verpakkingstechnoloog": {
+      "HBO": 0.7,
+      "WO": 0.3
+    },
+    "Senior Applicatiebeheerder": {
+      "MBO": 0.75,
+      "HBO": 0.22,
+      "WO": 0.03
+    },
+    "Senior Functioneel Beheerder": {
+      "HBO": 0.7,
+      "WO": 0.3
+    },
+    "Senior HR Adviseur": {
+      "HBO": 0.7,
+      "WO": 0.3
+    },
+    "QHSE Officer": {
+      "MBO": 0.75,
+      "HBO": 0.22,
+      "WO": 0.03
+    },
+    "Senior QHSE Officer": {
+      "HBO": 0.7,
+      "WO": 0.3
+    },
+    "QHSE Manager": {
+      "HBO": 0.7,
+      "WO": 0.3
+    },
+    "Product Manager": {
+      "HBO": 0.7,
+      "WO": 0.3
+    },
+    "CFO": {
+      "HBO": 0.5,
+      "WO": 0.5
+    },
+    "Commercial Director": {
+      "HBO": 0.6,
+      "WO": 0.4
+    }
+  },
   "contract_hours_distribution": {
     "default": {
       "40": 0.65,
-      "32": 0.20,
-      "24": 0.10,
+      "32": 0.2,
+      "24": 0.1,
       "16": 0.05
     },
     "Productiemedewerker": {
-      "40": 0.90,
-      "32": 0.10
+      "40": 0.9,
+      "32": 0.1
     }
   },
-
-  "employment_attributes": {
-    "Ploegendienst": {
-      "type": "categorical",
-      "values": ["Dag", "2-ploeg", "3-ploeg"],
-      "weights": [0.3, 0.4, 0.3],
-      "applies_if": "Ploegendienst_Flag"
-    }
+  "ploegendienst_assignment": {
+    "values": [
+      "Dag",
+      "2-ploeg",
+      "3-ploeg"
+    ],
+    "weights": [
+      0.3,
+      0.4,
+      0.3
+    ]
   },
-
-  "dim_reden_vertrek": {
-    "vrijwillig": ["Eigen initiatief", "Nieuwe baan elders", "Hoger salaris", "Carrière switch", "Opleiding volgen", "Pensioen", "Verhuizing", "Arbeidsvoorwaarden", "Medisch"],
-    "werkgever": ["Ontslag", "Disfunctioneren", "No-show"],
-    "tijdelijk": ["Contract niet verlengd", "Seizoenswerker"]
-  },
-
   "retirement": {
     "minimum_age": 50,
     "forced_retirement_age": 67,
     "age_bands": [
-      {"min_age": 50, "max_age": 54, "annual_probability": 0.001},
-      {"min_age": 55, "max_age": 59, "annual_probability": 0.003},
-      {"min_age": 60, "max_age": 61, "annual_probability": 0.010},
-      {"min_age": 62, "max_age": 62, "annual_probability": 0.030},
-      {"min_age": 63, "max_age": 63, "annual_probability": 0.080},
-      {"min_age": 64, "max_age": 64, "annual_probability": 0.250},
-      {"min_age": 65, "max_age": 65, "annual_probability": 0.850},
-      {"min_age": 66, "max_age": 66, "annual_probability": 0.980}
+      {
+        "min_age": 50,
+        "max_age": 54,
+        "annual_probability": 0.001
+      },
+      {
+        "min_age": 55,
+        "max_age": 59,
+        "annual_probability": 0.003
+      },
+      {
+        "min_age": 60,
+        "max_age": 61,
+        "annual_probability": 0.01
+      },
+      {
+        "min_age": 62,
+        "max_age": 62,
+        "annual_probability": 0.03
+      },
+      {
+        "min_age": 63,
+        "max_age": 63,
+        "annual_probability": 0.08
+      },
+      {
+        "min_age": 64,
+        "max_age": 64,
+        "annual_probability": 0.25
+      },
+      {
+        "min_age": 65,
+        "max_age": 65,
+        "annual_probability": 0.85
+      },
+      {
+        "min_age": 66,
+        "max_age": 66,
+        "annual_probability": 0.98
+      }
     ]
   },
-
   "dim_event_type": [
     "Aangenomen",
     "Promotie",
@@ -315,269 +2623,1041 @@
     "Salarisaanpassing",
     "Uit dienst",
     "Contract omgezet naar vast",
-    "Contract verlengd"
+    "Contract verlengd",
+    "Locatietransfer"
   ],
-
   "recruitment": {
-    "applications_per_hire_by_department": {
-      "Productie": 7,
-      "Techniek": 5,
-      "Kwaliteit": 4,
-      "Logistiek": 6,
-      "R&D": 3,
-      "IT": 4,
-      "Sales": 5,
-      "HR": 3,
-      "Finance": 3,
-      "Directie": 2
-    },
-    "extra_open_applications_by_department": {
-      "Productie": 3,
-      "Techniek": 2,
-      "Kwaliteit": 1,
-      "Logistiek": 2,
-      "R&D": 1,
-      "IT": 1,
-      "Sales": 2,
-      "HR": 1,
-      "Finance": 1,
-      "Directie": 0
-    },
-    "status_weights": {
-      "Afgewezen": 0.72,
-      "Geweigerd": 0.28
+    "candidate_quality_weights": {
+      "Candidate_Experience_Score": 0.28,
+      "Candidate_Education_Relevance_Score": 0.18,
+      "Candidate_Technical_Skills_Score": 0.26,
+      "Candidate_Soft_Skills_Score": 0.16,
+      "Candidate_Motivation_Score": 0.12
     },
     "decision_days": {
       "min": 3,
       "max": 28
-    }
+    },
+    "source_profiles": {
+      "Vacaturebank": {
+        "application_volume_weight": 4.8,
+        "candidate_quality_mean": 2.6,
+        "minimum_offer_quality": 3.25,
+        "candidate_decline_rate": 0.1,
+        "candidate_decline_per_quality_point": 0.02,
+        "department_weights": {
+          "Productie": 1.6,
+          "Logistiek": 1.4,
+          "Techniek": 1.2
+        }
+      },
+      "Campus": {
+        "application_volume_weight": 2.5,
+        "candidate_quality_mean": 3.1,
+        "minimum_offer_quality": 3.05,
+        "candidate_decline_rate": 0.11,
+        "candidate_decline_per_quality_point": 0.03,
+        "department_weights": {
+          "IT": 1.5,
+          "R&D": 1.8,
+          "Finance": 1.3,
+          "Techniek": 1.3
+        }
+      },
+      "Interne recruiter": {
+        "application_volume_weight": 1.3,
+        "candidate_quality_mean": 3.7,
+        "minimum_offer_quality": 2.85,
+        "candidate_decline_rate": 0.1,
+        "candidate_decline_per_quality_point": 0.03,
+        "department_weights": {
+          "IT": 1.5,
+          "R&D": 1.4,
+          "Finance": 1.3,
+          "Techniek": 1.3
+        }
+      },
+      "Recruitmentbureau": {
+        "application_volume_weight": 0.65,
+        "candidate_quality_mean": 3.8,
+        "minimum_offer_quality": 2.8,
+        "candidate_decline_rate": 0.11,
+        "candidate_decline_per_quality_point": 0.04,
+        "department_weights": {
+          "IT": 1.7,
+          "R&D": 1.5,
+          "Finance": 1.4,
+          "Directie": 1.8,
+          "Techniek": 1.3
+        }
+      },
+      "Referral": {
+        "application_volume_weight": 0.9,
+        "candidate_quality_mean": 3.6,
+        "minimum_offer_quality": 2.9,
+        "candidate_decline_rate": 0.07,
+        "candidate_decline_per_quality_point": 0.03,
+        "department_weights": {
+          "Productie": 1.3,
+          "Logistiek": 1.3,
+          "Techniek": 1.4
+        }
+      },
+      "Interne mobiliteit": {
+        "application_volume_weight": 0.35,
+        "candidate_quality_mean": 4.0,
+        "minimum_offer_quality": 3.0,
+        "candidate_decline_rate": 0.03,
+        "candidate_decline_per_quality_point": 0.01,
+        "department_weights": {
+          "R&D": 1.3,
+          "IT": 1.3,
+          "Finance": 1.2,
+          "HR": 1.2
+        }
+      }
+    },
+    "decline_reasons": [
+      {
+        "name": "Ander aanbod geaccepteerd",
+        "weight": 1.0,
+        "quality_weight_bonus": 1.2
+      },
+      {
+        "name": "Tegenbod huidige werkgever",
+        "weight": 0.5,
+        "quality_weight_bonus": 0.8
+      },
+      {
+        "name": "Arbeidsvoorwaarden onvoldoende",
+        "weight": 0.7
+      },
+      {
+        "name": "Persoonlijke omstandigheden",
+        "weight": 0.5
+      },
+      {
+        "name": "Reisafstand of verhuizing",
+        "weight": 0.4
+      }
+    ],
+    "decline_reason_high_quality_threshold": 3.7,
+    "weekly_applications_by_department": {
+      "Productie": 3.0,
+      "Techniek": 2.0,
+      "Kwaliteit": 1.5,
+      "Logistiek": 2.5,
+      "R&D": 1.0,
+      "IT": 1.5,
+      "Sales": 2.0,
+      "HR": 1.0,
+      "Finance": 1.0,
+      "Directie": 0.5
+    },
+    "screening_decision_rate": 0.6,
+    "interview_decision_rate": 0.3
   },
-
   "seasonality": {
     "enabled": true,
     "amplitude": 0.015,
     "phase_shift_weeks": 13
   },
-
   "special_arrangements": {
     "Banenafspraak": {
       "probability": 0.05,
-      "roles": ["Operator A", "Productiemedewerker"]
+      "roles": [
+        "Operator A",
+        "Productiemedewerker"
+      ]
     },
     "Expat": {
       "probability": 0.08,
-      "roles": ["Operator A", "Productiemedewerker", "IT Support"]
+      "roles": [
+        "Operator A",
+        "Productiemedewerker"
+      ]
     }
   },
   "structure": {
     "Productie": {
       "Productiemedewerker": {
-        "fte_ratio": 0.32,
+        "role_key": 1,
+        "department_key": 1,
         "leidinggevend": false,
-        "salaris_range": [30000, 35000],
-        "ploegendienst": true
+        "salaris_range": [
+          30000,
+          36000
+        ],
+        "salary_scale_code": "A",
+        "ploegendienst": true,
+        "target_weight": 8,
+        "initially_staffed": true,
+        "active_from_headcount": null,
+        "multi_site": true
       },
       "Operator A": {
-        "fte_ratio": 0.12,
+        "role_key": 2,
+        "department_key": 1,
         "leidinggevend": false,
-        "salaris_range": [34000, 40000],
-        "ploegendienst": true
+        "salaris_range": [
+          35000,
+          43000
+        ],
+        "salary_scale_code": "B",
+        "ploegendienst": true,
+        "target_weight": 8,
+        "initially_staffed": true,
+        "active_from_headcount": null,
+        "multi_site": true
       },
       "Operator B": {
-        "fte_ratio": 0.08,
+        "role_key": 3,
+        "department_key": 1,
         "leidinggevend": false,
-        "salaris_range": [38000, 45000],
-        "ploegendienst": true
+        "salaris_range": [
+          40000,
+          49000
+        ],
+        "salary_scale_code": "C",
+        "ploegendienst": true,
+        "target_weight": 8,
+        "initially_staffed": true,
+        "active_from_headcount": null,
+        "multi_site": true
       },
       "Teamleider Productie": {
-        "fte_ratio": 0.025,
+        "role_key": 4,
+        "department_key": 1,
         "leidinggevend": true,
-        "salaris_range": [45000, 55000],
-        "ploegendienst": true
+        "salaris_range": [
+          50000,
+          62000
+        ],
+        "salary_scale_code": "D",
+        "ploegendienst": true,
+        "target_weight": 1,
+        "initially_staffed": true,
+        "active_from_headcount": null,
+        "multi_site": true
+      },
+      "Productiemanager": {
+        "role_key": 5,
+        "department_key": 1,
+        "leidinggevend": true,
+        "salaris_range": [
+          68000,
+          88000
+        ],
+        "salary_scale_code": "E",
+        "ploegendienst": false,
+        "target_weight": 1,
+        "initially_staffed": false,
+        "active_from_headcount": 35,
+        "active_from_scope": "department",
+        "multi_site": true,
+        "secondary_site_manager_threshold": 150
+      },
+      "Plant Manager": {
+        "role_key": 6,
+        "department_key": 1,
+        "leidinggevend": true,
+        "salaris_range": [
+          90000,
+          115000
+        ],
+        "salary_scale_code": "F",
+        "ploegendienst": false,
+        "target_weight": 1,
+        "initially_staffed": false,
+        "active_from_headcount": 70,
+        "active_from_scope": "department",
+        "centralized": true,
+        "max_count": 1
+      },
+      "Operator C": {
+        "role_key": 39,
+        "department_key": 1,
+        "leidinggevend": false,
+        "salaris_range": [
+          47000,
+          58000
+        ],
+        "salary_scale_code": "D",
+        "ploegendienst": true,
+        "target_weight": 1,
+        "initially_staffed": false,
+        "active_from_headcount": 95,
+        "multi_site": true
       }
     },
-
     "Techniek": {
       "Monteur": {
-        "fte_ratio": 0.04,
+        "role_key": 7,
+        "department_key": 2,
         "leidinggevend": false,
-        "salaris_range": [38000, 48000],
-        "ploegendienst": false
+        "salaris_range": [
+          38000,
+          50000
+        ],
+        "salary_scale_code": "B",
+        "ploegendienst": false,
+        "target_weight": 3,
+        "initially_staffed": true,
+        "active_from_headcount": null,
+        "multi_site": true
+      },
+      "Teamleider Technische Dienst": {
+        "role_key": 8,
+        "department_key": 2,
+        "leidinggevend": true,
+        "salaris_range": [
+          52000,
+          66000
+        ],
+        "salary_scale_code": "D",
+        "ploegendienst": false,
+        "target_weight": 1,
+        "initially_staffed": false,
+        "active_from_headcount": 8,
+        "active_from_scope": "department",
+        "multi_site": true
       },
       "Hoofd Technische Dienst": {
-        "fte_ratio": 0.005,
+        "role_key": 9,
+        "department_key": 2,
         "leidinggevend": true,
-        "salaris_range": [60000, 75000],
-        "ploegendienst": false
+        "salaris_range": [
+          62000,
+          80000
+        ],
+        "salary_scale_code": "E",
+        "ploegendienst": false,
+        "target_weight": 1,
+        "initially_staffed": false,
+        "active_from_headcount": 20,
+        "active_from_scope": "department",
+        "centralized": true,
+        "max_count": 1
+      },
+      "Werkvoorbereider Technische Dienst": {
+        "role_key": 40,
+        "department_key": 2,
+        "leidinggevend": false,
+        "salaris_range": [
+          43000,
+          57000
+        ],
+        "salary_scale_code": "C",
+        "ploegendienst": false,
+        "target_weight": 1,
+        "initially_staffed": false,
+        "active_from_headcount": 55
+      },
+      "Project Engineer": {
+        "role_key": 41,
+        "department_key": 2,
+        "leidinggevend": false,
+        "salaris_range": [
+          50000,
+          68000
+        ],
+        "salary_scale_code": "D",
+        "ploegendienst": false,
+        "target_weight": 1,
+        "initially_staffed": false,
+        "active_from_headcount": 260
+      },
+      "Maintenance Engineer": {
+        "role_key": 42,
+        "department_key": 2,
+        "leidinggevend": false,
+        "salaris_range": [
+          52000,
+          70000
+        ],
+        "salary_scale_code": "D",
+        "ploegendienst": false,
+        "target_weight": 1,
+        "initially_staffed": false,
+        "active_from_headcount": 68
       }
     },
-
     "Kwaliteit": {
       "QC Medewerker": {
-        "fte_ratio": 0.03,
+        "role_key": 10,
+        "department_key": 3,
         "leidinggevend": false,
-        "salaris_range": [32000, 38000],
-        "ploegendienst": false
+        "salaris_range": [
+          36000,
+          44000
+        ],
+        "salary_scale_code": "B",
+        "ploegendienst": false,
+        "target_weight": 3,
+        "initially_staffed": true,
+        "active_from_headcount": null,
+        "multi_site": true
       },
       "QC Engineer": {
-        "fte_ratio": 0.01,
+        "role_key": 11,
+        "department_key": 3,
         "leidinggevend": false,
-        "salaris_range": [42000, 52000],
-        "ploegendienst": false
+        "salaris_range": [
+          43000,
+          56000
+        ],
+        "salary_scale_code": "C",
+        "ploegendienst": false,
+        "target_weight": 1,
+        "initially_staffed": false,
+        "active_from_headcount": 42,
+        "multi_site": true
       },
       "QA Officer": {
-        "fte_ratio": 0.008,
+        "role_key": 12,
+        "department_key": 3,
         "leidinggevend": false,
-        "salaris_range": [45000, 55000],
-        "ploegendienst": false
+        "salaris_range": [
+          45000,
+          58000
+        ],
+        "salary_scale_code": "C",
+        "ploegendienst": false,
+        "target_weight": 1,
+        "initially_staffed": false,
+        "active_from_headcount": 24,
+        "multi_site": true
+      },
+      "Teamleider Kwaliteit": {
+        "role_key": 13,
+        "department_key": 3,
+        "leidinggevend": true,
+        "salaris_range": [
+          56000,
+          70000
+        ],
+        "salary_scale_code": "D",
+        "ploegendienst": false,
+        "target_weight": 1,
+        "initially_staffed": false,
+        "active_from_headcount": 8,
+        "active_from_scope": "department",
+        "centralized": true
       },
       "QA Manager": {
-        "fte_ratio": 0.004,
+        "role_key": 14,
+        "department_key": 3,
         "leidinggevend": true,
-        "salaris_range": [65000, 80000],
-        "ploegendienst": false
+        "salaris_range": [
+          68000,
+          88000
+        ],
+        "salary_scale_code": "E",
+        "ploegendienst": false,
+        "target_weight": 1,
+        "initially_staffed": false,
+        "active_from_headcount": 20,
+        "active_from_scope": "department",
+        "centralized": true,
+        "max_count": 1
+      },
+      "QC Laborant": {
+        "role_key": 43,
+        "department_key": 3,
+        "leidinggevend": false,
+        "salaris_range": [
+          34000,
+          44000
+        ],
+        "salary_scale_code": "B",
+        "ploegendienst": false,
+        "target_weight": 1,
+        "initially_staffed": false,
+        "active_from_headcount": 27,
+        "multi_site": true
+      },
+      "Senior QA Officer": {
+        "role_key": 44,
+        "department_key": 3,
+        "leidinggevend": false,
+        "salaris_range": [
+          52000,
+          68000
+        ],
+        "salary_scale_code": "D",
+        "ploegendienst": false,
+        "target_weight": 1,
+        "initially_staffed": false,
+        "active_from_headcount": 300,
+        "centralized": true
       }
     },
-
     "Logistiek": {
       "Magazijnmedewerker": {
-        "fte_ratio": 0.04,
+        "role_key": 15,
+        "department_key": 4,
         "leidinggevend": false,
-        "salaris_range": [30000, 36000],
-        "ploegendienst": false
+        "salaris_range": [
+          29000,
+          37000
+        ],
+        "salary_scale_code": "A",
+        "ploegendienst": false,
+        "target_weight": 8,
+        "initially_staffed": true,
+        "active_from_headcount": null
+      },
+      "Teamleider Logistiek": {
+        "role_key": 16,
+        "department_key": 4,
+        "leidinggevend": true,
+        "salaris_range": [
+          48000,
+          60000
+        ],
+        "salary_scale_code": "D",
+        "ploegendienst": false,
+        "target_weight": 1,
+        "initially_staffed": true,
+        "active_from_headcount": null
       },
       "Supply Chain Planner": {
-        "fte_ratio": 0.01,
+        "role_key": 17,
+        "department_key": 4,
         "leidinggevend": false,
-        "salaris_range": [42000, 52000],
-        "ploegendienst": false
+        "salaris_range": [
+          38000,
+          54000
+        ],
+        "salary_scale_code": "C",
+        "ploegendienst": false,
+        "target_weight": 1,
+        "initially_staffed": false,
+        "active_from_headcount": 72
       },
       "Logistiek Manager": {
-        "fte_ratio": 0.004,
+        "role_key": 18,
+        "department_key": 4,
         "leidinggevend": true,
-        "salaris_range": [60000, 75000],
-        "ploegendienst": false
+        "salaris_range": [
+          60000,
+          78000
+        ],
+        "salary_scale_code": "D",
+        "ploegendienst": false,
+        "target_weight": 1,
+        "initially_staffed": false,
+        "active_from_headcount": 20,
+        "active_from_scope": "department",
+        "max_count": 1
+      },
+      "Productieplanner": {
+        "role_key": 45,
+        "department_key": 4,
+        "leidinggevend": false,
+        "salaris_range": [
+          40000,
+          55000
+        ],
+        "salary_scale_code": "C",
+        "ploegendienst": false,
+        "target_weight": 1,
+        "initially_staffed": false,
+        "active_from_headcount": 76
+      },
+      "Inkoper": {
+        "role_key": 46,
+        "department_key": 4,
+        "leidinggevend": false,
+        "salaris_range": [
+          40000,
+          55000
+        ],
+        "salary_scale_code": "C",
+        "ploegendienst": false,
+        "target_weight": 1,
+        "initially_staffed": false,
+        "active_from_headcount": 80
+      },
+      "Supply Chain Manager": {
+        "role_key": 47,
+        "department_key": 4,
+        "leidinggevend": true,
+        "salaris_range": [
+          68000,
+          90000
+        ],
+        "salary_scale_code": "E",
+        "ploegendienst": false,
+        "target_weight": 1,
+        "initially_staffed": false,
+        "active_from_headcount": 28,
+        "active_from_scope": "department",
+        "max_count": 1
       }
     },
-
     "R&D": {
       "Productontwikkelaar": {
-        "fte_ratio": 0.015,
+        "role_key": 19,
+        "department_key": 5,
         "leidinggevend": false,
-        "salaris_range": [45000, 55000],
-        "ploegendienst": false
+        "salaris_range": [
+          45000,
+          58000
+        ],
+        "salary_scale_code": "C",
+        "ploegendienst": false,
+        "target_weight": 1,
+        "initially_staffed": true,
+        "active_from_headcount": null
       },
       "Procestechnoloog": {
-        "fte_ratio": 0.01,
+        "role_key": 20,
+        "department_key": 5,
         "leidinggevend": false,
-        "salaris_range": [50000, 60000],
-        "ploegendienst": false
+        "salaris_range": [
+          50000,
+          65000
+        ],
+        "salary_scale_code": "D",
+        "ploegendienst": false,
+        "target_weight": 1,
+        "initially_staffed": false,
+        "active_from_headcount": 25
+      },
+      "R&D Teamleider": {
+        "role_key": 21,
+        "department_key": 5,
+        "leidinggevend": true,
+        "salaris_range": [
+          62000,
+          80000
+        ],
+        "salary_scale_code": "E",
+        "ploegendienst": false,
+        "target_weight": 1,
+        "initially_staffed": false,
+        "active_from_headcount": 5,
+        "active_from_scope": "department"
       },
       "R&D Manager": {
-        "fte_ratio": 0.004,
+        "role_key": 22,
+        "department_key": 5,
         "leidinggevend": true,
-        "salaris_range": [70000, 85000],
-        "ploegendienst": false
+        "salaris_range": [
+          75000,
+          98000
+        ],
+        "salary_scale_code": "E",
+        "ploegendienst": false,
+        "target_weight": 1,
+        "initially_staffed": false,
+        "active_from_headcount": 15,
+        "active_from_scope": "department",
+        "max_count": 1
+      },
+      "Senior Productontwikkelaar": {
+        "role_key": 48,
+        "department_key": 5,
+        "leidinggevend": false,
+        "salaris_range": [
+          52000,
+          68000
+        ],
+        "salary_scale_code": "D",
+        "ploegendienst": false,
+        "target_weight": 1,
+        "initially_staffed": false,
+        "active_from_headcount": 240
+      },
+      "Verpakkingstechnoloog": {
+        "role_key": 49,
+        "department_key": 5,
+        "leidinggevend": false,
+        "salaris_range": [
+          48000,
+          62000
+        ],
+        "salary_scale_code": "D",
+        "ploegendienst": false,
+        "target_weight": 1,
+        "initially_staffed": false,
+        "active_from_headcount": 380
       }
     },
-
     "IT": {
-      "IT Support": {
-        "fte_ratio": 0.01,
-        "leidinggevend": false,
-        "salaris_range": [35000, 42000],
-        "ploegendienst": false
-      },
       "Applicatiebeheerder": {
-        "fte_ratio": 0.008,
+        "role_key": 24,
+        "department_key": 6,
         "leidinggevend": false,
-        "salaris_range": [45000, 55000],
-        "ploegendienst": false
+        "salaris_range": [
+          42000,
+          56000
+        ],
+        "salary_scale_code": "C",
+        "ploegendienst": false,
+        "target_weight": 1,
+        "initially_staffed": false,
+        "active_from_headcount": 100
       },
       "Functioneel Beheerder": {
-        "fte_ratio": 0.006,
+        "role_key": 25,
+        "department_key": 6,
         "leidinggevend": false,
-        "salaris_range": [50000, 60000],
-        "ploegendienst": false
+        "salaris_range": [
+          43000,
+          58000
+        ],
+        "salary_scale_code": "C",
+        "ploegendienst": false,
+        "target_weight": 1,
+        "initially_staffed": false,
+        "active_from_headcount": 130
       },
       "IT Manager": {
-        "fte_ratio": 0.003,
+        "role_key": 26,
+        "department_key": 6,
         "leidinggevend": true,
-        "salaris_range": [70000, 85000],
-        "ploegendienst": false
+        "salaris_range": [
+          75000,
+          98000
+        ],
+        "salary_scale_code": "E",
+        "ploegendienst": false,
+        "target_weight": 1,
+        "initially_staffed": false,
+        "active_from_headcount": 4,
+        "active_from_scope": "department",
+        "max_count": 1
+      },
+      "Senior Applicatiebeheerder": {
+        "role_key": 50,
+        "department_key": 6,
+        "leidinggevend": false,
+        "salaris_range": [
+          52000,
+          68000
+        ],
+        "salary_scale_code": "D",
+        "ploegendienst": false,
+        "target_weight": 1,
+        "initially_staffed": false,
+        "active_from_headcount": 280
+      },
+      "Senior Functioneel Beheerder": {
+        "role_key": 51,
+        "department_key": 6,
+        "leidinggevend": false,
+        "salaris_range": [
+          54000,
+          70000
+        ],
+        "salary_scale_code": "D",
+        "ploegendienst": false,
+        "target_weight": 1,
+        "initially_staffed": false,
+        "active_from_headcount": 320
       }
     },
-
     "Sales": {
       "Accountmanager": {
-        "fte_ratio": 0.015,
+        "role_key": 27,
+        "department_key": 7,
         "leidinggevend": false,
-        "salaris_range": [45000, 60000],
-        "ploegendienst": false
+        "salaris_range": [
+          40000,
+          55000
+        ],
+        "salary_scale_code": "C",
+        "ploegendienst": false,
+        "target_weight": 1,
+        "initially_staffed": true,
+        "active_from_headcount": null
+      },
+      "Key Accountmanager": {
+        "role_key": 28,
+        "department_key": 7,
+        "leidinggevend": false,
+        "salaris_range": [
+          55000,
+          72000
+        ],
+        "salary_scale_code": "D",
+        "ploegendienst": false,
+        "target_weight": 1,
+        "initially_staffed": false,
+        "active_from_headcount": 58
       },
       "Sales Manager": {
-        "fte_ratio": 0.003,
+        "role_key": 29,
+        "department_key": 7,
         "leidinggevend": true,
-        "salaris_range": [70000, 90000],
-        "ploegendienst": false
+        "salaris_range": [
+          70000,
+          95000
+        ],
+        "salary_scale_code": "E",
+        "ploegendienst": false,
+        "target_weight": 1,
+        "initially_staffed": false,
+        "active_from_headcount": 8,
+        "active_from_scope": "department",
+        "max_count": 1
       }
     },
-
     "HR": {
       "HR Medewerker": {
-        "fte_ratio": 0.006,
+        "role_key": 30,
+        "department_key": 8,
         "leidinggevend": false,
-        "salaris_range": [38000, 48000],
-        "ploegendienst": false
+        "salaris_range": [
+          33000,
+          43000
+        ],
+        "salary_scale_code": "B",
+        "ploegendienst": false,
+        "target_weight": 1,
+        "initially_staffed": true,
+        "active_from_headcount": null
+      },
+      "HR Adviseur": {
+        "role_key": 31,
+        "department_key": 8,
+        "leidinggevend": false,
+        "salaris_range": [
+          45000,
+          60000
+        ],
+        "salary_scale_code": "C",
+        "ploegendienst": false,
+        "target_weight": 1,
+        "initially_staffed": false,
+        "active_from_headcount": 62
       },
       "HR Manager": {
-        "fte_ratio": 0.002,
+        "role_key": 32,
+        "department_key": 8,
         "leidinggevend": true,
-        "salaris_range": [60000, 75000],
-        "ploegendienst": false
+        "salaris_range": [
+          65000,
+          85000
+        ],
+        "salary_scale_code": "E",
+        "ploegendienst": false,
+        "target_weight": 1,
+        "initially_staffed": false,
+        "active_from_headcount": 8,
+        "active_from_scope": "department",
+        "max_count": 1
+      },
+      "Senior HR Adviseur": {
+        "role_key": 52,
+        "department_key": 8,
+        "leidinggevend": false,
+        "salaris_range": [
+          55000,
+          70000
+        ],
+        "salary_scale_code": "D",
+        "ploegendienst": false,
+        "target_weight": 1,
+        "initially_staffed": false,
+        "active_from_headcount": 355
       }
     },
-
     "Finance": {
       "Financieel Medewerker": {
-        "fte_ratio": 0.006,
+        "role_key": 33,
+        "department_key": 9,
         "leidinggevend": false,
-        "salaris_range": [38000, 48000],
-        "ploegendienst": false
+        "salaris_range": [
+          32000,
+          42000
+        ],
+        "salary_scale_code": "B",
+        "ploegendienst": false,
+        "target_weight": 1,
+        "initially_staffed": true,
+        "active_from_headcount": null
+      },
+      "Assistent Controller": {
+        "role_key": 34,
+        "department_key": 9,
+        "leidinggevend": false,
+        "salaris_range": [
+          42000,
+          56000
+        ],
+        "salary_scale_code": "C",
+        "ploegendienst": false,
+        "target_weight": 1,
+        "initially_staffed": false,
+        "active_from_headcount": 65
       },
       "Controller": {
-        "fte_ratio": 0.004,
+        "role_key": 35,
+        "department_key": 9,
         "leidinggevend": false,
-        "salaris_range": [55000, 65000],
-        "ploegendienst": false
+        "salaris_range": [
+          52000,
+          68000
+        ],
+        "salary_scale_code": "D",
+        "ploegendienst": false,
+        "target_weight": 1,
+        "initially_staffed": false,
+        "active_from_headcount": 90
       },
       "Finance Manager": {
-        "fte_ratio": 0.002,
+        "role_key": 36,
+        "department_key": 9,
         "leidinggevend": true,
-        "salaris_range": [75000, 90000],
-        "ploegendienst": false
+        "salaris_range": [
+          72000,
+          98000
+        ],
+        "salary_scale_code": "E",
+        "ploegendienst": false,
+        "target_weight": 1,
+        "initially_staffed": false,
+        "active_from_headcount": 8,
+        "active_from_scope": "department",
+        "max_count": 1
       }
     },
-
     "Directie": {
       "Operations Director": {
-        "fte_ratio": 0.002,
+        "role_key": 37,
+        "department_key": 10,
         "leidinggevend": true,
-        "salaris_range": [95000, 120000],
-        "ploegendienst": false
+        "salaris_range": [
+          110000,
+          145000
+        ],
+        "salary_scale_code": "G",
+        "ploegendienst": false,
+        "target_weight": 1,
+        "initially_staffed": false,
+        "active_from_headcount": 150,
+        "max_count": 1
       },
       "Managing Director": {
-        "fte_ratio": 0.002,
+        "role_key": 38,
+        "department_key": 10,
         "leidinggevend": true,
-        "salaris_range": [120000, 160000],
-        "ploegendienst": false
+        "salaris_range": [
+          135000,
+          190000
+        ],
+        "salary_scale_code": "G",
+        "ploegendienst": false,
+        "target_weight": 1,
+        "initially_staffed": true,
+        "active_from_headcount": null,
+        "max_count": 1
+      },
+      "CFO": {
+        "role_key": 57,
+        "department_key": 10,
+        "leidinggevend": true,
+        "salaris_range": [
+          110000,
+          145000
+        ],
+        "salary_scale_code": "G",
+        "ploegendienst": false,
+        "target_weight": 1,
+        "initially_staffed": false,
+        "active_from_headcount": 200,
+        "max_count": 1
+      },
+      "Commercial Director": {
+        "role_key": 58,
+        "department_key": 10,
+        "leidinggevend": true,
+        "salaris_range": [
+          100000,
+          135000
+        ],
+        "salary_scale_code": "F",
+        "ploegendienst": false,
+        "target_weight": 1,
+        "initially_staffed": false,
+        "active_from_scope": "department_group",
+        "active_from_departments": [
+          "Sales",
+          "Marketing"
+        ],
+        "active_from_headcount": 30,
+        "max_count": 1
+      }
+    },
+    "QHSE": {
+      "QHSE Officer": {
+        "role_key": 53,
+        "department_key": 11,
+        "leidinggevend": false,
+        "salaris_range": [
+          45000,
+          60000
+        ],
+        "salary_scale_code": "C",
+        "ploegendienst": false,
+        "target_weight": 1,
+        "initially_staffed": false,
+        "active_from_headcount": 175
+      },
+      "Senior QHSE Officer": {
+        "role_key": 54,
+        "department_key": 11,
+        "leidinggevend": false,
+        "salaris_range": [
+          55000,
+          72000
+        ],
+        "salary_scale_code": "D",
+        "ploegendienst": false,
+        "target_weight": 1,
+        "initially_staffed": false,
+        "active_from_headcount": 340
+      },
+      "QHSE Manager": {
+        "role_key": 55,
+        "department_key": 11,
+        "leidinggevend": true,
+        "salaris_range": [
+          70000,
+          92000
+        ],
+        "salary_scale_code": "E",
+        "ploegendienst": false,
+        "target_weight": 1,
+        "initially_staffed": false,
+        "active_from_headcount": 5,
+        "active_from_scope": "department",
+        "max_count": 1
+      }
+    },
+    "Marketing": {
+      "Product Manager": {
+        "role_key": 56,
+        "department_key": 12,
+        "leidinggevend": false,
+        "salaris_range": [
+          50000,
+          68000
+        ],
+        "salary_scale_code": "D",
+        "ploegendienst": false,
+        "target_weight": 1,
+        "initially_staffed": false,
+        "active_from_headcount": 50
       }
     }
   },
-
   "contract_rules": {
     "Productie": {
-      "vast_kans": 0.70,
+      "vast_kans": 0.7,
       "tijdelijk_kans": 0.25,
       "zomer_kans": 0.05
     },
@@ -587,7 +3667,6 @@
       "zomer_kans": 0.0
     }
   },
-
   "attrition": {
     "Productie": 0.11,
     "Techniek": 0.08,
@@ -595,9 +3674,240 @@
     "Logistiek": 0.09,
     "R&D": 0.06,
     "IT": 0.08,
-    "Sales": 0.10,
+    "Sales": 0.1,
     "HR": 0.06,
     "Finance": 0.06,
-    "Directie": 0.03
+    "Directie": 0.03,
+    "satisfaction_attrition_multipliers": {
+      "zeer_laag": 1.8,
+      "laag": 1.35,
+      "neutraal": 1.05,
+      "hoog": 0.85,
+      "zeer_hoog": 0.7
+    },
+    "engagement_attrition_multipliers": {
+      "laag": 1.18,
+      "neutraal": 1.0,
+      "hoog": 0.92
+    },
+    "voluntary_reason_satisfaction_multipliers": {
+      "Eigen initiatief": {
+        "laag": 1.35,
+        "neutraal": 1.0,
+        "hoog": 0.75
+      },
+      "Nieuwe baan elders": {
+        "laag": 1.55,
+        "neutraal": 1.0,
+        "hoog": 0.65
+      },
+      "Hoger salaris": {
+        "laag": 1.75,
+        "neutraal": 1.0,
+        "hoog": 0.55
+      },
+      "CarriÃ¨re switch": {
+        "laag": 1.15,
+        "neutraal": 1.0,
+        "hoog": 0.85
+      },
+      "Arbeidsvoorwaarden": {
+        "laag": 1.5,
+        "neutraal": 1.0,
+        "hoog": 0.65
+      }
+    }
+  },
+  "qualification_events": {
+    "annual_probability": 0.1,
+    "minimum_tenure_years": 1
+  },
+  "department_relocation": {
+    "Logistiek": "DC",
+    "Finance": "Hoofdkantoor",
+    "HR": "Hoofdkantoor",
+    "Sales": "Hoofdkantoor",
+    "Marketing": "Hoofdkantoor",
+    "Directie": "Hoofdkantoor",
+    "IT": "Hoofdkantoor"
+  },
+  "dim_decline_reason": [
+    {
+      "DeclineReason_Key": 1,
+      "DeclineReason_Name": "Ander aanbod geaccepteerd",
+      "Category": "Extern aanbod"
+    },
+    {
+      "DeclineReason_Key": 2,
+      "DeclineReason_Name": "Tegenbod huidige werkgever",
+      "Category": "Extern aanbod"
+    },
+    {
+      "DeclineReason_Key": 3,
+      "DeclineReason_Name": "Arbeidsvoorwaarden onvoldoende",
+      "Category": "Arbeidsvoorwaarden"
+    },
+    {
+      "DeclineReason_Key": 4,
+      "DeclineReason_Name": "Persoonlijke omstandigheden",
+      "Category": "Persoonlijk"
+    },
+    {
+      "DeclineReason_Key": 5,
+      "DeclineReason_Name": "Reisafstand of verhuizing",
+      "Category": "Persoonlijk"
+    }
+  ],
+  "dim_rejection_reason": [
+    {
+      "RejectionReason_Key": 1,
+      "RejectionReason_Name": "Onvoldoende relevante werkervaring",
+      "Category": "Kwalificatie"
+    },
+    {
+      "RejectionReason_Key": 2,
+      "RejectionReason_Name": "Opleiding of kwalificatie onvoldoende",
+      "Category": "Kwalificatie"
+    },
+    {
+      "RejectionReason_Key": 3,
+      "RejectionReason_Name": "Onvoldoende leidinggevende ervaring",
+      "Category": "Kwalificatie"
+    },
+    {
+      "RejectionReason_Key": 4,
+      "RejectionReason_Name": "Kwaliteit onder minimumniveau",
+      "Category": "Kwaliteit"
+    },
+    {
+      "RejectionReason_Key": 5,
+      "RejectionReason_Name": "Andere kandidaat gekozen",
+      "Category": "Niet geselecteerd"
+    }
+  ],
+  "dim_recruitment_stage": [
+    {
+      "Stage_Key": 1,
+      "Stage_Name": "Sollicitatie",
+      "Sort_Order": 1
+    },
+    {
+      "Stage_Key": 2,
+      "Stage_Name": "Screening",
+      "Sort_Order": 2
+    },
+    {
+      "Stage_Key": 3,
+      "Stage_Name": "Gesprek",
+      "Sort_Order": 3
+    },
+    {
+      "Stage_Key": 4,
+      "Stage_Name": "Aanbod",
+      "Sort_Order": 4
+    }
+  ],
+  "dim_incident_type": [
+    {
+      "IncidentType_Key": 1,
+      "IncidentType_Name": "Bijna-ongeval",
+      "Recordable": false
+    },
+    {
+      "IncidentType_Key": 2,
+      "IncidentType_Name": "EHBO-geval",
+      "Recordable": false
+    },
+    {
+      "IncidentType_Key": 3,
+      "IncidentType_Name": "Medische behandeling",
+      "Recordable": true
+    },
+    {
+      "IncidentType_Key": 4,
+      "IncidentType_Name": "Verzuimongeval",
+      "Recordable": true
+    }
+  ],
+  "safety": {
+    "annual_incident_rate_by_department": {
+      "Productie": 0.35,
+      "Techniek": 0.3,
+      "Logistiek": 0.25,
+      "Kwaliteit": 0.1,
+      "QHSE": 0.12,
+      "R&D": 0.05,
+      "Marketing": 0.02,
+      "IT": 0.02,
+      "Sales": 0.02,
+      "Finance": 0.01,
+      "HR": 0.01,
+      "Directie": 0.01
+    },
+    "ploegendienst_multipliers": {
+      "Niet van toepassing": 1.0,
+      "Dag": 1.0,
+      "2-ploeg": 1.15,
+      "3-ploeg": 1.3
+    },
+    "new_hire_multiplier": {
+      "within_days": 180,
+      "multiplier": 1.8
+    },
+    "type_weights": {
+      "Bijna-ongeval": 60,
+      "EHBO-geval": 25,
+      "Medische behandeling": 10,
+      "Verzuimongeval": 5
+    },
+    "lost_workdays_range": {
+      "min_days": 1,
+      "mode_days": 3,
+      "max_days": 20
+    }
+  },
+  "dim_shift": [
+    {
+      "Shift_Key": 0,
+      "Shift_Name": "Niet van toepassing",
+      "Is_Shift_Work": false
+    },
+    {
+      "Shift_Key": 1,
+      "Shift_Name": "Dag",
+      "Is_Shift_Work": true
+    },
+    {
+      "Shift_Key": 2,
+      "Shift_Name": "2-ploeg",
+      "Is_Shift_Work": true
+    },
+    {
+      "Shift_Key": 3,
+      "Shift_Name": "3-ploeg",
+      "Is_Shift_Work": true
+    }
+  ],
+  "dim_departure_reason": {
+    "vrijwillig": [
+      "Eigen initiatief",
+      "Nieuwe baan elders",
+      "Hoger salaris",
+      "Carrière switch",
+      "Opleiding volgen",
+      "Pensioen",
+      "Verhuizing",
+      "Arbeidsvoorwaarden",
+      "Medisch"
+    ],
+    "werkgever": [
+      "Ontslag",
+      "Disfunctioneren",
+      "No-show"
+    ],
+    "tijdelijk": [
+      "Contract niet verlengd",
+      "Seizoenswerker"
+    ]
   }
 }

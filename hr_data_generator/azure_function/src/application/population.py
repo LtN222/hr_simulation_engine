@@ -8,8 +8,9 @@ from src.infrastructure.dimension_factory import generate_dimensions
 from src.infrastructure.dimensions import (
     build_dim_department,
     build_dim_role,
-    build_dim_reden_vertrek
+    build_dim_departure_reason
 )
+from src.infrastructure.manager_assignment import sync_manager_assignments
 
 from src.application.allocation import allocate_headcount
 from src.application.employee_generation import generate_employees
@@ -84,11 +85,14 @@ class WorkforceGenerator:
 
         state["dim_role"] = build_dim_role(
             structure,
-            state["dim_department"]
+            state["dim_department"],
+            state["dim_salary_scale"],
+            self.config.salary_benchmark.get("market_median_by_role", {}),
+            self.config.role_career_paths,
         )
 
-        state["dim_reden_vertrek"] = build_dim_reden_vertrek(
-            self.config.dim_reden_vertrek
+        state["dim_departure_reason"] = build_dim_departure_reason(
+            self.config.dim_departure_reason
         )
 
     def _allocate_headcount(self, state):
@@ -96,7 +100,8 @@ class WorkforceGenerator:
         role_allocations = allocate_headcount(
             self.config.structure,
             self.initial_headcount,
-            self.config.staffing
+            self.config.staffing,
+            self.config.workforce_planning,
         )
 
         state["role_allocations"] = role_allocations
@@ -112,6 +117,7 @@ class WorkforceGenerator:
         ))
 
         state.pop("role_allocations", None)
+        sync_manager_assignments(state, self.schema, self.today)
 
     def _generate_history(self, state):
 

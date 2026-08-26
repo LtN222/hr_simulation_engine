@@ -1,22 +1,27 @@
 def choose_hire_source(config, dim_hire_source, rng):
+    """Choose an original external source for a newly created employee.
 
-    return rng.choice(
-        dim_hire_source["HireSource_Key"].tolist()
-    )
+    Internal mobility can fill a vacancy, but it can never be an employee's
+    original source of hire. Older narrow test fixtures do not carry the flag,
+    so they retain their previous behaviour.
+    """
+    sources = dim_hire_source
+    if "Is_Internal" in sources.columns:
+        external_sources = sources[~sources["Is_Internal"].fillna(False)]
+        if not external_sources.empty:
+            sources = external_sources
+
+    return rng.choice(sources["HireSource_Key"].tolist())
 
 
 def choose_education(
     role_name,
     config,
-    dim_education_level,
+    dim_education,
     rng
 ):
 
-    edu_cfg = config.education_distribution_by_role.get(
-        role_name,
-        {"MBO": 0.5, "HBO": 0.3, "WO": 0.2}
-    )
-
+    edu_cfg = config.education_distribution_by_role[role_name]
     niveaus = list(edu_cfg.keys())
     gewichten = list(edu_cfg.values())
 
@@ -25,29 +30,11 @@ def choose_education(
         weights=gewichten
     )[0]
 
-    return dim_education_level.loc[
-        dim_education_level["EducationLevel"] == gekozen,
-        "EducationLevel_Key"
-    ].values[0]
-
-
-def choose_location(
-    dim_location,
-    config,
-    rng
-):
-
-    loc_cfg = config.dim_location
-
-    names = list(loc_cfg.keys())
-    weights = list(loc_cfg.values())
-
-    gekozen = rng.choices(
-        names,
-        weights=weights
-    )[0]
-
-    return dim_location.loc[
-        dim_location["Location_Name"] == gekozen,
-        "Location_Key"
-    ].values[0]
+    requirements = config.role_career_paths[role_name]["relevante_opleidingen"]
+    candidates = dim_education[
+        (dim_education["Education_Level"] == gekozen)
+        & dim_education["Education_Name"].isin(requirements)
+    ]
+    if candidates.empty:
+        candidates = dim_education[dim_education["Education_Name"].isin(requirements)]
+    return rng.choice(candidates["Education_Key"].tolist())

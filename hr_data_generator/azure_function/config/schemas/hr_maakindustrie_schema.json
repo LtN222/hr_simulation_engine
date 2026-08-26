@@ -7,24 +7,40 @@
       "Department_Name": "NVARCHAR(100)"
     }
   },
-
   "dim_role": {
     "df": "dim_role",
     "primary_key": "Role_Key",
     "types": {
       "Role_Key": "INT",
       "Department_Key": "INT",
+      "Department_Name": "NVARCHAR(100)",
       "Role_Name": "NVARCHAR(100)",
       "Leidinggevend": "BIT",
       "Salaris_min": "INT",
       "Salaris_max": "INT",
-      "Ploegendienst_Flag": "BIT"
+      "SalaryScale_Key": "INT",
+      "Ploegendienst_Flag": "BIT",
+      "Relevante_Opleidingen": "NVARCHAR(1000)",
+      "Logische_Doorgroei": "NVARCHAR(1000)",
+      "Laterale_Transfers": "NVARCHAR(1000)",
+      "Min_Relevante_Ervaring_Jr": "DECIMAL(5,2)",
+      "Formele_Kwalificatie_Vereist": "BIT",
+      "Min_Opleidingsniveau": "NVARCHAR(20)",
+      "Min_Leidinggevende_Ervaring_Jr": "DECIMAL(5,2)"
     },
     "foreign_keys": [
-      ["Department_Key", "dim_department", "Department_Key"]
+      [
+        "Department_Key",
+        "dim_department",
+        "Department_Key"
+      ],
+      [
+        "SalaryScale_Key",
+        "dim_salary_scale",
+        "SalaryScale_Key"
+      ]
     ]
   },
-
   "dim_manager": {
     "df": "dim_manager",
     "primary_key": "Manager_Key",
@@ -34,7 +50,6 @@
       "Achternaam": "NVARCHAR(50)"
     }
   },
-
   "dim_location": {
     "df": "dim_location",
     "primary_key": "Location_Key",
@@ -43,25 +58,67 @@
       "Location_Name": "NVARCHAR(100)"
     }
   },
-
   "dim_hire_source": {
     "df": "dim_hire_source",
     "primary_key": "HireSource_Key",
     "types": {
       "HireSource_Key": "INT",
-      "HireSource_Name": "NVARCHAR(100)"
+      "HireSource_Name": "NVARCHAR(100)",
+      "Source_Group": "NVARCHAR(50)",
+      "Source_Description": "NVARCHAR(250)",
+      "Is_Internal": "BIT"
     }
   },
-
-  "dim_education_level": {
-    "df": "dim_education_level",
-    "primary_key": "EducationLevel_Key",
+  "dim_recruitment_status": {
+    "df": "dim_recruitment_status",
+    "primary_key": "RecruitmentStatus_Key",
     "types": {
-      "EducationLevel_Key": "INT",
-      "EducationLevel": "NVARCHAR(50)"
+      "RecruitmentStatus_Key": "INT",
+      "Status_Name": "NVARCHAR(50)",
+      "Status_Verbose": "NVARCHAR(250)",
+      "Status_Group": "NVARCHAR(100)",
+      "Is_Final": "BIT",
+      "Counts_As_Hire": "BIT",
+      "Sort_Order": "INT"
     }
   },
-
+  "dim_recruitment_stage": {
+    "df": "dim_recruitment_stage",
+    "primary_key": "Stage_Key",
+    "types": {
+      "Stage_Key": "INT",
+      "Stage_Name": "NVARCHAR(50)",
+      "Sort_Order": "INT"
+    }
+  },
+  "dim_decline_reason": {
+    "df": "dim_decline_reason",
+    "primary_key": "DeclineReason_Key",
+    "types": {
+      "DeclineReason_Key": "INT",
+      "DeclineReason_Name": "NVARCHAR(100)",
+      "Category": "NVARCHAR(50)"
+    }
+  },
+  "dim_rejection_reason": {
+    "df": "dim_rejection_reason",
+    "primary_key": "RejectionReason_Key",
+    "types": {
+      "RejectionReason_Key": "INT",
+      "RejectionReason_Name": "NVARCHAR(100)",
+      "Category": "NVARCHAR(50)"
+    }
+  },
+  "dim_education": {
+    "df": "dim_education",
+    "primary_key": "Education_Key",
+    "types": {
+      "Education_Key": "INT",
+      "Education_Name": "NVARCHAR(150)",
+      "Education_Level": "NVARCHAR(20)",
+      "Education_Direction": "NVARCHAR(100)"
+    }
+  },
   "dim_absence_type": {
     "df": "dim_absence_type",
     "primary_key": "AbsenceType_Key",
@@ -71,18 +128,112 @@
       "Telt_als_verzuim": "BIT"
     }
   },
-
+  "dim_satisfaction_band": {
+    "df": "dim_satisfaction_band",
+    "primary_key": "SatisfactionBand_Key",
+    "types": {
+      "SatisfactionBand_Key": "INT",
+      "SatisfactionBand_Name": "NVARCHAR(50)",
+      "Minimum_Score": "DECIMAL(4,2)",
+      "Maximum_Score": "DECIMAL(4,2)"
+    }
+  },
+  "dim_satisfaction_driver": {
+    "df": "dim_satisfaction_driver",
+    "primary_key": "SatisfactionDriver_Key",
+    "types": {
+      "SatisfactionDriver_Key": "INT",
+      "Driver_Name": "NVARCHAR(100)",
+      "Direction": "NVARCHAR(20)"
+    },
+    "indexes": [
+      "Driver_Name",
+      "Direction"
+    ]
+  },
+  "dim_engagement_band": {
+    "df": "dim_engagement_band",
+    "primary_key": "EngagementBand_Key",
+    "types": {
+      "EngagementBand_Key": "INT",
+      "EngagementBand_Name": "NVARCHAR(50)",
+      "Minimum_Score": "DECIMAL(4,2)",
+      "Maximum_Score": "DECIMAL(4,2)"
+    }
+  },
+  "dim_performance_driver": {
+    "df": "dim_performance_driver",
+    "primary_key": "PerformanceDriver_Key",
+    "types": {
+      "PerformanceDriver_Key": "INT",
+      "Driver_Name": "NVARCHAR(100)"
+    },
+    "indexes": [
+      "Driver_Name"
+    ]
+  },
+  "dim_engagement_driver": {
+    "df": "dim_engagement_driver",
+    "primary_key": "EngagementDriver_Key",
+    "types": {
+      "EngagementDriver_Key": "INT",
+      "Driver_Name": "NVARCHAR(100)"
+    },
+    "indexes": [
+      "Driver_Name"
+    ]
+  },
+  "dim_candidate_quality_driver": {
+    "df": "dim_candidate_quality_driver",
+    "primary_key": "CandidateQualityDriver_Key",
+    "types": {
+      "CandidateQualityDriver_Key": "INT",
+      "Driver_Name": "NVARCHAR(100)"
+    },
+    "indexes": [
+      "Driver_Name"
+    ]
+  },
   "dim_salary_band": {
     "df": "dim_salary_band",
     "primary_key": "SalaryBand_Key",
     "types": {
       "SalaryBand_Key": "INT",
-      "SalaryBand_Name": "NVARCHAR(50)",
+      "SalaryBand_Name": "NVARCHAR(100)",
       "Minimum_Salaris": "INT",
       "Maximum_Salaris": "INT"
     }
   },
-
+  "dim_salary_scale": {
+    "df": "dim_salary_scale",
+    "primary_key": "SalaryScale_Key",
+    "types": {
+      "SalaryScale_Key": "INT",
+      "SalaryScale_Code": "NVARCHAR(10)",
+      "SalaryScale_Name": "NVARCHAR(100)",
+      "Minimum_Salaris": "INT",
+      "Maximum_Salaris": "INT",
+      "Aantal_Treden": "INT"
+    }
+  },
+  "dim_shift": {
+    "df": "dim_shift",
+    "primary_key": "Shift_Key",
+    "types": {
+      "Shift_Key": "INT",
+      "Shift_Name": "NVARCHAR(50)",
+      "Is_Shift_Work": "BIT"
+    }
+  },
+  "dim_incident_type": {
+    "df": "dim_incident_type",
+    "primary_key": "IncidentType_Key",
+    "types": {
+      "IncidentType_Key": "INT",
+      "IncidentType_Name": "NVARCHAR(50)",
+      "Recordable": "BIT"
+    }
+  },
   "dim_employee": {
     "df": "dim_employee",
     "primary_key": "Employee_Key",
@@ -91,37 +242,68 @@
       "Voornaam": "NVARCHAR(100)",
       "Achternaam": "NVARCHAR(100)",
       "Gender": "NVARCHAR(20)",
+      "Avatar_FileName": "NVARCHAR(100)",
+      "Avatar_URL": "NVARCHAR(500)",
       "Geboortedatum": "DATE",
       "Land": "NVARCHAR(100)",
       "HireSource_Key": "INT",
-      "EducationLevel_Key": "INT",
+      "Education_Key": "INT",
       "Location_Key": "INT",
       "Bijzondere_Aanstelling": "NVARCHAR(100)",
       "Manager_Key": "INT",
+      "Role_Key": "INT",
+      "Department_Key": "INT",
       "Performance_Score": "DECIMAL(3,2)",
+      "Initial_Performance_Score": "DECIMAL(3,2)",
       "Eerste_Indienst_Datum": "DATE",
       "Aaneengesloten_Indienst_Datum": "DATE",
       "Datum_uitdienst": "DATE",
       "In_Dienst": "BIT"
     },
-    "deprecated_columns": ["Leeftijd"],
+    "deprecated_columns": [
+      "Leeftijd"
+    ],
     "foreign_keys": [
-      ["HireSource_Key", "dim_hire_source", "HireSource_Key"],
-      ["EducationLevel_Key", "dim_education_level", "EducationLevel_Key"],
-      ["Location_Key", "dim_location", "Location_Key"]
+      [
+        "HireSource_Key",
+        "dim_hire_source",
+        "HireSource_Key"
+      ],
+      [
+        "Education_Key",
+        "dim_education",
+        "Education_Key"
+      ],
+      [
+        "Location_Key",
+        "dim_location",
+        "Location_Key"
+      ],
+      [
+        "Role_Key",
+        "dim_role",
+        "Role_Key"
+      ],
+      [
+        "Department_Key",
+        "dim_department",
+        "Department_Key"
+      ]
+    ],
+    "indexes": [
+      "Role_Key",
+      "Department_Key"
     ]
   },
-
-  "dim_reden_vertrek": {
-    "df": "dim_reden_vertrek",
-    "primary_key": "RedenVertrek_Key",
+  "dim_departure_reason": {
+    "df": "dim_departure_reason",
+    "primary_key": "DepartureReason_Key",
     "types": {
-      "RedenVertrek_Key": "INT",
-      "RedenVertrek": "NVARCHAR(100)",
-      "Categorie": "NVARCHAR(50)"
+      "DepartureReason_Key": "INT",
+      "DepartureReason": "NVARCHAR(100)",
+      "Category": "NVARCHAR(50)"
     }
   },
-
   "dim_event_type": {
     "df": "dim_event_type",
     "primary_key": "EventType_Key",
@@ -130,7 +312,29 @@
       "EventType": "NVARCHAR(50)"
     }
   },
-
+  "fact_employee_qualification": {
+    "df": "fact_employee_qualification",
+    "primary_key": "EmployeeQualification_Key",
+    "types": {
+      "EmployeeQualification_Key": "INT",
+      "Employee_Key": "INT",
+      "Education_Key": "INT",
+      "Behaald_Datum": "DATE",
+      "Verkregen_Tijdens_Dienstverband": "BIT"
+    },
+    "foreign_keys": [
+      [
+        "Employee_Key",
+        "dim_employee",
+        "Employee_Key"
+      ],
+      [
+        "Education_Key",
+        "dim_education",
+        "Education_Key"
+      ]
+    ]
+  },
   "fact_employment": {
     "df": "fact_employment",
     "primary_key": "Employment_Key",
@@ -138,8 +342,13 @@
       "Employment_Key": "INT",
       "Previous_Employment_Key": "INT",
       "Employee_Key": "INT",
+      "HireSource_Key": "INT",
       "Role_Key": "INT",
       "Location_Key": "INT",
+      "Shift_Key": "INT",
+      "SalaryScale_Key": "INT",
+      "Target_Compa_Ratio": "DECIMAL(5,4)",
+      "Relevante_Ervaring_Jaren_Bij_Start": "DECIMAL(5,2)",
       "Startdatum": "DATE",
       "Einddatum": "DATE",
       "Dienstverband_status": "NVARCHAR(50)",
@@ -149,43 +358,84 @@
       "Contract_einddatum": "DATE",
       "Contract_ronde": "INT",
       "EventType_Key": "INT",
-      "RedenVertrek_Key": "INT"
+      "DepartureReason_Key": "INT",
+      "Tevredenheid_Score_Bij_Uitdienst": "DECIMAL(4,2)",
+      "SatisfactionBand_Key_Bij_Uitdienst": "INT",
+      "Betrokkenheid_Score_Bij_Uitdienst": "DECIMAL(4,2)",
+      "EngagementBand_Key_Bij_Uitdienst": "INT"
     },
     "foreign_keys": [
-      ["Employee_Key", "dim_employee", "Employee_Key"],
-      ["Role_Key", "dim_role", "Role_Key"],
-      ["Location_Key", "dim_location", "Location_Key"],
-      ["Previous_Employment_Key", "fact_employment", "Employment_Key"],
-      ["EventType_Key", "dim_event_type", "EventType_Key"],
-      ["RedenVertrek_Key", "dim_reden_vertrek", "RedenVertrek_Key"]
+      [
+        "Employee_Key",
+        "dim_employee",
+        "Employee_Key"
+      ],
+      [
+        "HireSource_Key",
+        "dim_hire_source",
+        "HireSource_Key"
+      ],
+      [
+        "Role_Key",
+        "dim_role",
+        "Role_Key"
+      ],
+      [
+        "Location_Key",
+        "dim_location",
+        "Location_Key"
+      ],
+      [
+        "Shift_Key",
+        "dim_shift",
+        "Shift_Key"
+      ],
+      [
+        "SalaryScale_Key",
+        "dim_salary_scale",
+        "SalaryScale_Key"
+      ],
+      [
+        "Previous_Employment_Key",
+        "fact_employment",
+        "Employment_Key"
+      ],
+      [
+        "EventType_Key",
+        "dim_event_type",
+        "EventType_Key"
+      ],
+      [
+        "DepartureReason_Key",
+        "dim_departure_reason",
+        "DepartureReason_Key"
+      ],
+      [
+        "SatisfactionBand_Key_Bij_Uitdienst",
+        "dim_satisfaction_band",
+        "SatisfactionBand_Key"
+      ],
+      [
+        "EngagementBand_Key_Bij_Uitdienst",
+        "dim_engagement_band",
+        "EngagementBand_Key"
+      ]
     ],
     "indexes": [
       "Employee_Key",
       "Role_Key",
       "Location_Key",
+      "HireSource_Key",
       "Startdatum",
       "Einddatum"
     ]
   },
-
-  "fact_employment_attribute": {
-    "df": "fact_employment_attribute",
-    "types": {
-      "Employment_Key": "INT",
-      "Attribute_Name": "NVARCHAR(100)",
-      "Attribute_Value": "NVARCHAR(100)"
-    },
-    "foreign_keys": [
-      ["Employment_Key", "fact_employment", "Employment_Key"]
-    ],
-    "indexes": [
-      "Employment_Key"
-    ]
-  },
-
   "fact_absence": {
     "df": "fact_absence",
     "primary_key": "Absence_Key",
+    "deprecated_columns": [
+      "AbsenceDuration_Key"
+    ],
     "types": {
       "Absence_Key": "INT",
       "Employee_Key": "INT",
@@ -193,29 +443,138 @@
       "Role_Key": "INT",
       "Department_Key": "INT",
       "Location_Key": "INT",
+      "Shift_Key": "INT",
       "SalaryBand_Key": "INT",
+      "SalaryScale_Key": "INT",
       "Salaris_bij_aanvang": "INT",
+      "Tevredenheid_Score_Bij_Aanvang": "DECIMAL(4,2)",
+      "SatisfactionBand_Key": "INT",
       "Startdatum": "DATE",
       "Einddatum": "DATE",
-      "Duur_dagen": "INT"
+      "Duur_dagen": "INT",
+      "Afwezigheid_Werkdagen": "INT",
+      "Afwezigheid_Uren": "DECIMAL(8,2)",
+      "Verzuim_Werkdagen": "INT",
+      "Verzuim_Uren": "DECIMAL(8,2)"
     },
     "foreign_keys": [
-      ["Employee_Key", "dim_employee", "Employee_Key"],
-      ["AbsenceType_Key", "dim_absence_type", "AbsenceType_Key"],
-      ["Role_Key", "dim_role", "Role_Key"],
-      ["Department_Key", "dim_department", "Department_Key"],
-      ["Location_Key", "dim_location", "Location_Key"],
-      ["SalaryBand_Key", "dim_salary_band", "SalaryBand_Key"]
+      [
+        "Employee_Key",
+        "dim_employee",
+        "Employee_Key"
+      ],
+      [
+        "AbsenceType_Key",
+        "dim_absence_type",
+        "AbsenceType_Key"
+      ],
+      [
+        "Role_Key",
+        "dim_role",
+        "Role_Key"
+      ],
+      [
+        "Department_Key",
+        "dim_department",
+        "Department_Key"
+      ],
+      [
+        "Location_Key",
+        "dim_location",
+        "Location_Key"
+      ],
+      [
+        "Shift_Key",
+        "dim_shift",
+        "Shift_Key"
+      ],
+      [
+        "SalaryBand_Key",
+        "dim_salary_band",
+        "SalaryBand_Key"
+      ],
+      [
+        "SalaryScale_Key",
+        "dim_salary_scale",
+        "SalaryScale_Key"
+      ],
+      [
+        "SatisfactionBand_Key",
+        "dim_satisfaction_band",
+        "SatisfactionBand_Key"
+      ]
     ],
     "indexes": [
       "Employee_Key",
       "Role_Key",
       "Department_Key",
+      "Shift_Key",
       "SalaryBand_Key",
+      "SalaryScale_Key",
+      "SatisfactionBand_Key",
       "Startdatum"
     ]
   },
-
+  "fact_safety_incident": {
+    "df": "fact_safety_incident",
+    "primary_key": "Incident_Key",
+    "types": {
+      "Incident_Key": "INT",
+      "Employee_Key": "INT",
+      "IncidentType_Key": "INT",
+      "Role_Key": "INT",
+      "Department_Key": "INT",
+      "Location_Key": "INT",
+      "Shift_Key": "INT",
+      "Incident_Date": "DATE",
+      "Lost_Workdays": "INT",
+      "Absence_Key": "INT"
+    },
+    "foreign_keys": [
+      [
+        "Employee_Key",
+        "dim_employee",
+        "Employee_Key"
+      ],
+      [
+        "IncidentType_Key",
+        "dim_incident_type",
+        "IncidentType_Key"
+      ],
+      [
+        "Role_Key",
+        "dim_role",
+        "Role_Key"
+      ],
+      [
+        "Department_Key",
+        "dim_department",
+        "Department_Key"
+      ],
+      [
+        "Location_Key",
+        "dim_location",
+        "Location_Key"
+      ],
+      [
+        "Shift_Key",
+        "dim_shift",
+        "Shift_Key"
+      ],
+      [
+        "Absence_Key",
+        "fact_absence",
+        "Absence_Key"
+      ]
+    ],
+    "indexes": [
+      "Employee_Key",
+      "IncidentType_Key",
+      "Role_Key",
+      "Department_Key",
+      "Incident_Date"
+    ]
+  },
   "fact_vacancy": {
     "df": "fact_vacancy",
     "primary_key": "Vacancy_Key",
@@ -231,9 +590,21 @@
       "Filled_Employee_Key": "INT"
     },
     "foreign_keys": [
-      ["Role_Key", "dim_role", "Role_Key"],
-      ["Department_Key", "dim_department", "Department_Key"],
-      ["Filled_Employee_Key", "dim_employee", "Employee_Key"]
+      [
+        "Role_Key",
+        "dim_role",
+        "Role_Key"
+      ],
+      [
+        "Department_Key",
+        "dim_department",
+        "Department_Key"
+      ],
+      [
+        "Filled_Employee_Key",
+        "dim_employee",
+        "Employee_Key"
+      ]
     ],
     "indexes": [
       "Role_Key",
@@ -242,7 +613,6 @@
       "Status"
     ]
   },
-
   "fact_recruitment": {
     "df": "fact_recruitment",
     "primary_key": "Recruitment_Key",
@@ -254,53 +624,293 @@
       "Role_Key": "INT",
       "Department_Key": "INT",
       "HireSource_Key": "INT",
+      "RecruitmentStatus_Key": "INT",
       "Status": "NVARCHAR(50)",
       "Employee_Key": "INT",
       "Vacancy_Reason": "NVARCHAR(50)",
       "Candidate_Quality": "DECIMAL(3,2)",
-      "Days_To_Decision": "INT"
+      "Candidate_Experience_Score": "DECIMAL(3,2)",
+      "Candidate_Education_Relevance_Score": "DECIMAL(3,2)",
+      "Candidate_Technical_Skills_Score": "DECIMAL(3,2)",
+      "Candidate_Soft_Skills_Score": "DECIMAL(3,2)",
+      "Candidate_Motivation_Score": "DECIMAL(3,2)",
+      "CandidateQualityDriver_Key": "INT",
+      "Days_To_Decision": "INT",
+      "DeclineReason_Key": "INT",
+      "RejectionReason_Key": "INT",
+      "Stage_Key": "INT",
+      "Screening_Date": "DATE",
+      "Interview_Date": "DATE",
+      "Offer_Date": "DATE"
     },
     "foreign_keys": [
-      ["Vacancy_Key", "fact_vacancy", "Vacancy_Key"],
-      ["Role_Key", "dim_role", "Role_Key"],
-      ["Department_Key", "dim_department", "Department_Key"],
-      ["HireSource_Key", "dim_hire_source", "HireSource_Key"],
-      ["Employee_Key", "dim_employee", "Employee_Key"]
+      [
+        "Vacancy_Key",
+        "fact_vacancy",
+        "Vacancy_Key"
+      ],
+      [
+        "Role_Key",
+        "dim_role",
+        "Role_Key"
+      ],
+      [
+        "Department_Key",
+        "dim_department",
+        "Department_Key"
+      ],
+      [
+        "HireSource_Key",
+        "dim_hire_source",
+        "HireSource_Key"
+      ],
+      [
+        "CandidateQualityDriver_Key",
+        "dim_candidate_quality_driver",
+        "CandidateQualityDriver_Key"
+      ],
+      [
+        "RecruitmentStatus_Key",
+        "dim_recruitment_status",
+        "RecruitmentStatus_Key"
+      ],
+      [
+        "Employee_Key",
+        "dim_employee",
+        "Employee_Key"
+      ],
+      [
+        "DeclineReason_Key",
+        "dim_decline_reason",
+        "DeclineReason_Key"
+      ],
+      [
+        "RejectionReason_Key",
+        "dim_rejection_reason",
+        "RejectionReason_Key"
+      ],
+      [
+        "Stage_Key",
+        "dim_recruitment_stage",
+        "Stage_Key"
+      ]
     ],
     "indexes": [
       "Role_Key",
       "Department_Key",
       "Application_Date",
-      "Status"
+      "Status",
+      "RecruitmentStatus_Key"
     ]
   },
-
-  "fact_salary_snapshot": {
-    "df": "fact_salary_snapshot",
-    "primary_key": "SalarySnapshot_Key",
+  "fact_workforce_snapshot": {
+    "df": "fact_workforce_snapshot",
+    "primary_key": "WorkforceSnapshot_Key",
     "types": {
-      "SalarySnapshot_Key": "INT",
+      "WorkforceSnapshot_Key": "INT",
       "Snapshot_Date": "DATE",
       "Employee_Key": "INT",
       "Employment_Key": "INT",
+      "Manager_Key": "INT",
       "Role_Key": "INT",
       "Department_Key": "INT",
-      "Salaris": "INT"
+      "Location_Key": "INT",
+      "HireSource_Key": "INT",
+      "Education_Key": "INT",
+      "Shift_Key": "INT",
+      "SalaryScale_Key": "INT",
+      "SalaryBand_Key": "INT",
+      "Contracttype": "NVARCHAR(50)",
+      "Contracturen": "INT",
+      "FTE": "DECIMAL(5,2)",
+      "Salaris": "INT",
+      "Performance_Score": "DECIMAL(3,2)",
+      "Aaneengesloten_Indienst_Datum": "DATE",
+      "Dienstjaren": "DECIMAL(6,2)",
+      "Relevante_Ervaring_Jaren": "DECIMAL(5,2)",
+      "Tevredenheid_Score": "DECIMAL(4,2)",
+      "SatisfactionBand_Key": "INT",
+      "SatisfactionDriver_Key": "INT",
+      "Betrokkenheid_Score": "DECIMAL(4,2)",
+      "EngagementBand_Key": "INT",
+      "EngagementDriver_Key": "INT",
+      "PerformanceDriver_Key": "INT",
+      "Beschikbare_Werkdagen": "DECIMAL(6,2)",
+      "Beschikbare_Uren": "DECIMAL(8,2)",
+      "Afwezige_Dagen": "DECIMAL(6,2)",
+      "Verzuim_Dagen": "DECIMAL(6,2)",
+      "Afwezigheid_Werkdagen": "DECIMAL(6,2)",
+      "Verzuim_Werkdagen": "DECIMAL(6,2)",
+      "Afwezigheid_Uren": "DECIMAL(8,2)",
+      "Verzuim_Uren": "DECIMAL(8,2)",
+      "Aantal_Afwezigheid_Episodes": "INT",
+      "Aantal_Verzuimgevallen": "INT",
+      "SalaryStep": "INT",
+      "Benchmark_Salaris": "INT",
+      "Benchmark_Verschil": "INT",
+      "Benchmark_Status": "NVARCHAR(30)"
     },
     "foreign_keys": [
-      ["Employee_Key", "dim_employee", "Employee_Key"],
-      ["Employment_Key", "fact_employment", "Employment_Key"],
-      ["Role_Key", "dim_role", "Role_Key"],
-      ["Department_Key", "dim_department", "Department_Key"]
+      [
+        "Employee_Key",
+        "dim_employee",
+        "Employee_Key"
+      ],
+      [
+        "Employment_Key",
+        "fact_employment",
+        "Employment_Key"
+      ],
+      [
+        "Manager_Key",
+        "dim_manager",
+        "Manager_Key"
+      ],
+      [
+        "Role_Key",
+        "dim_role",
+        "Role_Key"
+      ],
+      [
+        "Department_Key",
+        "dim_department",
+        "Department_Key"
+      ],
+      [
+        "Location_Key",
+        "dim_location",
+        "Location_Key"
+      ],
+      [
+        "HireSource_Key",
+        "dim_hire_source",
+        "HireSource_Key"
+      ],
+      [
+        "Education_Key",
+        "dim_education",
+        "Education_Key"
+      ],
+      [
+        "Shift_Key",
+        "dim_shift",
+        "Shift_Key"
+      ],
+      [
+        "SalaryScale_Key",
+        "dim_salary_scale",
+        "SalaryScale_Key"
+      ],
+      [
+        "SalaryBand_Key",
+        "dim_salary_band",
+        "SalaryBand_Key"
+      ],
+      [
+        "SatisfactionBand_Key",
+        "dim_satisfaction_band",
+        "SatisfactionBand_Key"
+      ],
+      [
+        "SatisfactionDriver_Key",
+        "dim_satisfaction_driver",
+        "SatisfactionDriver_Key"
+      ],
+      [
+        "EngagementBand_Key",
+        "dim_engagement_band",
+        "EngagementBand_Key"
+      ],
+      [
+        "EngagementDriver_Key",
+        "dim_engagement_driver",
+        "EngagementDriver_Key"
+      ],
+      [
+        "PerformanceDriver_Key",
+        "dim_performance_driver",
+        "PerformanceDriver_Key"
+      ]
     ],
     "indexes": [
       "Snapshot_Date",
       "Employee_Key",
+      "Manager_Key",
       "Role_Key",
-      "Department_Key"
+      "Department_Key",
+      "Location_Key",
+      "HireSource_Key",
+      "Education_Key",
+      "SatisfactionBand_Key",
+      "SatisfactionDriver_Key",
+      "EngagementBand_Key",
+      "EngagementDriver_Key",
+      "PerformanceDriver_Key"
     ]
   },
-
+  "fact_manager_assignment": {
+    "df": "fact_manager_assignment",
+    "primary_key": "ManagerAssignment_Key",
+    "types": {
+      "ManagerAssignment_Key": "INT",
+      "Employee_Key": "INT",
+      "Manager_Key": "INT",
+      "Startdatum": "DATE",
+      "Einddatum": "DATE"
+    },
+    "foreign_keys": [
+      [
+        "Employee_Key",
+        "dim_employee",
+        "Employee_Key"
+      ],
+      [
+        "Manager_Key",
+        "dim_manager",
+        "Manager_Key"
+      ]
+    ],
+    "indexes": [
+      "Employee_Key",
+      "Manager_Key",
+      "Startdatum",
+      "Einddatum"
+    ]
+  },
+  "fact_salary_benchmark": {
+    "df": "fact_salary_benchmark",
+    "primary_key": "SalaryBenchmark_Key",
+    "types": {
+      "SalaryBenchmark_Key": "INT",
+      "Benchmark_Date": "DATE",
+      "Role_Key": "INT",
+      "SalaryScale_Key": "INT",
+      "SalaryStep": "INT",
+      "Scale_Min_Salaris": "INT",
+      "Scale_Max_Salaris": "INT",
+      "Market_P25": "INT",
+      "Market_Median": "INT",
+      "Market_P75": "INT",
+      "Benchmark_Salaris": "INT"
+    },
+    "foreign_keys": [
+      [
+        "Role_Key",
+        "dim_role",
+        "Role_Key"
+      ],
+      [
+        "SalaryScale_Key",
+        "dim_salary_scale",
+        "SalaryScale_Key"
+      ]
+    ],
+    "indexes": [
+      "Benchmark_Date",
+      "Role_Key",
+      "SalaryScale_Key"
+    ]
+  },
   "fact_performance_review": {
     "df": "fact_performance_review",
     "primary_key": "PerformanceReview_Key",
@@ -308,10 +918,20 @@
       "PerformanceReview_Key": "INT",
       "Employee_Key": "INT",
       "Review_Datum": "DATE",
-      "Performance_Score": "DECIMAL(3,2)"
+      "Performance_Score": "DECIMAL(3,2)",
+      "PerformanceDriver_Key": "INT"
     },
     "foreign_keys": [
-      ["Employee_Key", "dim_employee", "Employee_Key"]
+      [
+        "Employee_Key",
+        "dim_employee",
+        "Employee_Key"
+      ],
+      [
+        "PerformanceDriver_Key",
+        "dim_performance_driver",
+        "PerformanceDriver_Key"
+      ]
     ],
     "indexes": [
       "Employee_Key",

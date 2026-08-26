@@ -2,6 +2,15 @@ __pycache__/
 *.pyc
 *.pyo
 *.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+*.egg-info/
+build/
+dist/
 *.log
 .env
 .venv/
@@ -19,3 +28,7 @@ local.settings.json
 
 # The Azure Functions host configuration lives in azure_function/.
 /host.json
+
+# Local validation and temporary Codex-session artifacts
+/VALIDATION.json
+/subagent_log.md

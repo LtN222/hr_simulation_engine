@@ -1,276 +1,137 @@
-ARCHITECTURE OVERVIEW
-HR Data Generator – Project structuur en datastroom
-
-PROJECTSTRUCTUUR
-
-Demo_dashboards_HRdata
-│
-├─ azure_function
-│ └─ function_app.py
-│
-├─ config
-│ ├─ maakindustrie.json
-│ └─ schemas
-│ ├─ hr_default.json
-│ └─ hr_maakindustrie_schema.json
-│
-├─ src
-│ │
-│ ├─ run_simulation.py
-│ ├─ run_simulation_incremental.py
-│ │
-│ ├─ generator
-│ │ ├─ population.py
-│ │ ├─ simulation.py
-│ │ ├─ simulation_attrition.py
-│ │ ├─ employees.py
-│ │ ├─ dimensions.py
-│ │ ├─ allocation.py
-│ │ ├─ dimension_factory.py
-│ │ ├─ config_loader.py
-│ │ │
-│ │ ├─ employee_helpers.py
-│ │ ├─ employee_person.py
-│ │ ├─ employee_contract.py
-│ │ ├─ employee_job.py
-│ │ ├─ employee_attributes.py
-│ │ │
-│ │ ├─ absence_simulation.py
-│ │ └─ performance_simulation.py
-│ │
-│ └─ database
-│ ├─ write_to_sql.py
-│ ├─ schema_loader.py
-│ ├─ simulation_state.py
-│ └─ (eventueel later migrations / staging)
-│
-└─ requirements.txt
-
-----------------------------------------------------------------------------------------------
-
-HOOFDSTROOM VAN DE GENERATOR
-
-Azure Function (trigger)
-│
-▼
-run_simulation() / run_incremental_simulation()
-│
-│ load_config()
-▼
-Sector configuratie
-(structure, attrition, contract rules, locations, etc.)
-│
-▼
-generate_initial_workforce() ← population.py
-│
-│ 1. dimension generation
-│ 2. headcount allocatie
-│ 3. employee generatie
-│ 4. historische events
-│
-▼
-INITIAL WORKFORCE
-dim_employee
-fact_employment
-fact_employment_attribute
-fact_absence
-fact_performance_review
-│
-▼
-simulate_week() ← simulation.py
-│
-│ 1. attrition simulatie
-│ 2. headcount doel bepalen
-│ 3. nieuwe hires
-│ 4. employment updates
-│
-▼
-UPDATED WORKFORCE
-(dim + fact tables)
-│
-▼
-STATE (DataFrames container)
-│
-▼
-write_dataset() ← write_to_sql.py
-│
-│ 1. tabellen schrijven
-│ 2. constraints toepassen
-│ 3. indexes maken
-│ 4. retention policy
-│
-▼
-SQL Database
-(Azure SQL)
-│
-▼
-Power BI semantic model
-│
-▼
-Demo dashboards
-
-----------------------------------------------------------------------------------------------
-
-INCREMENTAL SIMULATION FLOW
-
-De generator ondersteunt twee modi:
-
-FULL SIMULATION
-
-Wordt gebruikt om een volledige dataset te genereren.
-
-Pipeline:
-
-run_simulation()
-→ initial workforce
-→ simulatie van meerdere weken
-→ volledige dataset schrijven
-
-INCREMENTAL SIMULATION
-
-Wordt gebruikt voor periodieke updates.
-
-Pipeline:
-
-run_incremental_simulation()
-
-    │
-    ▼
-
-load simulation_state
-
-    │
-    ▼
-
-start vanaf laatste week
-
-    │
-    ▼
-
-simulate_week()
-
-    │
-    ▼
-
-nieuwe records toevoegen
-
-    │
-    ▼
-
-update simulation_state
-
-SIMULATION STATE
-
-De voortgang van de simulatie wordt opgeslagen in:
-
-simulation_state
-
-Kolommen:
-
-id
-current_year
-current_week
-last_run
-
-Dit bepaalt waar de volgende incremental run moet starten.
-
-CENTRAAL DATA OBJECT
-
-Tijdens de simulatie wordt alle data opgeslagen in:
-
-state
-
-Dit is een dictionary met pandas DataFrames.
-
-Voorbeeld:
-
-state = {
-
-"dim_employee": dataframe,
-
-"fact_employment": dataframe,
-
-"fact_absence": dataframe,
-
-"fact_performance_review": dataframe
-
-}
-
-Elke generator functie:
-
-neemt state als input
-wijzigt of voegt data toe
-geeft state terug
-
-----------------------------------------------------------------------------------------------
-
-BELANGRIJKSTE GENERATOR MODULES
-
-population.py
-Genereert de initiële workforce.
-
-dimensions.py
-Bouwt structure dimensions zoals department en role.
-
-allocation.py
-Verdeelt headcount over rollen.
-
-employees.py
-Genereert employees en employment records.
-
-simulation.py
-Orchestratie van wekelijkse events.
-
-simulation_attrition.py
-Simuleert uitstroom van werknemers.
-
-absence_simulation.py
-Genereert verzuimhistorie.
-
-performance_simulation.py
-Genereert performance reviews.
-
-----------------------------------------------------------------------------------------------
-
-DATABASE PIPELINE
-
-write_to_sql.py verzorgt het schrijven naar Azure SQL.
-
-De pipeline:
-
-DataFrames verzamelen uit state
-
-tabellen in juiste volgorde schrijven
-
-primary keys toepassen
-
-foreign keys toepassen
-
-indexes maken
-
-retention policy uitvoeren
-
-----------------------------------------------------------------------------------------------
-
-EINDRESULTAAT
-
-De generator produceert een volledige HR dataset:
-
-DIMENSIONS
-
-dim_employee
-dim_role
-dim_department
-dim_location
-dim_hire_source
-dim_education_level
-dim_absence_type
-dim_event_type
-dim_reden_vertrek
-
-FACT TABLES
-
-fact_employment
-fact_employment_attribute
-fact_absence
-fact_performance_review
+HR DATA GENERATOR - ARCHITECTURE OVERVIEW
+
+Purpose
+-------
+This project generates a realistic, configuration-driven HR data set for an
+Azure SQL database and a Power BI semantic model. It supports a full historical
+simulation and weekly incremental updates.
+
+Repository structure
+--------------------
+hr_data_generator/
+|- README.md                         Setup, deployment and data model guide
+`- azure_function/
+   |- function_app.py                HTTP and timer trigger entry point
+   |- config/
+   |  |- maakindustrie.json          Sector-specific simulation parameters
+   |  `- schemas/                    SQL table definitions and constraints
+   `- src/
+      |- application/                Pipeline orchestration and initial setup
+      |- domain/                     Employee, job, person and contract objects
+      |- generator/                  Factories for the initial population
+      |- simulation/                 Weekly business-event simulators
+      |- infrastructure/             Snapshot, context, SQL and state helpers
+      `- tests/                      Pytest regression tests
+
+Execution flow
+--------------
+HTTP trigger or weekly timer
+        |
+        v
+run_hr_pipeline(mode)
+        |
+        +-- full: run_simulation()
+        |      Creates a population, runs history from the burn-in period,
+        |      then rebuilds managed reporting tables.
+        |
+        `-- incremental: run_incremental_simulation()
+               Loads the current SQL state and simulates missing weeks.
+        |
+        v
+WeeklySimulationRunner
+        |
+        +-- attrition and retirement
+        +-- performance reviews and career events
+        +-- growth demand, vacancies and recruitment
+        +-- hiring and manager assignment
+        `-- sickness absence and leave episodes
+        |
+        v
+Reporting enrichment
+        |
+        +-- employee employment status and original hire source
+        +-- effective-dated manager assignments
+        +-- absence satisfaction context at episode start
+        +-- monthly workforce snapshots and salary benchmarks
+        `-- departure satisfaction context
+        |
+        v
+Schema-driven Azure SQL writer
+        |
+        v
+Azure SQL -> Power BI semantic model
+
+Simulation state
+----------------
+The in-memory state is a dictionary of pandas DataFrames. It is the contract
+between simulators and the SQL writer. `simulation_state` in SQL stores the
+last completed ISO year and week for incremental processing.
+
+Core reporting model
+--------------------
+Dimensions include:
+
+- dim_employee, dim_department, dim_role and dim_manager
+- dim_hire_source, dim_education and dim_location
+- dim_absence_type, dim_ploegendienst, dim_satisfaction_band and
+  dim_engagement_band
+- dim_satisfaction_driver, dim_performance_driver and dim_engagement_driver
+- dim_salary_band, dim_salary_scale, dim_event_type and dim_reden_vertrek
+
+Facts include:
+
+- fact_employment: employment-event history; promotions, transfers, salary
+  reviews and exits create or complete employment records. It stores relevant
+  experience at the event start; cross-domain transfers retain only the
+  configured share.
+- fact_workforce_snapshot: one active employee per month-end. This is the
+  primary source for workforce trends, salary, performance, satisfaction,
+  engagement, current relevant experience, capacity and employee-month
+  absence metrics.
+- fact_absence: absence and leave episode events. It stores workday and hour
+  values plus the employment, pay and satisfaction context at episode start.
+- fact_vacancy and fact_recruitment: vacancy lifecycle and all applications.
+  The accepted application determines the hire source of a filled vacancy.
+- fact_salary_benchmark: monthly role, scale and salary-step benchmarks.
+- fact_manager_assignment: effective-dated manager history used to build the
+  monthly workforce context.
+- fact_performance_review: annual performance-review events with one dominant
+  performance driver.
+
+Modeling principles
+-------------------
+- Facts are not directly related to one another in Power BI.
+- Shared dimensions filter facts with single-direction relationships.
+- fact_workforce_snapshot is employee-month grain and includes zero absence
+  employees. Use it for denominators and employee trend measures.
+- fact_absence is episode grain. Use it for absence-type filtering and
+  episode-level analysis. `Duur_dagen` is calendar duration; workday and hour
+  fields are preferred for capacity and verzuim metrics.
+- Satisfaction is time-varying. `SatisfactionBand_Key` is therefore stored on
+  the workforce snapshot, on absence episodes at their start date, and on exit
+  events at their departure date.
+- Engagement is a separate time-varying score on the workforce snapshot and
+  exit events. Voluntary constructive contribution signals feed both its score
+  and its dominant driver; satisfaction, relative pay, manager, performance
+  and career momentum remain bounded context. Its effects on future performance
+  and attrition are deliberately capped.
+- Performance excludes absence, overtime and out-of-hours availability. Its
+  drivers describe bounded, role-relevant execution, experience, collaboration,
+  initiative or knowledge sharing.
+- `role_career_paths` is the configuration-owned source for relevant education
+  and promotion targets. `dim_role` exposes both lists; promotions use only
+  configured targets, while transfers remain separate lateral moves.
+- Time to fill is defined for closed vacancies. For hire-source analysis, use
+  the accepted recruitment record's Vacancy_Key in a DAX TREATAS measure.
+
+Operational notes
+-----------------
+- The HTTP endpoint uses HR_SIMULATION_MODE to select full or incremental.
+- The timer trigger always uses incremental mode.
+- Run a full simulation after adding snapshot columns or driver keys; an
+  incremental run does not backfill existing snapshot rows.
+- Local Azure Functions timer support requires Azurite through
+  AzureWebJobsStorage=UseDevelopmentStorage=true.
+- A full run is required after historical-logic or reporting-schema changes.
+- The SQL writer manages table creation, additive columns, retired tables,
+  primary keys, foreign keys, indexes and retention.

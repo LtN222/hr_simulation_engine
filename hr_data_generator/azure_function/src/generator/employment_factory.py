@@ -2,12 +2,14 @@ import pandas as pd
 
 from src.domain.contract import Contract
 from src.domain.job import Job
+from src.infrastructure.salary_policy import SalaryPolicy
 
 
 class EmploymentFactory:
     def __init__(self, config, rng):
         self.config = config
         self.rng = rng
+        self.salary_policy = SalaryPolicy(config)
 
     def create(
         self,
@@ -29,8 +31,9 @@ class EmploymentFactory:
             if is_new_hire
             else self._choose_initial_start_date(today)
         )
-        salary = self._choose_salary(
+        salary, target_compa_ratio = self._choose_salary(
             role_row,
+            department_name,
             start_date=start_date,
             today=today,
             is_new_hire=is_new_hire
@@ -41,7 +44,8 @@ class EmploymentFactory:
             role_key=role_row["Role_Key"],
             role_name=role_name,
             department_name=department_name,
-            salary=salary
+            salary=salary,
+            target_compa_ratio=target_compa_ratio
         )
 
         contract_rules = self.config.contract_rules
@@ -69,53 +73,21 @@ class EmploymentFactory:
     def _choose_salary(
         self,
         role_row,
+        department_name,
         start_date=None,
         today=None,
         is_new_hire=False
     ):
-        salary_min = int(role_row["Salaris_min"])
-        salary_max = int(role_row["Salaris_max"])
         if today is None:
             today = pd.Timestamp.today()
-
-        if start_date is None:
-            tenure_years = 0
-        else:
-            tenure_years = max(
-                0,
-                (pd.Timestamp(today) - pd.Timestamp(start_date)).days / 365.0
-            )
-
-        salary_cfg = self._salary_growth_config()
-        band_width = salary_max - salary_min
-
-        if is_new_hire:
-            position_cfg = salary_cfg.get("new_hire_band_position", {})
-            band_position = self.rng.uniform(
-                position_cfg.get("min", 0.32),
-                position_cfg.get("max", 0.42)
-            )
-        else:
-            position_cfg = salary_cfg.get(
-                "initial_population_band_position",
-                {}
-            )
-            base_position = self.rng.uniform(
-                position_cfg.get("min", 0.28),
-                position_cfg.get("max", 0.40)
-            )
-            tenure_increment = position_cfg.get(
-                "tenure_increment_per_year",
-                0.035
-            )
-            band_position = min(
-                position_cfg.get("max_position", 0.75),
-                base_position + tenure_years * tenure_increment
-            )
-
-        band_position = max(0.05, min(0.95, band_position))
-
-        return int(round(salary_min + band_width * band_position))
+        return self.salary_policy.initial_salary(
+            role_row,
+            department_name,
+            today,
+            start_date or today,
+            self.rng,
+            is_new_hire=is_new_hire
+        )
 
     def _choose_initial_start_date(self, today):
         initial_population = getattr(self.config, "initial_population", {})
@@ -134,11 +106,6 @@ class EmploymentFactory:
         lower, upper = (float(value) for value in tenure_range.split("-", 1))
         tenure_years = self.rng.uniform(lower, upper)
         return pd.Timestamp(today) - pd.Timedelta(days=round(tenure_years * 365.2425))
-
-    def _salary_growth_config(self):
-        if self.config is None:
-            return {}
-        return self.config.career_events.get("salary_growth", {})
 
     def _choose_performance(self):
         score = round(self.rng.normalvariate(3.5, 0.5), 2)

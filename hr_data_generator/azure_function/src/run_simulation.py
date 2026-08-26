@@ -6,9 +6,17 @@ from src.application.population import WorkforceGenerator
 from src.application.simulation_runner import simulate_week
 from src.core.config_loader import ConfigLoader
 from src.infrastructure.database.schema_loader import load_schema
+from src.infrastructure.absence_context import sync_absence_satisfaction
+from src.infrastructure.avatar import ensure_employee_avatars
+from src.infrastructure.departure_context import (
+    sync_departure_satisfaction,
+    sync_employment_hire_sources,
+)
 from src.infrastructure.employee_status import sync_employee_employment_status
+from src.infrastructure.recruitment_context import sync_recruitment_status_keys
 from src.infrastructure.manager_builder import build_dim_manager
-from src.infrastructure.salary_snapshot import build_salary_snapshots
+from src.infrastructure.manager_assignment import sync_manager_assignments
+from src.infrastructure.workforce_snapshot import build_workforce_snapshots
 from src.infrastructure.state.simulation_state import update_simulation_state
 
 
@@ -56,6 +64,7 @@ def run_simulation(engine, sector, seed):
         initial_date=burn_in_start_date,
         initial_headcount=initial_headcount
     ).run()
+    state = ensure_employee_avatars(state, config)
     state["vacancies"] = 0
 
     # The workforce is warmed up before the visible simulation period. This
@@ -96,13 +105,19 @@ def run_simulation(engine, sector, seed):
 
     update_simulation_state(engine, last_year, last_week)
     state = sync_employee_employment_status(state)
+    state = sync_employment_hire_sources(state)
+    state = sync_recruitment_status_keys(state)
+    state = sync_manager_assignments(state, schema, simulation_end_date)
     state = build_dim_manager(state)
-    state = build_salary_snapshots(
+    state = sync_absence_satisfaction(state, config)
+    state = build_workforce_snapshots(
         state,
         schema,
+        config=config,
         start_date=visible_start_date,
         end_date=simulation_end_date
     )
+    state = sync_departure_satisfaction(state)
 
     logging.info("Full HR simulation finished successfully")
     return state

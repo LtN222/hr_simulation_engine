@@ -3,6 +3,11 @@ import math
 import pandas as pd
 
 from src.infrastructure.record_builder import build_record
+from src.infrastructure.salary_band import salary_band_key_for
+from src.infrastructure.satisfaction import (
+    SatisfactionModel,
+    score_employee_satisfaction,
+)
 
 
 class AbsenceSimulator:
@@ -24,6 +29,7 @@ class AbsenceSimulator:
         self.schema = schema
         self.rng = rng
         self.absence_cfg = config.absence
+        self.satisfaction_model = SatisfactionModel(config)
 
     def run(self, state, today):
         today = pd.Timestamp(today).normalize()
@@ -37,6 +43,12 @@ class AbsenceSimulator:
         absence_types = self._available_absence_types(
             state.get("dim_absence_type", pd.DataFrame())
         )
+        occupied_employees = self._overlapping_employee_keys(
+            existing_absence,
+            today,
+            today + pd.Timedelta(days=6)
+        )
+        leave_event_counts = self._event_counts(existing_absence)
 
         records = []
         next_absence_key = self._next_key(existing_absence)
@@ -51,23 +63,18 @@ class AbsenceSimulator:
                 if not self._eligible_for_absence(employment, today):
                     continue
 
-                if self._has_overlap(
-                    existing_absence,
-                    records,
-                    employee_key,
-                    today,
-                    today + pd.Timedelta(days=6)
-                ):
+                if employee_key in occupied_employees:
                     continue
 
                 absence_type = self._choose_incident_type(
                     employee,
                     employment,
                     absence_types,
-                    state.get("fact_employment_attribute", pd.DataFrame()),
+                    state,
                     existing_absence,
                     records,
-                    today
+                    today,
+                    leave_event_counts,
                 )
                 if absence_type is None:
                     continue
@@ -82,6 +89,15 @@ class AbsenceSimulator:
                 )
                 if record is not None:
                     records.append(record)
+                    leave_event_counts[(
+                        employee_key,
+                        record["AbsenceType_Key"],
+                        pd.Timestamp(record["Startdatum"]).year,
+                    )] = leave_event_counts.get((
+                        employee_key,
+                        record["AbsenceType_Key"],
+                        pd.Timestamp(record["Startdatum"]).year,
+                    ), 0) + 1
                     next_absence_key += 1
 
         if records:
@@ -135,6 +151,30 @@ class AbsenceSimulator:
                 ).dt.normalize()
         return result
 
+    @staticmethod
+    def _overlapping_employee_keys(absence, window_start, window_end):
+        """Return employees with an episode overlapping this simulation week."""
+        if absence.empty:
+            return set()
+        overlap = absence[(absence["Startdatum"] <= window_end) & (
+            absence["Einddatum"] >= window_start
+        )]
+        return set(overlap["Employee_Key"].dropna().tolist())
+
+    @staticmethod
+    def _event_counts(absence):
+        """Index historical leave events once instead of scanning per employee."""
+        if absence.empty:
+            return {}
+        starts = pd.to_datetime(absence["Startdatum"], errors="coerce")
+        indexed = absence.loc[starts.notna(), [
+            "Employee_Key", "AbsenceType_Key"
+        ]].copy()
+        indexed["Year"] = starts.loc[starts.notna()].dt.year
+        return indexed.groupby(
+            ["Employee_Key", "AbsenceType_Key", "Year"]
+        ).size().to_dict()
+
     def _next_key(self, absence):
         if absence.empty or "Absence_Key" not in absence.columns:
             return 1
@@ -173,13 +213,21 @@ class AbsenceSimulator:
         self,
         employee,
         employment,
-        fact_employment_attribute,
+        state,
         today=None
     ):
-        """Return the annual probability of at least one absence episode."""
+        """Return the expected annual number of sickness episodes.
+
+        This is an incident *rate*, rather than the probability that someone
+        has at least one episode. Employees can therefore have multiple short
+        sickness episodes in a year, provided they do not overlap.
+        """
         annual_rate = self.absence_cfg.get(
-            "annual_event_rate",
-            self.absence_cfg.get("base_probability", 0.0)
+            "annual_sickness_episode_rate",
+            self.absence_cfg.get(
+                "annual_event_rate",
+                self.absence_cfg.get("base_probability", 0.0)
+            )
         )
         age_multipliers = self.absence_cfg.get("age_multipliers", {})
         age = self._current_age(employee, today)
@@ -193,11 +241,54 @@ class AbsenceSimulator:
         else:
             age_factor = age_multipliers.get("55+", 1.0)
 
-        attribute_factor = self._attribute_factor(
+        shift_factor = self._ploegendienst_factor(employment, state)
+        department_factor = self._department_factor(employment, state)
+        gender_factor = self.absence_cfg.get(
+            "gender_multipliers",
+            {}
+        ).get(employee.get("Gender"), 1.0)
+        seasonal_factor = self.absence_cfg.get(
+            "seasonal_multipliers",
+            {}
+        ).get(str(pd.Timestamp(today).month), 1.0) if today is not None else 1.0
+        satisfaction = score_employee_satisfaction(
+            self.satisfaction_model,
+            state,
+            employee,
             employment,
-            fact_employment_attribute
+            today,
         )
-        return max(0.0, min(0.95, float(annual_rate) * age_factor * attribute_factor))
+        satisfaction_factor = self._satisfaction_incident_multiplier(
+            satisfaction
+        )
+        return max(
+            0.0,
+            min(
+                4.0,
+                float(annual_rate)
+                * float(age_factor)
+                * float(shift_factor)
+                * float(department_factor)
+                * float(gender_factor)
+                * float(seasonal_factor)
+                * satisfaction_factor
+            )
+        )
+
+    def _satisfaction_incident_multiplier(self, satisfaction_score):
+        """Keep satisfaction's effect on sickness risk modest and configurable."""
+        multipliers = self.absence_cfg.get(
+            "satisfaction_incident_multipliers",
+            {}
+        )
+        score = pd.to_numeric(satisfaction_score, errors="coerce")
+        if pd.isna(score):
+            return 1.0
+        if score < 6.0:
+            return float(multipliers.get("low", 1.12))
+        if score < 7.5:
+            return float(multipliers.get("neutral", 1.0))
+        return float(multipliers.get("high", 0.94))
 
     def _current_age(self, employee, today):
         birth_date = employee.get("Geboortedatum")
@@ -212,35 +303,38 @@ class AbsenceSimulator:
 
         return 0
 
-    def _attribute_factor(self, employment, fact_employment_attribute):
-        if fact_employment_attribute.empty:
+    def _ploegendienst_factor(self, employment, state):
+        multipliers = self.absence_cfg.get("ploegendienst_multipliers", {})
+        shifts = state.get("dim_shift", pd.DataFrame())
+        shift_key = employment.get("Shift_Key")
+        if not multipliers or shifts.empty or pd.isna(shift_key):
             return 1.0
-
-        attr_cfg = self.absence_cfg.get("attribute_multipliers", {})
-        if not attr_cfg or "Employment_Key" not in fact_employment_attribute.columns:
-            return 1.0
-
-        attrs = fact_employment_attribute[
-            fact_employment_attribute["Employment_Key"]
-            == employment["Employment_Key"]
+        match = shifts.loc[
+            shifts["Shift_Key"] == shift_key,
+            "Shift_Name"
         ]
-        factor = 1.0
-        for attr_name, value_multipliers in attr_cfg.items():
-            values = attrs[attrs["Attribute_Name"] == attr_name]
-            if values.empty:
-                continue
-            value = values.iloc[0]["Attribute_Value"]
-            factor *= value_multipliers.get(value, 1.0)
-        return factor
+        return float(multipliers.get(match.iloc[0], 1.0)) if not match.empty else 1.0
 
-    def _draw_weekly_incident(self, annual_probability):
-        # This conversion preserves the annual probability across 52 weekly
-        # simulation steps: 1 - (1 - p_year) ** (1 / 52).
-        weekly_probability = 1 - math.pow(
-            1 - annual_probability,
-            1 / 52
-        )
-        return self.rng.random() < weekly_probability
+    def _department_factor(self, employment, state):
+        multipliers = self.absence_cfg.get("department_multipliers", {})
+        roles = state.get("dim_role", pd.DataFrame())
+        departments = state.get("dim_department", pd.DataFrame())
+        role_key = employment.get("Role_Key")
+        if not multipliers or roles.empty or departments.empty or pd.isna(role_key):
+            return 1.0
+
+        role = roles.loc[roles["Role_Key"] == role_key]
+        if role.empty or "Department_Key" not in role.columns:
+            return 1.0
+        department = departments.loc[
+            departments["Department_Key"] == role.iloc[0]["Department_Key"]
+        ]
+        if department.empty:
+            return 1.0
+        return float(multipliers.get(
+            department.iloc[0].get("Department_Name"),
+            1.0
+        ))
 
     def _available_absence_types(self, dim_absence_type):
         if dim_absence_type.empty:
@@ -258,10 +352,11 @@ class AbsenceSimulator:
         employee,
         employment,
         absence_types,
-        fact_employment_attribute,
+        state,
         existing_absence,
         new_records,
-        today
+        today,
+        leave_event_counts=None,
     ):
         """Draw at most one weekly illness or leave episode per employee."""
         candidates = []
@@ -274,10 +369,12 @@ class AbsenceSimulator:
             annual_probability = self._calculate_probability(
                 employee,
                 employment,
-                fact_employment_attribute,
+                state,
                 today
             )
-            sickness_probability = self._weekly_probability(annual_probability)
+            sickness_probability = self._weekly_incident_probability(
+                annual_probability
+            )
             configured_weights = self.absence_cfg.get("type_weights", {})
             total_weight = sum(
                 configured_weights.get(absence_type["AbsenceType_Name"], 1.0)
@@ -305,12 +402,13 @@ class AbsenceSimulator:
             if not rule or not self._eligible_for_leave_type(
                 employee,
                 employment,
-                fact_employment_attribute,
+                state,
                 absence_type,
                 rule,
                 existing_absence,
                 new_records,
-                today
+                today,
+                leave_event_counts,
             ):
                 continue
 
@@ -332,16 +430,22 @@ class AbsenceSimulator:
         annual_probability = max(0.0, min(0.999, annual_probability))
         return 1 - math.pow(1 - annual_probability, 1 / 52)
 
+    @staticmethod
+    def _weekly_incident_probability(annual_rate):
+        """Convert an expected annual episode rate into a weekly hazard."""
+        return min(0.80, max(0.0, float(annual_rate) / 52))
+
     def _eligible_for_leave_type(
         self,
         employee,
         employment,
-        fact_employment_attribute,
+        state,
         absence_type,
         rule,
         existing_absence,
         new_records,
-        today
+        today,
+        leave_event_counts=None,
     ):
         age = self._current_age(employee, today)
         gender = employee.get("Gender")
@@ -356,42 +460,47 @@ class AbsenceSimulator:
         tenure_days = (today - pd.Timestamp(employment["Startdatum"])).days
         if tenure_days < int(rule.get("min_tenure_days", 0)):
             return False
-        if not self._has_required_attribute(
+        if not self._has_required_ploegendienst(
             employment,
-            fact_employment_attribute,
-            rule.get("required_attribute")
+            state,
+            rule.get("required_ploegendienst")
         ):
             return False
 
         max_events = rule.get("max_events_per_year")
-        return (
-            max_events is None
-            or self._events_in_year(
+        event_count = (
+            leave_event_counts.get((
+                employee["Employee_Key"],
+                absence_type["AbsenceType_Key"],
+                today.year,
+            ), 0)
+            if leave_event_counts is not None
+            else self._events_in_year(
                 existing_absence,
                 new_records,
                 employee["Employee_Key"],
                 absence_type["AbsenceType_Key"],
                 today.year
-            ) < int(max_events)
+            )
+        )
+        return (
+            max_events is None
+            or event_count < int(max_events)
         )
 
     @staticmethod
-    def _has_required_attribute(employment, attributes, requirement):
-        if not requirement:
+    def _has_required_ploegendienst(employment, state, required_names):
+        if not required_names:
             return True
-        if attributes.empty or "Employment_Key" not in attributes.columns:
+        shifts = state.get("dim_shift", pd.DataFrame())
+        shift_key = employment.get("Shift_Key")
+        if shifts.empty or pd.isna(shift_key):
             return False
-
-        matches = attributes[
-            (attributes["Employment_Key"] == employment["Employment_Key"])
-            & (attributes["Attribute_Name"] == requirement["name"])
+        name = shifts.loc[
+            shifts["Shift_Key"] == shift_key,
+            "Shift_Name"
         ]
-        return (
-            not matches.empty
-            and matches["Attribute_Value"].isin(
-                requirement.get("values", [])
-            ).any()
-        )
+        return not name.empty and name.iloc[0] in required_names
 
     @staticmethod
     def _events_in_year(
@@ -490,6 +599,17 @@ class AbsenceSimulator:
         type_key = absence_type["AbsenceType_Key"]
         type_name = absence_type["AbsenceType_Name"]
         duration = self._choose_duration(type_name)
+        satisfaction = score_employee_satisfaction(
+            self.satisfaction_model,
+            state,
+            employee,
+            employment,
+            start,
+        )
+        satisfaction_band_key = self.satisfaction_model.band_key_for(
+            state.get("dim_satisfaction_band", pd.DataFrame()),
+            satisfaction,
+        )
 
         # Dates are inclusive: a one-day absence starts and ends on the same
         # date, so Duur_dagen remains consistent with the date columns.
@@ -498,6 +618,10 @@ class AbsenceSimulator:
             end = min(end, employment_end)
         duration = (end - start).days + 1
         employment_context = self._employment_context(state, employment)
+        absence_workdays = len(pd.bdate_range(start, end))
+        hours_per_day = self._hours_per_workday(employment)
+        absence_hours = round(absence_workdays * hours_per_day, 2)
+        is_sickness = bool(absence_type.get("Telt_als_verzuim", False))
 
         return build_record(
             self.schema,
@@ -509,27 +633,51 @@ class AbsenceSimulator:
                 "Role_Key": employment_context["Role_Key"],
                 "Department_Key": employment_context["Department_Key"],
                 "Location_Key": employment_context["Location_Key"],
+                "Shift_Key": employment_context["Shift_Key"],
                 "SalaryBand_Key": employment_context["SalaryBand_Key"],
+                "SalaryScale_Key": employment_context["SalaryScale_Key"],
                 "Salaris_bij_aanvang": employment_context["Salaris_bij_aanvang"],
+                "Tevredenheid_Score_Bij_Aanvang": satisfaction,
+                "SatisfactionBand_Key": satisfaction_band_key,
                 "Startdatum": start,
                 "Einddatum": end,
-                "Duur_dagen": duration
+                "Duur_dagen": duration,
+                "Afwezigheid_Werkdagen": absence_workdays,
+                "Afwezigheid_Uren": absence_hours,
+                "Verzuim_Werkdagen": absence_workdays if is_sickness else 0,
+                "Verzuim_Uren": absence_hours if is_sickness else 0.0,
             }
         )
+
+    def _hours_per_workday(self, employment):
+        weekly_hours = pd.to_numeric(
+            employment.get("Contracturen"),
+            errors="coerce"
+        )
+        if pd.isna(weekly_hours):
+            workforce_config = getattr(self.config, "workforce", {})
+            weekly_hours = workforce_config.get(
+                "full_time_weekly_hours",
+                40
+            )
+        return float(weekly_hours) / 5
 
     def _employment_context(self, state, employment):
         """Capture conformed dimensions as they were when absence started."""
         role_key = employment.get("Role_Key")
         department_key = self._department_for_role(state, role_key)
         salary = pd.to_numeric(employment.get("Salaris"), errors="coerce")
-        salary = int(salary) if pd.notna(salary) else None
-
         return {
             "Role_Key": role_key,
             "Department_Key": department_key,
             "Location_Key": employment.get("Location_Key"),
-            "SalaryBand_Key": self._salary_band_for(state, salary),
-            "Salaris_bij_aanvang": salary
+            "Shift_Key": employment.get("Shift_Key"),
+            "SalaryBand_Key": salary_band_key_for(
+                state.get("dim_salary_band", pd.DataFrame()),
+                salary
+            ),
+            "SalaryScale_Key": employment.get("SalaryScale_Key"),
+            "Salaris_bij_aanvang": int(salary)
         }
 
     @staticmethod
@@ -540,17 +688,6 @@ class AbsenceSimulator:
 
         role = roles.loc[roles["Role_Key"] == role_key, "Department_Key"]
         return role.iloc[0] if not role.empty else None
-
-    @staticmethod
-    def _salary_band_for(state, salary):
-        bands = state.get("dim_salary_band", pd.DataFrame())
-        if bands.empty or salary is None:
-            return None
-
-        minimum = pd.to_numeric(bands["Minimum_Salaris"], errors="coerce")
-        maximum = pd.to_numeric(bands["Maximum_Salaris"], errors="coerce")
-        matching = bands[(minimum <= salary) & (maximum.isna() | (salary <= maximum))]
-        return matching.iloc[0]["SalaryBand_Key"] if not matching.empty else None
 
     def _has_overlap(
         self,

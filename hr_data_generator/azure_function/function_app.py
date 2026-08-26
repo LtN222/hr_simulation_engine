@@ -22,6 +22,10 @@ from src.run_simulation import run_simulation
 from src.run_simulation_incremental import run_incremental_simulation
 from src.infrastructure.database.write_to_sql import write_dataset, get_engine
 from src.infrastructure.database.schema_loader import load_schema
+from src.infrastructure.database.simulation_lock import (
+    SimulationAlreadyRunningError,
+    acquire_simulation_lock
+)
 from src.core.config_loader import ConfigLoader
 from config.runtime_config import load_runtime_config
 
@@ -68,25 +72,26 @@ def run_hr_pipeline(mode: str):
     # Simulatie uitvoeren
     # -------------------------------------------------
 
-    if mode == "full":
-        dataframes = run_simulation(engine, sector, seed)
-    else:
-        dataframes = run_incremental_simulation(engine, sector, seed)
+    with acquire_simulation_lock(engine):
+        if mode == "full":
+            dataframes = run_simulation(engine, sector, seed)
+        else:
+            dataframes = run_incremental_simulation(engine, sector, seed)
 
-    logging.info(
-        f"Simulation finished. Tables generated: {list(dataframes.keys())}"
-    )
+        logging.info(
+            f"Simulation finished. Tables generated: {list(dataframes.keys())}"
+        )
 
-    # -------------------------------------------------
-    # Dataset schrijven
-    # -------------------------------------------------
+        # -------------------------------------------------
+        # Dataset schrijven
+        # -------------------------------------------------
 
-    summary = write_dataset(
-        engine,
-        dataframes,
-        schema_config,
-        reset=(mode == "full")
-    )
+        summary = write_dataset(
+            engine,
+            dataframes,
+            schema_config,
+            reset=(mode == "full")
+        )
 
     logging.info("Dataset successfully written to SQL")
 
@@ -132,6 +137,9 @@ def generate_hr_data(req: func.HttpRequest) -> func.HttpResponse:
 
         return func.HttpResponse(message, status_code=200)
 
+    except SimulationAlreadyRunningError as exc:
+        return func.HttpResponse(str(exc), status_code=409)
+
     except Exception as e:
 
         logging.exception("HR data generation failed")
@@ -168,6 +176,9 @@ def weekly_hr_run(timer: func.TimerRequest):
             f"+{employees_added} employees, "
             f"+{employments_added} employments."
         )
+
+    except SimulationAlreadyRunningError:
+        logging.info("Weekly HR run skipped because another run is in progress")
 
     except Exception:
         logging.exception("Weekly HR job failed")

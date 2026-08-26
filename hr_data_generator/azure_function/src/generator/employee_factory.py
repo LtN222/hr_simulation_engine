@@ -1,13 +1,14 @@
 from src.generator.employee_helpers import (
     choose_hire_source,
-    choose_education,
-    choose_location
+    choose_education
 )
+from src.infrastructure.location_assignment import resolve_location
 
 from src.domain.employee import Employee
 from src.domain.person import Person
 from src.generator.person_factory import PersonFactory
 from src.generator.employment_factory import EmploymentFactory  # straks
+from src.infrastructure.shift_assignment import assign_ploegendienst_key
 
 class EmployeeFactory:
 
@@ -49,6 +50,12 @@ class EmployeeFactory:
             today=today,
             employment_start_date=employment_start_date
         )
+        job.ploegendienst_key = assign_ploegendienst_key(
+            role_row,
+            state,
+            self.config,
+            self.rng
+        )
 
         # Contract start is needed to keep the person legally employable on
         # their first day, including the historical initial population.
@@ -81,14 +88,16 @@ class EmployeeFactory:
         education_key = choose_education(
             role_name,
             self.config,
-            state["dim_education_level"],
+            state["dim_education"],
             self.rng
         )
 
-        location_key = choose_location(
-            state["dim_location"],
+        location_key = resolve_location(
+            state,
             self.config,
-            self.rng
+            self.rng,
+            department_name,
+            role_name
         )
 
         # =====================================================
