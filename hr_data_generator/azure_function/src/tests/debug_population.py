@@ -169,7 +169,7 @@ def extra_checks(state):
 
     if fact_performance is not None:
 
-        if fact_performance["Performance_Score"].between(1, 5).all():
+        if fact_performance["Prestatie_Score"].between(1, 5).all():
             print("✅ Performance scores binnen range 1–5")
         else:
             print("❌ Performance scores buiten range!")

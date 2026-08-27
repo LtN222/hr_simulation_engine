@@ -29,8 +29,8 @@ def test_initial_allocation_excludes_roles_not_staffed_at_start():
     )
 
     assert allocations == [{
-        "Department_Name": "Productie",
-        "Role_Name": "Operator",
+        "Afdeling_Naam": "Productie",
+        "Functie_Naam": "Operator",
         "count": 10,
         "remainder": 0.0,
     }]
@@ -101,8 +101,8 @@ def test_initial_allocation_includes_a_role_once_its_headcount_threshold_is_met(
         workforce_planning={"department_target_weights": {"Productie": 1}},
     )
 
-    assert "Plant Manager" not in {a["Role_Name"] for a in small if a["count"] > 0}
-    assert "Plant Manager" in {a["Role_Name"] for a in large if a["count"] > 0}
+    assert "Plant Manager" not in {a["Functie_Naam"] for a in small if a["count"] > 0}
+    assert "Plant Manager" in {a["Functie_Naam"] for a in large if a["count"] > 0}
 
 
 def test_initial_allocation_gates_department_scoped_roles_by_estimated_department_share():
@@ -126,8 +126,8 @@ def test_initial_allocation_gates_department_scoped_roles_by_estimated_departmen
     small = allocate_headcount(structure, 100, workforce_planning=planning)
     large = allocate_headcount(structure, 1000, workforce_planning=planning)
 
-    assert "COO" not in {a["Role_Name"] for a in small if a["count"] > 0}
-    assert "COO" in {a["Role_Name"] for a in large if a["count"] > 0}
+    assert "COO" not in {a["Functie_Naam"] for a in small if a["count"] > 0}
+    assert "COO" in {a["Functie_Naam"] for a in large if a["count"] > 0}
 
 
 def test_role_capacity_reads_the_configured_max_count():
@@ -170,7 +170,7 @@ def test_allocate_headcount_never_exceeds_a_roles_max_count():
 
     allocations = allocate_headcount(structure, 1000, workforce_planning=planning)
 
-    ceo_count = next(a["count"] for a in allocations if a["Role_Name"] == "CEO")
+    ceo_count = next(a["count"] for a in allocations if a["Functie_Naam"] == "CEO")
     assert ceo_count == 1
     assert sum(a["count"] for a in allocations) == 1000
 

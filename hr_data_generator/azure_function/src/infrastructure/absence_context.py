@@ -70,7 +70,7 @@ def sync_absence_satisfaction(state, config):
             performance_reviews,
             employee_key,
             episode["Startdatum"],
-            employee.get("Performance_Score", 3.4),
+            employee.get("Prestatie_Score", 3.4),
         )
         manager_key = manager_as_of(
             manager_assignments,
@@ -124,4 +124,4 @@ def _performance_as_of(reviews, employee_key, date, fallback):
     )]
     return fallback if matches.empty else matches.sort_values(
         "Review_Datum"
-    ).iloc[-1]["Performance_Score"]
+    ).iloc[-1]["Prestatie_Score"]

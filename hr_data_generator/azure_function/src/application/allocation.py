@@ -47,8 +47,8 @@ def allocate_headcount(
                 count = min(count, capacity)
 
             role_allocations.append({
-                "Department_Name": afdeling,
-                "Role_Name": functie,
+                "Afdeling_Naam": afdeling,
+                "Functie_Naam": functie,
                 "count": count,
                 "remainder": remainder,
                 "_capacity": capacity,
@@ -92,8 +92,8 @@ def allocate_headcount(
 def _role_ratio(structure, allocation, workforce_planning=None):
     return role_target_ratio(
         structure,
-        allocation["Department_Name"],
-        allocation["Role_Name"],
+        allocation["Afdeling_Naam"],
+        allocation["Functie_Naam"],
         workforce_planning,
     )
 

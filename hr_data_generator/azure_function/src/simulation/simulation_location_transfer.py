@@ -51,7 +51,7 @@ def simulate_location_transfers(state, config, schema, today, rng, event_type_ma
 
     for idx, row in active.iterrows():
         role = role_lookup.loc[row["Role_Key"]]
-        if role["Role_Name"] not in multi_site_roles:
+        if role["Functie_Naam"] not in multi_site_roles:
             continue
 
         current_site = _location_name(state, row["Location_Key"])
@@ -118,7 +118,7 @@ def _location_key(state, location_name):
     dim_location = state.get("dim_location")
     if dim_location is None or location_name is None:
         return None
-    matches = dim_location.loc[dim_location["Location_Name"] == location_name, "Location_Key"]
+    matches = dim_location.loc[dim_location["Vestiging_Naam"] == location_name, "Location_Key"]
     return matches.iloc[0] if not matches.empty else None
 
 
@@ -128,5 +128,5 @@ def _location_name(state, location_key):
     dim_location = state.get("dim_location")
     if dim_location is None:
         return None
-    matches = dim_location.loc[dim_location["Location_Key"] == location_key, "Location_Name"]
+    matches = dim_location.loc[dim_location["Location_Key"] == location_key, "Vestiging_Naam"]
     return matches.iloc[0] if not matches.empty else None

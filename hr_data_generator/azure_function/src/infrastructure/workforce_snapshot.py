@@ -70,7 +70,7 @@ def build_workforce_snapshots(
                 performance_reviews,
                 row["Employee_Key"],
                 snapshot_date,
-                employee.get("Performance_Score", 3.4)
+                employee.get("Prestatie_Score", 3.4)
             )
             performance_driver_key = _performance_driver_as_of(
                 performance_reviews, row["Employee_Key"], snapshot_date
@@ -83,7 +83,7 @@ def build_workforce_snapshots(
             compa_ratio = _compa_ratio(
                 row.get("Salaris"),
                 benchmark_fields.get("Benchmark_Salaris"),
-                row.get("Target_Compa_Ratio")
+                row.get("Streef_Compa_Ratio")
             )
             manager_key = manager_as_of(
                 manager_assignments,
@@ -146,7 +146,7 @@ def build_workforce_snapshots(
                 "Contracturen": row.get("Contracturen"),
                 "FTE": _fte(row.get("Contracturen"), config),
                 "Salaris": row.get("Salaris"),
-                "Performance_Score": performance,
+                "Prestatie_Score": performance,
                 "Aaneengesloten_Indienst_Datum": service_start,
                 "Dienstjaren": _service_years(service_start, snapshot_date),
                 "Relevante_Ervaring_Jaren": experience_as_of(row, snapshot_date),
@@ -231,7 +231,7 @@ def _performance_as_of(reviews, employee_key, snapshot_date, fallback):
     matches = reviews[(reviews["Employee_Key"] == employee_key) & (
         reviews["Review_Datum"] <= snapshot_date
     )]
-    return fallback if matches.empty else float(matches.iloc[-1]["Performance_Score"])
+    return fallback if matches.empty else float(matches.iloc[-1]["Prestatie_Score"])
 
 
 def _performance_driver_as_of(reviews, employee_key, snapshot_date):

@@ -55,19 +55,19 @@ class RecruitmentSimulator:
 
     def run(self, state, today):
         self._status_keys = self._build_reason_lookup(
-            state, "dim_recruitment_status", "Status_Name", "RecruitmentStatus_Key"
+            state, "dim_recruitment_status", "Status_Naam", "RecruitmentStatus_Key"
         )
         self._stage_keys = self._build_reason_lookup(
-            state, "dim_recruitment_stage", "Stage_Name", "Stage_Key"
+            state, "dim_recruitment_stage", "Fase_Naam", "Stage_Key"
         )
         self._decline_reason_keys = self._build_reason_lookup(
-            state, "dim_decline_reason", "DeclineReason_Name", "DeclineReason_Key"
+            state, "dim_decline_reason", "Weigeringsreden_Naam", "DeclineReason_Key"
         )
         self._rejection_reason_keys = self._build_reason_lookup(
-            state, "dim_rejection_reason", "RejectionReason_Name", "RejectionReason_Key"
+            state, "dim_rejection_reason", "Afwijzingsreden_Naam", "RejectionReason_Key"
         )
         self._hire_source_names = self._build_reason_lookup(
-            state, "dim_hire_source", "HireSource_Key", "HireSource_Name"
+            state, "dim_hire_source", "HireSource_Key", "Bron_Naam"
         )
 
         if "fact_recruitment" not in state:
@@ -226,7 +226,7 @@ class RecruitmentSimulator:
         minimum_quality = float(
             self._source_profile_by_name(source_name).get("minimum_offer_quality", 1.0)
         )
-        if float(row["Candidate_Quality"]) < minimum_quality:
+        if float(row["Kandidaat_Kwaliteit"]) < minimum_quality:
             self._finalize(
                 state, idx, self.REJECTED_STATUS, today,
                 rejection_reason=BELOW_MINIMUM_QUALITY_REASON, date_columns=["Interview_Date"],
@@ -241,7 +241,7 @@ class RecruitmentSimulator:
         days_to_decision = self.rng.randint(
             decision_cfg.get("min", 3), decision_cfg.get("max", 28)
         )
-        state["fact_recruitment"].loc[idx, "Days_To_Decision"] = days_to_decision
+        state["fact_recruitment"].loc[idx, "Dagen_Tot_Beslissing"] = days_to_decision
 
     def _resolve_offer(self, state, vacancy, today):
         pipeline = self._pipeline(state, vacancy["Vacancy_Key"])
@@ -253,7 +253,7 @@ class RecruitmentSimulator:
 
         idx = pipeline.index[0]
         row = state["fact_recruitment"].loc[idx]
-        days_to_decision = row.get("Days_To_Decision")
+        days_to_decision = row.get("Dagen_Tot_Beslissing")
         if pd.isna(days_to_decision):
             return None
         offer_date = pd.Timestamp(row["Offer_Date"])
@@ -262,7 +262,7 @@ class RecruitmentSimulator:
 
         source_name = self._hire_source_names.get(row["HireSource_Key"])
         profile = self._source_profile_by_name(source_name)
-        candidate_quality = float(row["Candidate_Quality"])
+        candidate_quality = float(row["Kandidaat_Kwaliteit"])
         decline_rate = float(profile.get("candidate_decline_rate", 0.0))
         # Strong candidates generally have more alternatives. The effect is
         # deliberately small so a good score still increases the hire chance.
@@ -286,9 +286,9 @@ class RecruitmentSimulator:
             "Role_Key": row["Role_Key"],
             "Department_Key": row["Department_Key"],
             "HireSource_Key": row["HireSource_Key"],
-            "Vacancy_Reason": row["Vacancy_Reason"],
+            "Vacature_Reden": row["Vacature_Reden"],
             "Employee_Key": row["Employee_Key"],
-            "Candidate_Quality": row["Candidate_Quality"],
+            "Kandidaat_Kwaliteit": row["Kandidaat_Kwaliteit"],
             "Education_Key": pipeline_profile.get("Education_Key"),
             "Relevante_Ervaring_Jaren": pipeline_profile.get("Relevante_Ervaring_Jaren"),
             "Is_Internal_Mobility": pd.notna(row["Employee_Key"]),
@@ -348,12 +348,12 @@ class RecruitmentSimulator:
                 "Status": self.IN_PROGRESS_STATUS,
                 "RecruitmentStatus_Key": self._status_keys.get(self.IN_PROGRESS_STATUS),
                 "Employee_Key": employee_key,
-                "Vacancy_Reason": vacancy["Vacancy_Reason"],
+                "Vacature_Reden": vacancy["Vacature_Reden"],
                 "Stage_Key": self._stage_keys.get(stage_name),
                 "Screening_Date": None,
                 "Interview_Date": today if stage_name == self.STAGE_GESPREK else None,
                 "Offer_Date": None,
-                "Days_To_Decision": None,
+                "Dagen_Tot_Beslissing": None,
                 **candidate_fields,
                 "DeclineReason_Key": None,
                 "RejectionReason_Key": None,
@@ -416,8 +416,8 @@ class RecruitmentSimulator:
             return None, None
 
         target_role = target_role.iloc[0]
-        employee_scores = employees.set_index("Employee_Key")["Performance_Score"]
-        active["Performance_Score"] = active["Employee_Key"].map(employee_scores)
+        employee_scores = employees.set_index("Employee_Key")["Prestatie_Score"]
+        active["Prestatie_Score"] = active["Employee_Key"].map(employee_scores)
         eligible = active[
             ~active["Employee_Key"].isin(reserved_internal_employees)
         ].copy()
@@ -426,14 +426,14 @@ class RecruitmentSimulator:
             lambda candidate: eligible_internal(
                 self.config, state, int(candidate["Employee_Key"]),
                 role_lookup.loc[candidate["Role_Key"]], target_role,
-                vacancy["Created_Date"], candidate["Performance_Score"],
+                vacancy["Created_Date"], candidate["Prestatie_Score"],
             ), axis=1)]
         if eligible.empty:
             return None, None
 
         # Known performance provides the main fit signal for an internal move.
         eligible["Selection_Weight"] = (
-            eligible["Performance_Score"].fillna(2.7) - 2.3
+            eligible["Prestatie_Score"].fillna(2.7) - 2.3
         ).clip(lower=0.1)
         selected_index = self.rng.choices(
             list(eligible.index),
@@ -441,7 +441,7 @@ class RecruitmentSimulator:
         )[0]
         selected = eligible.loc[selected_index]
         quality = self._clamp_quality(
-            float(selected["Performance_Score"])
+            float(selected["Prestatie_Score"])
             + self.rng.normalvariate(0.25, 0.25)
         )
         return int(selected["Employee_Key"]), quality
@@ -473,11 +473,11 @@ class RecruitmentSimulator:
         profile = self._source_profile(source)
         baseline = internal_quality
         component_columns = {
-            "Candidate_Experience_Score": "Relevante werkervaring",
-            "Candidate_Education_Relevance_Score": "Relevante opleiding",
-            "Candidate_Technical_Skills_Score": "Technische vaardigheden en kwalificaties",
-            "Candidate_Soft_Skills_Score": "Rolrelevante soft skills",
-            "Candidate_Motivation_Score": "Motivatie en voorbereiding",
+            "Kandidaat_Ervaring_Score": "Relevante werkervaring",
+            "Kandidaat_Opleiding_Relevantie_Score": "Relevante opleiding",
+            "Kandidaat_Technische_Vaardigheden_Score": "Technische vaardigheden en kwalificaties",
+            "Kandidaat_Sociale_Vaardigheden_Score": "Rolrelevante soft skills",
+            "Kandidaat_Motivatie_Score": "Motivatie en voorbereiding",
         }
         weights = self.recruitment_cfg.get("candidate_quality_weights", {})
         values = {
@@ -495,7 +495,7 @@ class RecruitmentSimulator:
         )
         return {
             **values,
-            "Candidate_Quality": self._clamp_quality(quality),
+            "Kandidaat_Kwaliteit": self._clamp_quality(quality),
             "CandidateQualityDriver_Key": self._driver_key(
                 component_columns[driver_name]
             ),
@@ -516,29 +516,29 @@ class RecruitmentSimulator:
         baseline = self._clamp_quality(self.rng.normalvariate(mean, 0.6))
 
         component_columns = {
-            "Candidate_Experience_Score": self._experience_score(
+            "Kandidaat_Ervaring_Score": self._experience_score(
                 attributes["Relevante_Ervaring_Jaren"],
                 _numeric(target_role.get("Min_Relevante_Ervaring_Jr"), 0.0),
             ),
-            "Candidate_Education_Relevance_Score": self._education_relevance_score(
+            "Kandidaat_Opleiding_Relevantie_Score": self._education_relevance_score(
                 target_role, attributes["Qualifications"]
             ),
-            "Candidate_Technical_Skills_Score": self._clamp_quality(
+            "Kandidaat_Technische_Vaardigheden_Score": self._clamp_quality(
                 baseline + self.rng.normalvariate(0, 0.45)
             ),
-            "Candidate_Soft_Skills_Score": self._clamp_quality(
+            "Kandidaat_Sociale_Vaardigheden_Score": self._clamp_quality(
                 baseline + self.rng.normalvariate(0, 0.45)
             ),
-            "Candidate_Motivation_Score": self._clamp_quality(
+            "Kandidaat_Motivatie_Score": self._clamp_quality(
                 baseline + self.rng.normalvariate(0, 0.45)
             ),
         }
         driver_labels = {
-            "Candidate_Experience_Score": "Relevante werkervaring",
-            "Candidate_Education_Relevance_Score": "Relevante opleiding",
-            "Candidate_Technical_Skills_Score": "Technische vaardigheden en kwalificaties",
-            "Candidate_Soft_Skills_Score": "Rolrelevante soft skills",
-            "Candidate_Motivation_Score": "Motivatie en voorbereiding",
+            "Kandidaat_Ervaring_Score": "Relevante werkervaring",
+            "Kandidaat_Opleiding_Relevantie_Score": "Relevante opleiding",
+            "Kandidaat_Technische_Vaardigheden_Score": "Technische vaardigheden en kwalificaties",
+            "Kandidaat_Sociale_Vaardigheden_Score": "Rolrelevante soft skills",
+            "Kandidaat_Motivatie_Score": "Motivatie en voorbereiding",
         }
         weights = self.recruitment_cfg.get("candidate_quality_weights", {})
         total_weight = sum(float(weights.get(column, 1)) for column in component_columns)
@@ -552,7 +552,7 @@ class RecruitmentSimulator:
         )
         return {
             **component_columns,
-            "Candidate_Quality": self._clamp_quality(quality),
+            "Kandidaat_Kwaliteit": self._clamp_quality(quality),
             "CandidateQualityDriver_Key": self._driver_key(
                 driver_labels[driver_name]
             ),
@@ -591,8 +591,8 @@ class RecruitmentSimulator:
             "Relevante_Ervaring_Jaren": experience,
             "Leidinggevende_Ervaring_Jaren": leadership_experience,
             "Qualifications": [{
-                "Education_Name": education_row.get("Education_Name"),
-                "Education_Level": education_row.get("Education_Level"),
+                "Opleiding_Naam": education_row.get("Opleiding_Naam"),
+                "Opleidingsniveau": education_row.get("Opleidingsniveau"),
             }],
         }
 
@@ -603,10 +603,10 @@ class RecruitmentSimulator:
 
         required_names = set(
             getattr(self.config, "role_career_paths", {})
-            .get(target_role["Role_Name"], {})
+            .get(target_role["Functie_Naam"], {})
             .get("relevante_opleidingen", [])
         )
-        matching = dim_education[dim_education["Education_Name"].isin(required_names)] \
+        matching = dim_education[dim_education["Opleiding_Naam"].isin(required_names)] \
             if required_names else dim_education.iloc[0:0]
 
         pool = (
@@ -631,7 +631,7 @@ class RecruitmentSimulator:
     def _education_relevance_score(self, target_role, qualifications):
         required_names = set(
             getattr(self.config, "role_career_paths", {})
-            .get(target_role["Role_Name"], {})
+            .get(target_role["Functie_Naam"], {})
             .get("relevante_opleidingen", [])
         )
         min_niveau = target_role.get("Min_Opleidingsniveau", "Geen")
@@ -639,10 +639,10 @@ class RecruitmentSimulator:
         min_level = LEVELS.get(min_niveau, 0)
 
         matches = [
-            q for q in qualifications if q.get("Education_Name") in required_names
+            q for q in qualifications if q.get("Opleiding_Naam") in required_names
         ]
         meets_level = any(
-            LEVELS.get(q.get("Education_Level"), 0) >= min_level for q in matches
+            LEVELS.get(q.get("Opleidingsniveau"), 0) >= min_level for q in matches
         )
         baseline = 4.3 if meets_level else (3.0 if matches else 1.6)
         return self._clamp_quality(baseline + self.rng.normalvariate(0, 0.3))
@@ -655,12 +655,12 @@ class RecruitmentSimulator:
     def _driver_key(self, name):
         drivers = getattr(self.config, "dim_candidate_quality_driver", [])
         for index, driver in enumerate(drivers, start=1):
-            if driver.get("Driver_Name") == name:
+            if driver.get("Factor_Naam") == name:
                 return driver.get("CandidateQualityDriver_Key", index)
         return None
 
     def _source_profile(self, source):
-        source_name = source.get("HireSource_Name")
+        source_name = source.get("Bron_Naam")
         return self._source_profile_by_name(source_name)
 
     def _source_profile_by_name(self, source_name):
@@ -672,12 +672,12 @@ class RecruitmentSimulator:
         flag = source.get("Is_Internal")
         if pd.notna(flag):
             return bool(flag)
-        return source.get("HireSource_Name") == "Interne mobiliteit"
+        return source.get("Bron_Naam") == "Interne mobiliteit"
 
     def _department_name(self, department_key, state):
         return state["dim_department"].loc[
             state["dim_department"]["Department_Key"] == department_key,
-            "Department_Name"
+            "Afdeling_Naam"
         ].iloc[0]
 
     @staticmethod

@@ -32,9 +32,9 @@ def choose_education(
 
     requirements = config.role_career_paths[role_name]["relevante_opleidingen"]
     candidates = dim_education[
-        (dim_education["Education_Level"] == gekozen)
-        & dim_education["Education_Name"].isin(requirements)
+        (dim_education["Opleidingsniveau"] == gekozen)
+        & dim_education["Opleiding_Naam"].isin(requirements)
     ]
     if candidates.empty:
-        candidates = dim_education[dim_education["Education_Name"].isin(requirements)]
+        candidates = dim_education[dim_education["Opleiding_Naam"].isin(requirements)]
     return rng.choice(candidates["Education_Key"].tolist())

@@ -13,13 +13,13 @@ def sync_recruitment_status_keys(state):
     if (
         recruitment.empty
         or "Status" not in recruitment.columns
-        or not {"Status_Name", "RecruitmentStatus_Key"}.issubset(
+        or not {"Status_Naam", "RecruitmentStatus_Key"}.issubset(
             statuses.columns
         )
     ):
         return state
 
-    lookup = statuses.set_index("Status_Name")["RecruitmentStatus_Key"]
+    lookup = statuses.set_index("Status_Naam")["RecruitmentStatus_Key"]
     recruitment["RecruitmentStatus_Key"] = recruitment["Status"].map(lookup)
     state["fact_recruitment"] = recruitment
     return state

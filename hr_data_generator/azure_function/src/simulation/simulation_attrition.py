@@ -71,9 +71,9 @@ class AttritionSimulator:
             employee = employee_lookup.loc[employment["Employee_Key"]]
             role = role_lookup.loc[employment["Role_Key"]]
             department = department_lookup.loc[role["Department_Key"]]
-            department_name = department["Department_Name"]
+            department_name = department["Afdeling_Naam"]
             performance = pd.to_numeric(
-                employee.get("Performance_Score"), errors="coerce"
+                employee.get("Prestatie_Score"), errors="coerce"
             )
             performance = float(performance) if pd.notna(performance) else 3.4
             satisfaction = score_employee_satisfaction(
@@ -186,7 +186,7 @@ class AttritionSimulator:
             state.setdefault("_vacancy_requests", []).append({
                 "Role_Key": employment["Role_Key"],
                 "Department_Key": role["Department_Key"],
-                "Vacancy_Reason": "Replacement",
+                "Vacature_Reden": "Vervanging",
             })
 
         state["fact_employment"] = fact_employment
@@ -212,7 +212,7 @@ class AttritionSimulator:
     @staticmethod
     def _salary_ratio(employment, role_average_salary):
         target_ratio = pd.to_numeric(
-            employment.get("Target_Compa_Ratio"), errors="coerce"
+            employment.get("Streef_Compa_Ratio"), errors="coerce"
         )
         if pd.notna(target_ratio):
             return float(target_ratio)

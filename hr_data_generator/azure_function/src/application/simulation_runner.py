@@ -68,12 +68,12 @@ class WeeklySimulationRunner:
 
         event_type_map = self._map_dimension(
             state["dim_event_type"],
-            "EventType",
+            "Gebeurtenis",
             "EventType_Key"
         )
         departure_reason_map = self._map_dimension(
             state["dim_departure_reason"],
-            "DepartureReason",
+            "Vertrekreden",
             "DepartureReason_Key"
         )
 

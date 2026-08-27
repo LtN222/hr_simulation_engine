@@ -55,7 +55,7 @@ class VacancySimulator:
 
         for request in state.get("_vacancy_requests", []):
             if (
-                request.get("Vacancy_Reason", "Replacement") == "Replacement"
+                request.get("Vacature_Reden", "Vervanging") == "Vervanging"
                 and self.rng.random() > replacement_hiring_rate
             ):
                 continue
@@ -72,7 +72,7 @@ class VacancySimulator:
                     today,
                     role_key,
                     request["Department_Key"],
-                    request.get("Vacancy_Reason", "Replacement")
+                    request.get("Vacature_Reden", "Vervanging")
                 )
             )
             vacancy_key += 1
@@ -95,7 +95,7 @@ class VacancySimulator:
             role_key = role["Role_Key"]
             department_name = self._department_name(role["Department_Key"], state)
             if not self._has_room_for_another_vacancy(
-                state, role_key, department_name, role["Role_Name"], role_counts, pending_by_role
+                state, role_key, department_name, role["Functie_Naam"], role_counts, pending_by_role
             ):
                 # The selection step already accounts for pending demand, so
                 # this should not normally trigger - kept as a safety net
@@ -107,7 +107,7 @@ class VacancySimulator:
                     today,
                     role_key,
                     role["Department_Key"],
-                    "Growth"
+                    "Groei"
                 )
             )
             vacancy_key += 1
@@ -136,7 +136,7 @@ class VacancySimulator:
                 "Closed_Date": None,
                 "Role_Key": role_key,
                 "Department_Key": department_key,
-                "Vacancy_Reason": reason,
+                "Vacature_Reden": reason,
                 "Status": "Open",
                 "Target_Start_Date": today + pd.DateOffset(days=target_days),
                 "Filled_Employee_Key": None
@@ -157,7 +157,7 @@ class VacancySimulator:
         def has_room(role_row):
             department_name = self._department_name(role_row["Department_Key"], state)
             capacity = effective_role_capacity(
-                state, self.config, department_name, role_row["Role_Name"]
+                state, self.config, department_name, role_row["Functie_Naam"]
             )
             return capacity is None or covered_count(role_row["Role_Key"]) < capacity
 
@@ -235,7 +235,7 @@ class VacancySimulator:
         """
         totals = {}
         for _, role in dim_role.iterrows():
-            department_name = role["Department_Name"]
+            department_name = role["Afdeling_Naam"]
             totals[department_name] = (
                 totals.get(department_name, 0)
                 + role_counts.get(role["Role_Key"], 0)
@@ -248,11 +248,11 @@ class VacancySimulator:
             state
         )
         department_structure = self.config.structure[department_name]
-        role_config = department_structure[role_row["Role_Name"]]
+        role_config = department_structure[role_row["Functie_Naam"]]
         staffing_rules = getattr(self.config, "staffing", {})
         flat_minimum = minimum_count_for_role(
             department_name,
-            role_row["Role_Name"],
+            role_row["Functie_Naam"],
             role_config,
             staffing_rules
         )
@@ -261,7 +261,7 @@ class VacancySimulator:
             (name, cfg) for name, cfg in department_structure.items()
             if cfg.get("leidinggevend", False)
         ]
-        if team_lead_role_name(manager_roles) != role_row["Role_Name"]:
+        if team_lead_role_name(manager_roles) != role_row["Functie_Naam"]:
             return flat_minimum
 
         # The department's team-lead role scales with its actual current
@@ -283,11 +283,11 @@ class VacancySimulator:
 
     def _non_manager_headcount_for_department(self, state, department_name, role_counts):
         dim_role = state["dim_role"]
-        department_roles = dim_role[dim_role["Department_Name"] == department_name]
+        department_roles = dim_role[dim_role["Afdeling_Naam"] == department_name]
         department_structure = self.config.structure[department_name]
         total = 0
         for _, role in department_roles.iterrows():
-            if department_structure[role["Role_Name"]].get("leidinggevend", False):
+            if department_structure[role["Functie_Naam"]].get("leidinggevend", False):
                 continue
             total += role_counts.get(role["Role_Key"], 0)
         return total
@@ -315,7 +315,7 @@ class VacancySimulator:
 
     def _role_name_for_key(self, state, role_key):
         return state["dim_role"].loc[
-            state["dim_role"]["Role_Key"] == role_key, "Role_Name"
+            state["dim_role"]["Role_Key"] == role_key, "Functie_Naam"
         ].iloc[0]
 
     def _open_vacancy_count(self, state):
@@ -326,7 +326,7 @@ class VacancySimulator:
 
     def _target_ratio_for_role(self, state, role_row, active_structure):
         department_name = self._department_name(role_row["Department_Key"], state)
-        role_name = role_row["Role_Name"]
+        role_name = role_row["Functie_Naam"]
         return role_target_ratio(
             active_structure,
             department_name,
@@ -350,7 +350,7 @@ class VacancySimulator:
 
     def _is_active_role(self, state, role_row, company_headcount, department_headcounts):
         department_name = self._department_name(role_row["Department_Key"], state)
-        role_config = self.config.structure[department_name][role_row["Role_Name"]]
+        role_config = self.config.structure[department_name][role_row["Functie_Naam"]]
         return role_is_active(
             role_config,
             company_headcount,
@@ -360,5 +360,5 @@ class VacancySimulator:
     def _department_name(self, department_key, state):
         return state["dim_department"].loc[
             state["dim_department"]["Department_Key"] == department_key,
-            "Department_Name"
+            "Afdeling_Naam"
         ].iloc[0]

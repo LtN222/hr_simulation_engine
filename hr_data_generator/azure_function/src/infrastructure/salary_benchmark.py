@@ -57,16 +57,16 @@ class SalaryBenchmarkBuilder:
                                 "Benchmark_Date": snapshot_date,
                                 "Role_Key": int(role["Role_Key"]),
                                 "SalaryScale_Key": benchmark["SalaryScale_Key"],
-                                "SalaryStep": step,
-                                "Scale_Min_Salaris": benchmark[
-                                    "Scale_Min_Salaris"
+                                "Salaris_Trede": step,
+                                "Schaal_Min_Salaris": benchmark[
+                                    "Schaal_Min_Salaris"
                                 ],
-                                "Scale_Max_Salaris": benchmark[
-                                    "Scale_Max_Salaris"
+                                "Schaal_Max_Salaris": benchmark[
+                                    "Schaal_Max_Salaris"
                                 ],
-                                "Market_P25": benchmark["Market_P25"],
-                                "Market_Median": benchmark["Market_Median"],
-                                "Market_P75": benchmark["Market_P75"],
+                                "Markt_P25": benchmark["Markt_P25"],
+                                "Markt_Mediaan": benchmark["Markt_Mediaan"],
+                                "Markt_P75": benchmark["Markt_P75"],
                                 "Benchmark_Salaris": self._step_salary(
                                     benchmark,
                                     step
@@ -95,14 +95,14 @@ class SalaryBenchmarkBuilder:
             snapshot_date,
             service_start
         )
-        step = benchmark["SalaryStep"]
+        step = benchmark["Salaris_Trede"]
         benchmark_salary = benchmark["Benchmark_Salaris"]
         difference = int(round(int(salary) - benchmark_salary))
         status = self._benchmark_status(salary, benchmark_salary)
 
         return {
             "SalaryScale_Key": benchmark["SalaryScale_Key"],
-            "SalaryStep": step,
+            "Salaris_Trede": step,
             "Benchmark_Salaris": benchmark_salary,
             "Benchmark_Verschil": difference,
             "Benchmark_Status": status
@@ -168,12 +168,12 @@ class SalaryBenchmarkBuilder:
     def _step_salary(benchmark, step):
         step_count = int(benchmark["Aantal_Treden"])
         if step_count <= 1:
-            return int(benchmark["Market_Median"])
+            return int(benchmark["Markt_Mediaan"])
 
         progress = (step - 1) / (step_count - 1)
         return int(round(
-            benchmark["Market_P25"]
-            + (benchmark["Market_P75"] - benchmark["Market_P25"]) * progress
+            benchmark["Markt_P25"]
+            + (benchmark["Markt_P75"] - benchmark["Markt_P25"]) * progress
         ))
 
     def _benchmark_status(self, salary, benchmark_salary):

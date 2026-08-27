@@ -25,12 +25,12 @@ def _config():
 def _department_lookup():
     return pd.DataFrame({
         "Department_Key": [1],
-        "Department_Name": ["Directie"],
+        "Afdeling_Naam": ["Directie"],
     }).set_index("Department_Key")
 
 
 def _target_role():
-    return pd.Series({"Role_Key": 2, "Role_Name": "CEO", "Department_Key": 1})
+    return pd.Series({"Role_Key": 2, "Functie_Naam": "CEO", "Department_Key": 1})
 
 
 def test_under_capacity_blocks_a_promotion_into_an_already_full_capped_role():

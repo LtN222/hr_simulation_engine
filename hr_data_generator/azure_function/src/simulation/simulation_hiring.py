@@ -63,7 +63,7 @@ class HiringSimulator:
                 state,
                 application["Department_Key"]
             )
-            role_name = role_row["Role_Name"]
+            role_name = role_row["Functie_Naam"]
             role_key = role_row["Role_Key"]
 
             if not self._has_capacity_for_hire(state, department_name, role_name, role_counts, role_key):
@@ -102,7 +102,7 @@ class HiringSimulator:
                     "Department_Key": role_row["Department_Key"],
                     "HireSource_Key": application["HireSource_Key"],
                     "Vacancy_Key": application["Vacancy_Key"],
-                    "Vacancy_Reason": application["Vacancy_Reason"],
+                    "Vacature_Reden": application["Vacature_Reden"],
                     "Is_Internal_Mobility": True
                 })
                 recruitment_employee_updates[application["Recruitment_Key"]] = (
@@ -132,7 +132,7 @@ class HiringSimulator:
             employee_obj.hire_source_key = application["HireSource_Key"]
             employee_obj.performance = self._initial_performance_from_candidate(
                 employee_obj.performance,
-                application.get("Candidate_Quality")
+                application.get("Kandidaat_Kwaliteit")
             )
 
             # The candidate was already screened on a specific education and
@@ -173,7 +173,7 @@ class HiringSimulator:
                         "Employee_Key": employee_obj.employee_key,
                         "Voornaam": employee_obj.person.first_name,
                         "Achternaam": employee_obj.person.last_name,
-                        "Gender": employee_obj.person.gender,
+                        "Geslacht": employee_obj.person.gender,
                         **avatar_fields(
                             self.config,
                             employee_obj.employee_key,
@@ -187,8 +187,8 @@ class HiringSimulator:
                         "Location_Key": employee_obj.location_key,
                         "Bijzondere_Aanstelling": employee_obj.bijzondere_aanstelling,
                         "Manager_Key": employee_obj.manager_key,
-                        "Performance_Score": employee_obj.performance,
-                        "Initial_Performance_Score": employee_obj.performance,
+                        "Prestatie_Score": employee_obj.performance,
+                        "Aanvangs_Prestatie_Score": employee_obj.performance,
                         "Eerste_Indienst_Datum": today,
                         "Aaneengesloten_Indienst_Datum": today,
                         "Datum_uitdienst": None,
@@ -210,7 +210,7 @@ class HiringSimulator:
                         "Location_Key": employee_obj.location_key,
                         "Shift_Key": employee_obj.job.ploegendienst_key,
                         "SalaryScale_Key": role_row["SalaryScale_Key"],
-                        "Target_Compa_Ratio": employee_obj.job.target_compa_ratio,
+                        "Streef_Compa_Ratio": employee_obj.job.target_compa_ratio,
                         "Relevante_Ervaring_Jaren_Bij_Start": relevant_experience_at_start,
                         "Startdatum": today,
                         "Einddatum": None,
@@ -234,7 +234,7 @@ class HiringSimulator:
                 "Department_Key": role_row["Department_Key"],
                 "HireSource_Key": employee_obj.hire_source_key,
                 "Vacancy_Key": application["Vacancy_Key"],
-                "Vacancy_Reason": application["Vacancy_Reason"]
+                "Vacature_Reden": application["Vacature_Reden"]
             })
             recruitment_employee_updates[application["Recruitment_Key"]] = (
                 employee_obj.employee_key
@@ -308,7 +308,7 @@ class HiringSimulator:
             "Aaneengesloten_Indienst_Datum"
         ].iloc[0]
         previous_ratio = pd.to_numeric(
-            previous.get("Target_Compa_Ratio"),
+            previous.get("Streef_Compa_Ratio"),
             errors="coerce"
         )
         if pd.isna(previous_ratio):
@@ -319,8 +319,8 @@ class HiringSimulator:
             )["Benchmark_Salaris"]
             previous_ratio = int(previous["Salaris"]) / previous_benchmark
 
-        is_promotion = target_role["Role_Name"] in self.config.role_career_paths.get(
-            previous_role["Role_Name"], {}
+        is_promotion = target_role["Functie_Naam"] in self.config.role_career_paths.get(
+            previous_role["Functie_Naam"], {}
         ).get("logische_doorgroei", [])
         target_ratio = salary_policy.clamp_ratio(
             float(previous_ratio) + (0.02 if is_promotion else 0.0)
@@ -339,8 +339,8 @@ class HiringSimulator:
             state,
             self.config,
             self.rng,
-            target_role.get("Department_Name"),
-            target_role["Role_Name"],
+            target_role.get("Afdeling_Naam"),
+            target_role["Functie_Naam"],
             preferred_location_key=previous["Location_Key"],
         )
         new_record = build_record(
@@ -360,7 +360,7 @@ class HiringSimulator:
                     self.rng
                 ),
                 "SalaryScale_Key": target_role["SalaryScale_Key"],
-                "Target_Compa_Ratio": target_ratio,
+                "Streef_Compa_Ratio": target_ratio,
                 "Relevante_Ervaring_Jaren_Bij_Start": carried_experience(
                     previous,
                     today,
@@ -388,7 +388,7 @@ class HiringSimulator:
         backfill_request = {
             "Role_Key": previous["Role_Key"],
             "Department_Key": previous_role["Department_Key"],
-            "Vacancy_Reason": "Internal mobility backfill"
+            "Vacature_Reden": "Interne doorstroom"
         }
         return new_record, backfill_request
 
@@ -420,7 +420,7 @@ class HiringSimulator:
 
         for vacancy_key, employee_key in vacancy_employee_updates.items():
             mask = vacancy["Vacancy_Key"] == vacancy_key
-            vacancy.loc[mask, "Status"] = "Closed"
+            vacancy.loc[mask, "Status"] = "Gesloten"
             vacancy.loc[mask, "Closed_Date"] = today
             vacancy.loc[mask, "Filled_Employee_Key"] = employee_key
 
@@ -446,7 +446,7 @@ class HiringSimulator:
         vacancy = state.get("fact_vacancy", pd.DataFrame())
         if not vacancy.empty:
             mask = vacancy["Vacancy_Key"] == vacancy_key
-            vacancy.loc[mask, "Status"] = "Closed"
+            vacancy.loc[mask, "Status"] = "Gesloten"
             vacancy.loc[mask, "Closed_Date"] = today
             state["fact_vacancy"] = vacancy
         self._close_out_remaining_pipeline(state, vacancy_key, today)
@@ -466,10 +466,10 @@ class HiringSimulator:
         if pipeline.empty:
             return
         rejection_reason_keys = self._reason_lookup(
-            state, "dim_rejection_reason", "RejectionReason_Name", "RejectionReason_Key"
+            state, "dim_rejection_reason", "Afwijzingsreden_Naam", "RejectionReason_Key"
         )
         status_keys = self._reason_lookup(
-            state, "dim_recruitment_status", "Status_Name", "RecruitmentStatus_Key"
+            state, "dim_recruitment_status", "Status_Naam", "RecruitmentStatus_Key"
         )
         for idx in pipeline.index:
             fact_recruitment.loc[idx, "Status"] = RecruitmentSimulator.REJECTED_STATUS
@@ -496,7 +496,7 @@ class HiringSimulator:
     def _department_name(self, state, department_key):
         return state["dim_department"].loc[
             state["dim_department"]["Department_Key"] == department_key,
-            "Department_Name"
+            "Afdeling_Naam"
         ].iloc[0]
 
 

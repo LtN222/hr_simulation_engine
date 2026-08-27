@@ -123,7 +123,7 @@ def relocate_department_group(state, config, schema, location_name, today, event
     home = state.setdefault("_home_location", {})
     location_key = _location_key(state, location_name)
 
-    moving_roles = dim_role[dim_role["Department_Name"].isin(departments)]["Role_Key"]
+    moving_roles = dim_role[dim_role["Afdeling_Naam"].isin(departments)]["Role_Key"]
     active = fact_employment[
         (fact_employment["Dienstverband_status"] == "Actief")
         & (fact_employment["Role_Key"].isin(moving_roles))
@@ -268,7 +268,7 @@ def _location_key(state, location_name):
     dim_location = state.get("dim_location")
     if dim_location is None or location_name is None:
         return None
-    matches = dim_location.loc[dim_location["Location_Name"] == location_name, "Location_Key"]
+    matches = dim_location.loc[dim_location["Vestiging_Naam"] == location_name, "Location_Key"]
     return matches.iloc[0] if not matches.empty else None
 
 
@@ -278,7 +278,7 @@ def _location_name(state, location_key):
     dim_location = state.get("dim_location")
     if dim_location is None:
         return None
-    matches = dim_location.loc[dim_location["Location_Key"] == location_key, "Location_Name"]
+    matches = dim_location.loc[dim_location["Location_Key"] == location_key, "Vestiging_Naam"]
     return matches.iloc[0] if not matches.empty else None
 
 
@@ -310,7 +310,7 @@ def _department_headcount(state, department_name):
     if active.empty or dim_role is None or "Role_Key" not in active.columns:
         return 0
     department_roles = dim_role.loc[
-        dim_role["Department_Name"] == department_name, "Role_Key"
+        dim_role["Afdeling_Naam"] == department_name, "Role_Key"
     ]
     return int(active["Role_Key"].isin(department_roles).sum())
 
@@ -320,12 +320,12 @@ def _non_manager_department_headcount(state, config, department_name):
     dim_role = state.get("dim_role")
     if active.empty or dim_role is None or "Role_Key" not in active.columns:
         return 0
-    department_roles = dim_role[dim_role["Department_Name"] == department_name]
+    department_roles = dim_role[dim_role["Afdeling_Naam"] == department_name]
     non_manager_role_keys = [
         role["Role_Key"]
         for _, role in department_roles.iterrows()
         if not config.structure.get(department_name, {})
-        .get(role["Role_Name"], {})
+        .get(role["Functie_Naam"], {})
         .get("leidinggevend", False)
     ]
     return int(active["Role_Key"].isin(non_manager_role_keys).sum())

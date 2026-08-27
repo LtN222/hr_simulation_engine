@@ -108,8 +108,8 @@ class SatisfactionModel:
         """Resolve the explanation to the configuration-owned dimension key."""
         if drivers is None or drivers.empty or explanation is None:
             return None
-        matches = drivers[(drivers["Driver_Name"] == explanation.driver_name) & (
-            drivers["Direction"] == explanation.driver_direction
+        matches = drivers[(drivers["Factor_Naam"] == explanation.driver_name) & (
+            drivers["Richting"] == explanation.driver_direction
         )]
         return (
             int(matches.iloc[0]["SatisfactionDriver_Key"])
@@ -273,9 +273,9 @@ def explain_employee_satisfaction(
         else None
     )
     if performance_score is None:
-        performance_score = employee.get("Performance_Score", 3.4)
+        performance_score = employee.get("Prestatie_Score", 3.4)
     if compa_ratio is None:
-        compa_ratio = employment.get("Target_Compa_Ratio")
+        compa_ratio = employment.get("Streef_Compa_Ratio")
     if manager_key is None:
         manager_key = employee.get("Manager_Key")
     department_name = _department_name(state, employment.get("Role_Key"))
@@ -358,23 +358,23 @@ def _compute_career_momentum(state, employee_key, as_of_date, performance_score,
 
     event_types = state.get("dim_event_type", pd.DataFrame())
     event_lookup = (
-        event_types.set_index("EventType_Key")["EventType"].to_dict()
+        event_types.set_index("EventType_Key")["Gebeurtenis"].to_dict()
         if not event_types.empty else {}
     )
-    history["EventType"] = history.get(
+    history["Gebeurtenis"] = history.get(
         "EventType_Key", pd.Series(index=history.index, dtype="object")
     ).map(event_lookup)
     momentum = settings.get("career_momentum", {})
     months = max(1, int(momentum.get("momentum_months", 12)))
-    moves = history[history["EventType"].isin(["Promotie", "Transfer"])]
+    moves = history[history["Gebeurtenis"].isin(["Promotie", "Transfer"])]
     if not moves.empty:
         move = moves.sort_values("Startdatum").iloc[-1]
         elapsed = max(0.0, (as_of_date - move["Startdatum"]).days / 30.4375)
         if elapsed <= months:
             maximum = float(momentum.get(
-                "promotion_max_effect" if move["EventType"] == "Promotie"
+                "promotion_max_effect" if move["Gebeurtenis"] == "Promotie"
                 else "transfer_max_effect",
-                0.18 if move["EventType"] == "Promotie" else 0.08,
+                0.18 if move["Gebeurtenis"] == "Promotie" else 0.08,
             ))
             return maximum * (1 - elapsed / months)
 
@@ -398,7 +398,7 @@ def _department_name(state, role_key):
     department = departments.loc[
         departments["Department_Key"] == role.iloc[0]["Department_Key"]
     ]
-    return None if department.empty else department.iloc[0].get("Department_Name")
+    return None if department.empty else department.iloc[0].get("Afdeling_Naam")
 
 
 def _interpolate(value, left_x, right_x, left_y, right_y):

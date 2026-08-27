@@ -333,68 +333,153 @@ pages - not needed on either of these two.)
   recruitment/mobility eligibility rules. `CLAUDE.md` has interim working
   notes, but the canonical docs are stale on this area.
 
-## Data model: English-only cleanup
+## Data model: Dutch/English naming convention
 
-The SQL/reporting model mixes English structural names with Dutch
-business-domain names. At minimum, everything below needs an English name
-before the model can be called consistently English; each rename also needs
-its producer code, consumer code (tests, enrichment steps) and Power BI
-model/measures checked.
+**The intended convention (clarified; this reverses the earlier framing of
+this section).** Table names and every key column (surrogate PK/FK, used
+only for joins/identity) are English - structural/technical identifiers.
+Every business-content column - anything likely to appear in a Power BI
+visualization, KPI card, axis label or slicer, or that a future LLM feature
+would need to read or reason about - should be Dutch, since the intended end
+users think and prompt in Dutch and an LLM feature should never have to
+switch languages between a Dutch prompt and the schema's business
+vocabulary. Several tables added later in the project drifted from this
+(built with English business-content columns); those are the drift to fix,
+not the target style. Date columns are exempt across the board - they join
+to the Power BI `dim_date` table and don't need to be in Dutch for that.
+Also exempt/left as-is by explicit decision: boolean business flags
+(`Is_Internal`, `Is_Final`, `Counts_As_Hire`, `Recordable`, `Is_Shift_Work`),
+`Status` fields (identical loanword in Dutch), `FTE` (used unchanged in
+Dutch HR contexts), `Sort_Order` (pure UI/display metadata, not itself shown
+as a data point), and `Avatar_FileName`/`Avatar_URL` (technical asset
+references).
 
-**Table names (2 found, both renamed):**
-- ✅ `dim_ploegendienst` → `dim_shift` (columns `Ploegendienst_Key` →
-  `Shift_Key`, `Ploegendienst_Name` → `Shift_Name`, `Is_Ploegendienst` →
-  `Is_Shift_Work`) — shift/roster pattern dimension. All FK references
-  (`fact_employment`, `fact_absence`, `fact_safety_incident`,
-  `fact_workforce_snapshot`) updated; the old table is dropped automatically
-  via `_drop_obsolete_tables` on the next run. Function/parameter names tied
-  to the config-value concept (`assign_ploegendienst_key`,
-  `ploegendienst_multipliers`, `ploegendienst_assignment`,
-  `dim_role.Ploegendienst_Flag`, the per-role `"ploegendienst"` config flag)
-  were intentionally left as-is - this pass only renamed the structural
-  table/key identifiers.
-- ✅ `dim_reden_vertrek` → `dim_departure_reason` (columns
-  `RedenVertrek_Key` → `DepartureReason_Key`, `RedenVertrek` →
-  `DepartureReason`, `Categorie` → `Category`) — departure-reason dimension.
-  Same FK/drop/scope treatment as above.
+The two Dutch table names (`dim_ploegendienst`, `dim_reden_vertrek`) were
+already renamed to English structural names (`dim_shift`,
+`dim_departure_reason`) in an earlier pass - see the fact-table migration
+note below for why that stays even though this section is about the
+opposite direction for columns.
 
-**Column names (Dutch, by table):**
-- `dim_role`: `Leidinggevend`, `Salaris_min`, `Salaris_max`,
-  `Ploegendienst_Flag`, `Relevante_Opleidingen`, `Logische_Doorgroei`,
-  `Laterale_Transfers`, `Min_Relevante_Ervaring_Jr`,
-  `Formele_Kwalificatie_Vereist`, `Min_Opleidingsniveau`,
-  `Min_Leidinggevende_Ervaring_Jr`.
-- `dim_manager`: `Voornaam`, `Achternaam`.
-- `dim_absence_type`: `Telt_als_verzuim`.
-- `dim_salary_band`: `Minimum_Salaris`, `Maximum_Salaris`.
-- `dim_salary_scale`: `Minimum_Salaris`, `Maximum_Salaris`, `Aantal_Treden`.
-- `dim_employee`: `Voornaam`, `Achternaam`, `Geboortedatum`, `Land`,
-  `Bijzondere_Aanstelling`, `Eerste_Indienst_Datum`,
-  `Aaneengesloten_Indienst_Datum`, `Datum_uitdienst`, `In_Dienst`.
-- `fact_employee_qualification`: `Behaald_Datum`,
-  `Verkregen_Tijdens_Dienstverband`.
-- `fact_employment`: `Relevante_Ervaring_Jaren_Bij_Start`, `Startdatum`,
-  `Einddatum`, `Dienstverband_status`, `Salaris`, `Contracttype`,
-  `Contracturen`, `Contract_einddatum`, `Contract_ronde`,
-  `Tevredenheid_Score_Bij_Uitdienst`, `Betrokkenheid_Score_Bij_Uitdienst`
-  (plus the `RedenVertrek_Key` foreign key, which inherits the dimension's
-  Dutch name).
-- `fact_absence`: `Salaris_bij_aanvang`, `Tevredenheid_Score_Bij_Aanvang`,
-  `Startdatum`, `Einddatum`, `Duur_dagen`, `Afwezigheid_Werkdagen`,
-  `Afwezigheid_Uren`, `Verzuim_Werkdagen`, `Verzuim_Uren`.
-- `fact_workforce_snapshot`: `Contracttype`, `Contracturen`, `Salaris`,
-  `Aaneengesloten_Indienst_Datum`, `Dienstjaren`, `Relevante_Ervaring_Jaren`,
-  `Tevredenheid_Score`, `Betrokkenheid_Score`, `Beschikbare_Werkdagen`,
-  `Beschikbare_Uren`, `Afwezige_Dagen`, `Verzuim_Dagen`,
-  `Afwezigheid_Werkdagen`, `Verzuim_Werkdagen`, `Afwezigheid_Uren`,
-  `Verzuim_Uren`, `Aantal_Afwezigheid_Episodes`, `Aantal_Verzuimgevallen`,
-  `Benchmark_Salaris`, `Benchmark_Verschil`.
-- `fact_manager_assignment`: `Startdatum`, `Einddatum`.
-- `fact_salary_benchmark`: `Scale_Min_Salaris`, `Scale_Max_Salaris`,
-  `Benchmark_Salaris`.
-- `fact_performance_review`: `Review_Datum`.
+**✅ Fact tables (done).** Producer/consumer code, the schema and
+`maakindustrie.json`'s `recruitment.candidate_quality_weights` keys were
+updated together; full test suite green (142 passed) plus a direct
+`SalaryPolicy`/`SalaryBenchmarkBuilder` smoke check. Renamed:
+- `fact_employment.Target_Compa_Ratio` → `Streef_Compa_Ratio`.
+- `fact_safety_incident.Lost_Workdays` → `Verloren_Werkdagen`.
+- `fact_vacancy.Vacancy_Reason` → `Vacature_Reden`.
+- `fact_recruitment.Vacancy_Reason` → `Vacature_Reden`;
+  `Candidate_Quality` → `Kandidaat_Kwaliteit`; `Candidate_Experience_Score`
+  → `Kandidaat_Ervaring_Score`; `Candidate_Education_Relevance_Score` →
+  `Kandidaat_Opleiding_Relevantie_Score`; `Candidate_Technical_Skills_Score`
+  → `Kandidaat_Technische_Vaardigheden_Score`; `Candidate_Soft_Skills_Score`
+  → `Kandidaat_Sociale_Vaardigheden_Score`; `Candidate_Motivation_Score` →
+  `Kandidaat_Motivatie_Score`; `Days_To_Decision` → `Dagen_Tot_Beslissing`.
+  Date columns (`Application_Date`, `Decision_Date`, `Screening_Date`,
+  `Interview_Date`, `Offer_Date`) left as-is per the date exemption.
+- `fact_workforce_snapshot.Performance_Score` → `Prestatie_Score`;
+  `SalaryStep` → `Salaris_Trede`.
+- `fact_salary_benchmark.SalaryStep` → `Salaris_Trede`;
+  `Scale_Min_Salaris` → `Schaal_Min_Salaris`; `Scale_Max_Salaris` →
+  `Schaal_Max_Salaris`; `Market_P25` → `Markt_P25`; `Market_Median` →
+  `Markt_Mediaan`; `Market_P75` → `Markt_P75`. `Benchmark_Date` left as-is
+  (date exemption).
+- `fact_performance_review.Performance_Score` → `Prestatie_Score`.
+  `Review_Datum` left as-is (date exemption).
 
-This is a cross-cutting rename (schema + every producer + every consumer +
-the Power BI model and its documented relationships/measures in
-`README.md`), not a one-file edit — treat it as its own coherent migration
-rather than a batch of independent column renames.
+Note the resulting asymmetry is intentional and temporary:
+`dim_employee.Performance_Score`/`Initial_Performance_Score` were
+deliberately **not** touched in this pass (dims are the second phase, done
+separately so a Power BI fix-up doesn't have to happen all at once) - the
+fact-side columns feeding from them (`fact_workforce_snapshot`,
+`fact_performance_review`) are now `Prestatie_Score` while the dim-side
+source stays `Performance_Score` until that second phase lands.
+
+**✅ Fact-table stored values (done, separate follow-up pass).** Column
+names are not the only thing that can be English - a column can have a
+correctly-Dutch name while the literal values stored in it are still
+English. Checked every fact table's free-text columns (dates/numbers/keys
+excluded - nothing to check there) against their producer code; two
+columns held English values:
+- `fact_vacancy.Status`: `"Closed"` → `"Gesloten"` (`"Open"` unchanged - the
+  same word in Dutch).
+- `fact_vacancy.Vacature_Reden` and `fact_recruitment.Vacature_Reden` (same
+  shared concept and values): `"Replacement"` → `"Vervanging"`, `"Growth"`
+  → `"Groei"`, `"Internal mobility backfill"` → `"Interne doorstroom"`.
+
+`fact_recruitment.Status` (`"Aangenomen"`/`"Afgewezen"`/`"Geweigerd"`/`"In
+behandeling"`), `fact_employment.Dienstverband_status`/`Contracttype`, and
+`fact_workforce_snapshot.Benchmark_Status` were already Dutch - confirmed,
+not changed. Full test suite green (142 passed) after this pass too.
+
+**Bug found and fixed after this pass**: a full run surfaced
+`KeyError: 'Performance_Score'` in
+`src/infrastructure/absence_context.py::_performance_as_of` -
+`sync_absence_satisfaction`'s per-episode performance lookup still read
+`fact_performance_review`'s old column name; it now reads `Prestatie_Score`.
+This file had shown up in the original discovery grep for the
+`fact_performance_review.Performance_Score` rename but was missed when the
+rest of that rename's call sites were fixed, since it isn't exercised by the
+unit suite's mocked-state fixtures (only a fuller run reaches this
+`fact_performance_review`-populated path). Re-verified with a direct
+reproduction of the exact code path (a non-empty performance-review match)
+plus a full grep sweep of every remaining `Performance_Score` reference in
+`src/` - all others confirmed to genuinely read `dim_employee`'s
+still-English column, not the renamed fact column.
+
+**✅ Dim tables (done).** Every business-content column below was renamed
+to Dutch; keys/table names stayed English, and the boolean flags
+(`Is_Shift_Work`, `Recordable`) were left English per the flag exemption
+rather than folded in automatically. For the generic config-driven
+dimensions (list-of-dicts shape, e.g. `dim_hire_source`,
+`dim_recruitment_status`), `maakindustrie.json`'s own field names had to be
+renamed to match, since the generic `generate_dimensions()` factory maps
+config fields to schema columns by exact name - a silent-blank-data risk if
+missed, not just a crash. For the bespoke-built ones (`dim_department`,
+`dim_role`, `dim_departure_reason`) only the builder function's output and
+its consumers changed; the config's own internal shape was untouched:
+- `dim_department`: `Department_Name` → `Afdeling_Naam`.
+- `dim_role`: `Department_Name` (denormalized copy) → `Afdeling_Naam`;
+  `Role_Name` → `Functie_Naam`.
+- `dim_location`: `Location_Name` → `Vestiging_Naam`.
+- `dim_hire_source`: `HireSource_Name` → `Bron_Naam`; `Source_Group` →
+  `Bron_Groep`; `Source_Description` → `Bron_Omschrijving`.
+- `dim_recruitment_status`: `Status_Name` → `Status_Naam`; `Status_Verbose`
+  → `Status_Omschrijving`; `Status_Group` → `Status_Groep`.
+- `dim_recruitment_stage`: `Stage_Name` → `Fase_Naam`.
+- `dim_decline_reason`: `DeclineReason_Name` → `Weigeringsreden_Naam`;
+  `Category` → `Categorie`.
+- `dim_rejection_reason`: `RejectionReason_Name` → `Afwijzingsreden_Naam`;
+  `Category` → `Categorie`.
+- `dim_education`: `Education_Name` → `Opleiding_Naam`; `Education_Level` →
+  `Opleidingsniveau`; `Education_Direction` → `Opleidingsrichting`.
+- `dim_absence_type`: `AbsenceType_Name` → `Verzuim_Type_Naam`.
+- `dim_satisfaction_band`: `SatisfactionBand_Name` →
+  `Tevredenheidsband_Naam`.
+- `dim_satisfaction_driver`: `Driver_Name` → `Factor_Naam`; `Direction` →
+  `Richting`.
+- `dim_engagement_band`: `EngagementBand_Name` → `Betrokkenheidsband_Naam`.
+- `dim_performance_driver`, `dim_engagement_driver`,
+  `dim_candidate_quality_driver`: `Driver_Name` → `Factor_Naam` (all three).
+- `dim_salary_band`: `SalaryBand_Name` → `Salarisband_Naam`.
+- `dim_salary_scale`: `SalaryScale_Code` → `Salarisschaal_Code`;
+  `SalaryScale_Name` → `Salarisschaal_Naam`.
+- `dim_shift`: `Shift_Name` → `Ploegendienst_Naam` (`Is_Shift_Work` stays -
+  flag exemption).
+- `dim_incident_type`: `IncidentType_Name` → `Incidenttype_Naam`
+  (`Recordable` stays - flag exemption).
+- `dim_employee`: `Gender` → `Geslacht`; `Performance_Score` →
+  `Prestatie_Score`; `Initial_Performance_Score` →
+  `Aanvangs_Prestatie_Score` (this also resolves the temporary asymmetry
+  noted in the fact-table section above - the dim and fact sides now share
+  the same Dutch name).
+- `dim_departure_reason`: `DepartureReason` → `Vertrekreden`; `Category` →
+  `Categorie`.
+- `dim_event_type`: `EventType` → `Gebeurtenis`.
+
+Verified via the full test suite (142 passed) plus an in-memory,
+SQL-free 60-simulated-week run through the real production pipeline
+(`WorkforceGenerator` → weekly simulation → `sync_absence_satisfaction` →
+`build_workforce_snapshots`, the same code path that surfaced the
+fact-table rename's `absence_context.py` bug) - every dim table's actual
+generated columns were inspected directly and matched the renamed set
+exactly, with no stale/blank columns.

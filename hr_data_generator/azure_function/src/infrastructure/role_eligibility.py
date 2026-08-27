@@ -26,23 +26,23 @@ def _credential_rows(credentials):
 
 
 def _matching_credentials(config, target_role, credentials):
-    required = set(_role_requirements(config, target_role["Role_Name"])
+    required = set(_role_requirements(config, target_role["Functie_Naam"])
                    .get("relevante_opleidingen", []))
     return [
         credential for credential in _credential_rows(credentials)
-        if credential.get("Education_Name") in required
+        if credential.get("Opleiding_Naam") in required
     ]
 
 
 def _required_relevant_experience(config, target_role, credentials):
     """Apply the configured experience requirement, including the WO senior rule."""
     required = float(_value(target_role, "Min_Relevante_Ervaring_Jr", 0.0))
-    if not str(_value(target_role, "Role_Name", "")).startswith("Senior "):
+    if not str(_value(target_role, "Functie_Naam", "")).startswith("Senior "):
         return required
 
     matches = _matching_credentials(config, target_role, credentials)
     has_relevant_wo = any(
-        LEVELS.get(credential.get("Education_Level"), 0) >= LEVELS["WO"]
+        LEVELS.get(credential.get("Opleidingsniveau"), 0) >= LEVELS["WO"]
         for credential in matches
     )
     return min(required, 2.0) if has_relevant_wo else required
@@ -61,7 +61,7 @@ def external_rejection_reason(config, target_role, candidate_profile):
     matches = _matching_credentials(config, target_role, credentials)
     min_level = LEVELS.get(_value(target_role, "Min_Opleidingsniveau", "Geen"), 0)
     has_required_qualification = any(
-        LEVELS.get(credential.get("Education_Level"), 0) >= min_level
+        LEVELS.get(credential.get("Opleidingsniveau"), 0) >= min_level
         for credential in matches
     )
     formal_required = bool(_value(
@@ -106,27 +106,27 @@ def credentials_for(state, employee_key, date):
     rows = state.get("fact_employee_qualification", pd.DataFrame())
     if rows.empty: return set()
     rows = rows[(rows.Employee_Key == employee_key) & (pd.to_datetime(rows.Behaald_Datum) <= pd.Timestamp(date))]
-    lookup = state["dim_education"].set_index("Education_Key")["Education_Name"]
+    lookup = state["dim_education"].set_index("Education_Key")["Opleiding_Naam"]
     return set(rows.Education_Key.map(lookup).dropna())
 
 def relevant_experience(state, employee_key, target_role, date, config=None):
     history = employment_history_for(state, employee_key)
     roles = state["dim_role"].set_index("Role_Key")
-    target = target_role["Role_Name"]
+    target = target_role["Functie_Naam"]
     allowed = {target}
     for source, cfg in (getattr(config, "role_career_paths", {}) if config else {}).items():
         if target in cfg.get("logische_doorgroei", []) or target in cfg.get("laterale_transfers", []): allowed.add(source)
     total=0.0
     for _, row in history.iterrows():
-        if roles.loc[row.Role_Key, "Role_Name"] not in allowed: continue
+        if roles.loc[row.Role_Key, "Functie_Naam"] not in allowed: continue
         end=pd.Timestamp(row.Einddatum) if pd.notna(row.Einddatum) else pd.Timestamp(date)
         start=pd.Timestamp(row.Startdatum)
         total += max(0,(min(end,pd.Timestamp(date))-start).days/365.2425)
     return total
 
 def eligible_internal(config, state, employee_key, source_role, target_role, date, performance=3.0):
-    target_name=target_role["Role_Name"]
-    kind=movement_type(config, source_role["Role_Name"], target_name)
+    target_name=target_role["Functie_Naam"]
+    kind=movement_type(config, source_role["Functie_Naam"], target_name)
     if not kind or performance < 2.7: return False
     if kind == "Transfer" and source_role.SalaryScale_Key != target_role.SalaryScale_Key: return False
     exp=relevant_experience(state,employee_key,target_role,date,config)

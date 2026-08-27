@@ -96,7 +96,7 @@ def _build_employee_role_context(
         for column in [
             "Role_Key",
             "Department_Key",
-            "Role_Name",
+            "Functie_Naam",
             "Leidinggevend",
             "Salaris_min",
             "Salaris_max"

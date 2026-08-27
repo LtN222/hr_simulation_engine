@@ -59,7 +59,7 @@ def test_close_vacancy_without_hire_closes_it_with_no_filled_employee():
 
     vacancy = state["fact_vacancy"]
     closed = vacancy.loc[vacancy["Vacancy_Key"] == 1].iloc[0]
-    assert closed["Status"] == "Closed"
+    assert closed["Status"] == "Gesloten"
     assert closed["Closed_Date"] == pd.Timestamp("2024-01-01")
     still_open = vacancy.loc[vacancy["Vacancy_Key"] == 2].iloc[0]
     assert still_open["Status"] == "Open"
@@ -87,11 +87,11 @@ def test_close_vacancy_without_hire_also_closes_out_the_rest_of_the_pipeline():
             "RejectionReason_Key": [None, None, None],
         }),
         "dim_rejection_reason": pd.DataFrame({
-            "RejectionReason_Name": [NOT_SELECTED_REASON],
+            "Afwijzingsreden_Naam": [NOT_SELECTED_REASON],
             "RejectionReason_Key": [5],
         }),
         "dim_recruitment_status": pd.DataFrame({
-            "Status_Name": ["Afgewezen"],
+            "Status_Naam": ["Afgewezen"],
             "RecruitmentStatus_Key": [2],
         }),
     }

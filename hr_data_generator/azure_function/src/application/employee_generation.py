@@ -40,7 +40,7 @@ def _generate_employee_records(
 
     event_type_map = dict(
         zip(
-            dim_event_type["EventType"],
+            dim_event_type["Gebeurtenis"],
             dim_event_type["EventType_Key"]
         )
     )
@@ -57,10 +57,10 @@ def _generate_employee_records(
     for allocation in role_allocations:
 
         role_row = dim_role.loc[
-            dim_role["Role_Name"] == allocation["Role_Name"]
+            dim_role["Functie_Naam"] == allocation["Functie_Naam"]
         ].iloc[0]
 
-        role_name = role_row["Role_Name"]
+        role_name = role_row["Functie_Naam"]
 
         for _ in range(allocation["count"]):
 
@@ -68,7 +68,7 @@ def _generate_employee_records(
                 emp_key=emp_key,
                 role_row=role_row,
                 role_name=role_name,
-                department_name=allocation["Department_Name"],
+                department_name=allocation["Afdeling_Naam"],
                 today=today,
                 state=state
             )
@@ -82,7 +82,7 @@ def _generate_employee_records(
                         "Employee_Key": employee_obj.employee_key,
                         "Voornaam": employee_obj.person.first_name,
                         "Achternaam": employee_obj.person.last_name,
-                        "Gender": employee_obj.person.gender,
+                        "Geslacht": employee_obj.person.gender,
                         **avatar_fields(
                             config,
                             employee_obj.employee_key,
@@ -96,8 +96,8 @@ def _generate_employee_records(
                         "Location_Key": employee_obj.location_key,
                         "Bijzondere_Aanstelling": employee_obj.bijzondere_aanstelling,
                         "Manager_Key": employee_obj.manager_key,
-                        "Performance_Score": employee_obj.performance,
-                        "Initial_Performance_Score": employee_obj.performance,
+                        "Prestatie_Score": employee_obj.performance,
+                        "Aanvangs_Prestatie_Score": employee_obj.performance,
                         "Eerste_Indienst_Datum": employee_obj.contract.start_date,
                         "Aaneengesloten_Indienst_Datum": employee_obj.contract.start_date,
                         "Datum_uitdienst": None,
@@ -120,7 +120,7 @@ def _generate_employee_records(
                         "Location_Key": employee_obj.location_key,
                         "Shift_Key": employee_obj.job.ploegendienst_key,
                         "SalaryScale_Key": role_row["SalaryScale_Key"],
-                        "Target_Compa_Ratio": employee_obj.job.target_compa_ratio,
+                        "Streef_Compa_Ratio": employee_obj.job.target_compa_ratio,
                         "Relevante_Ervaring_Jaren_Bij_Start": initial_relevant_experience(
                             employee_obj.person.birth_date,
                             employee_obj.contract.start_date,
