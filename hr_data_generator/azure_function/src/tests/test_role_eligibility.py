@@ -9,7 +9,7 @@ def _config(role_career_paths=None):
 
 def _role(**overrides):
     base = {
-        "Role_Name": "Monteur",
+        "Functie_Naam": "Monteur",
         "Min_Relevante_Ervaring_Jr": 3.0,
         "Formele_Kwalificatie_Vereist": False,
         "Min_Opleidingsniveau": "Geen",

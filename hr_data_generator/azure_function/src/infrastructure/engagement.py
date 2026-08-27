@@ -172,7 +172,7 @@ def score_employee_engagement(
     if pd.isna(employee_key):
         employee_key = employment.get("Employee_Key")
     if compa_ratio is None:
-        compa_ratio = employment.get("Target_Compa_Ratio")
+        compa_ratio = employment.get("Streef_Compa_Ratio")
     if manager_key is None:
         manager_key = employee.get("Manager_Key")
     department_name = _department_name(state, employment.get("Role_Key"))
@@ -271,24 +271,24 @@ def _compute_career_momentum(
 
     event_types = state.get("dim_event_type", pd.DataFrame())
     event_lookup = (
-        event_types.set_index("EventType_Key")["EventType"].to_dict()
+        event_types.set_index("EventType_Key")["Gebeurtenis"].to_dict()
         if not event_types.empty else {}
     )
     event_keys = history.get(
         "EventType_Key",
         pd.Series(index=history.index, dtype="object"),
     )
-    history["EventType"] = event_keys.map(event_lookup)
+    history["Gebeurtenis"] = event_keys.map(event_lookup)
     momentum_cfg = (engagement_settings or {}).get("career_momentum", {})
     months = max(1, int(momentum_cfg.get("momentum_months", 12)))
     promotion_effect = float(momentum_cfg.get("promotion_max_effect", 0.35))
     transfer_effect = float(momentum_cfg.get("transfer_max_effect", 0.15))
-    latest_move = history[history["EventType"].isin(["Promotie", "Transfer"])]
+    latest_move = history[history["Gebeurtenis"].isin(["Promotie", "Transfer"])]
     if not latest_move.empty:
         move = latest_move.sort_values("Startdatum").iloc[-1]
         elapsed_months = max(0.0, (date - move["Startdatum"]).days / 30.4375)
         if elapsed_months <= months:
-            effect = promotion_effect if move["EventType"] == "Promotie" else transfer_effect
+            effect = promotion_effect if move["Gebeurtenis"] == "Promotie" else transfer_effect
             return effect * (1 - elapsed_months / months)
 
     performance = pd.to_numeric(performance_score, errors="coerce")

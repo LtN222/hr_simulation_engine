@@ -184,7 +184,7 @@ def ensure_employee_avatars(state, config):
         ):
             continue
 
-        avatar = assigner.assign(employee["Employee_Key"], employee.get("Gender"))
+        avatar = assigner.assign(employee["Employee_Key"], employee.get("Geslacht"))
         employees.at[index, "Avatar_FileName"] = avatar.file_name
         employees.at[index, "Avatar_URL"] = avatar.url
 

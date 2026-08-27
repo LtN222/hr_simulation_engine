@@ -66,11 +66,11 @@ def _config(**overrides):
 def _dim_role():
     return pd.DataFrame({
         "Role_Key": [1, 2, 3, 4, 5],
-        "Role_Name": [
+        "Functie_Naam": [
             "Operator", "Plant Manager", "Magazijnmedewerker",
             "Financieel Medewerker", "HR Medewerker",
         ],
-        "Department_Name": [
+        "Afdeling_Naam": [
             "Productie", "Productie", "Logistiek", "Finance", "HR",
         ],
         "Department_Key": [1, 1, 2, 3, 4],
@@ -80,7 +80,7 @@ def _dim_role():
 def _dim_location():
     return pd.DataFrame({
         "Location_Key": [1, 2, 3, 4],
-        "Location_Name": ["Fabriek Noord", "Fabriek Zuid", "DC", "Hoofdkantoor"],
+        "Vestiging_Naam": ["Fabriek Noord", "Fabriek Zuid", "DC", "Hoofdkantoor"],
     })
 
 
@@ -288,8 +288,8 @@ def test_effective_role_capacity_scales_the_team_lead_role_with_non_manager_head
     state = {
         "dim_role": pd.DataFrame({
             "Role_Key": [1, 2, 3],
-            "Role_Name": ["Operator", "Teamleider", "Plant Manager"],
-            "Department_Name": ["Productie", "Productie", "Productie"],
+            "Functie_Naam": ["Operator", "Teamleider", "Plant Manager"],
+            "Afdeling_Naam": ["Productie", "Productie", "Productie"],
             "Department_Key": [1, 1, 1],
         }),
         "fact_employment": pd.DataFrame(
@@ -316,8 +316,8 @@ def test_effective_role_capacity_caps_the_team_lead_role_at_zero_with_no_staff_y
     state = {
         "dim_role": pd.DataFrame({
             "Role_Key": [1, 2],
-            "Role_Name": ["Operator", "Teamleider"],
-            "Department_Name": ["Productie", "Productie"],
+            "Functie_Naam": ["Operator", "Teamleider"],
+            "Afdeling_Naam": ["Productie", "Productie"],
             "Department_Key": [1, 1],
         }),
         "fact_employment": pd.DataFrame(),

@@ -62,8 +62,8 @@ def simulate_career_events(
         employee_key = int(row["Employee_Key"])
         role = role_lookup.loc[row["Role_Key"]]
         department_key = role["Department_Key"]
-        department_name = department_lookup.loc[department_key, "Department_Name"]
-        performance = employee_lookup.loc[employee_key, "Performance_Score"]
+        department_name = department_lookup.loc[department_key, "Afdeling_Naam"]
+        performance = employee_lookup.loc[employee_key, "Prestatie_Score"]
         service_start = employee_lookup.loc[
             employee_key,
             "Aaneengesloten_Indienst_Datum"
@@ -79,9 +79,9 @@ def simulate_career_events(
         promotion_probability = (promotion_rate / 52) * _performance_factor(performance)
         if rng.random() < promotion_probability:
             target_names = config.role_career_paths.get(
-                role["Role_Name"], {}
+                role["Functie_Naam"], {}
             ).get("logische_doorgroei", [])
-            candidates = dim_role[dim_role["Role_Name"].isin(target_names)]
+            candidates = dim_role[dim_role["Functie_Naam"].isin(target_names)]
             candidates = candidates[candidates.apply(lambda target: eligible_internal(config, state, employee_key, role, target, today, performance), axis=1)]
             candidates = candidates[candidates.apply(
                 lambda target: _under_capacity(
@@ -98,10 +98,10 @@ def simulate_career_events(
                     target_ratio + 0.015 + max(0, float(performance) - 3.5) * 0.01
                 )
                 new_department_name = department_lookup.loc[
-                    new_role["Department_Key"], "Department_Name"
+                    new_role["Department_Key"], "Afdeling_Naam"
                 ]
                 new_location_key = resolve_location(
-                    state, config, rng, new_department_name, new_role["Role_Name"],
+                    state, config, rng, new_department_name, new_role["Functie_Naam"],
                     preferred_location_key=row["Location_Key"],
                 )
                 _close_employment(fact_employment, idx, today)
@@ -125,10 +125,10 @@ def simulate_career_events(
                 ) + 1
                 continue
 
-        target_names = config.role_career_paths.get(role["Role_Name"], {}).get("laterale_transfers", [])
+        target_names = config.role_career_paths.get(role["Functie_Naam"], {}).get("laterale_transfers", [])
         if rng.random() >= transfer_rate / 52 or not target_names:
             continue
-        candidates = dim_role[dim_role["Role_Name"].isin(target_names)]
+        candidates = dim_role[dim_role["Functie_Naam"].isin(target_names)]
         candidates = candidates[candidates.apply(lambda target: eligible_internal(config, state, employee_key, role, target, today, performance), axis=1)]
         candidates = candidates[candidates.apply(
             lambda target: _under_capacity(
@@ -144,10 +144,10 @@ def simulate_career_events(
             random_state=rng.randint(0, 100000)
         ).iloc[0]
         new_department_name = department_lookup.loc[
-            new_role["Department_Key"], "Department_Name"
+            new_role["Department_Key"], "Afdeling_Naam"
         ]
         new_location_key = resolve_location(
-            state, config, rng, new_department_name, new_role["Role_Name"],
+            state, config, rng, new_department_name, new_role["Functie_Naam"],
             preferred_location_key=row["Location_Key"],
         )
         _close_employment(fact_employment, idx, today)
@@ -214,7 +214,7 @@ def _simulate_salary_reviews(
 
         role = roles.loc[row["Role_Key"]]
         service_start = employees.loc[employee_key, "Aaneengesloten_Indienst_Datum"]
-        performance = employees.loc[employee_key, "Performance_Score"]
+        performance = employees.loc[employee_key, "Prestatie_Score"]
         target_ratio = _target_ratio_for_row(
             row,
             salary_policy,
@@ -289,7 +289,7 @@ def _new_employment_record(
         ),
         "Shift_Key": ploegendienst_key,
         "SalaryScale_Key": role["SalaryScale_Key"],
-        "Target_Compa_Ratio": target_ratio,
+        "Streef_Compa_Ratio": target_ratio,
         "Relevante_Ervaring_Jaren_Bij_Start": carried_experience(
             previous_row,
             today,
@@ -315,10 +315,10 @@ def _under_capacity(state, config, department_lookup, role_counts, target_role):
     """Whether promoting/transferring someone into `target_role` is still
     allowed - i.e. it has no hard ceiling, or hasn't reached it yet."""
     department_name = department_lookup.loc[
-        target_role["Department_Key"], "Department_Name"
+        target_role["Department_Key"], "Afdeling_Naam"
     ]
     capacity = effective_role_capacity(
-        state, config, department_name, target_role["Role_Name"]
+        state, config, department_name, target_role["Functie_Naam"]
     )
     if capacity is None:
         return True
@@ -326,7 +326,7 @@ def _under_capacity(state, config, department_lookup, role_counts, target_role):
 
 
 def _target_ratio_for_row(row, salary_policy, role, service_start, today):
-    value = pd.to_numeric(row.get("Target_Compa_Ratio"), errors="coerce")
+    value = pd.to_numeric(row.get("Streef_Compa_Ratio"), errors="coerce")
     if pd.notna(value):
         return salary_policy.clamp_ratio(value)
     benchmark = salary_policy.employee_benchmark(role, today, service_start)

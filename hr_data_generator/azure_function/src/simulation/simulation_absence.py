@@ -246,7 +246,7 @@ class AbsenceSimulator:
         gender_factor = self.absence_cfg.get(
             "gender_multipliers",
             {}
-        ).get(employee.get("Gender"), 1.0)
+        ).get(employee.get("Geslacht"), 1.0)
         seasonal_factor = self.absence_cfg.get(
             "seasonal_multipliers",
             {}
@@ -311,7 +311,7 @@ class AbsenceSimulator:
             return 1.0
         match = shifts.loc[
             shifts["Shift_Key"] == shift_key,
-            "Shift_Name"
+            "Ploegendienst_Naam"
         ]
         return float(multipliers.get(match.iloc[0], 1.0)) if not match.empty else 1.0
 
@@ -332,7 +332,7 @@ class AbsenceSimulator:
         if department.empty:
             return 1.0
         return float(multipliers.get(
-            department.iloc[0].get("Department_Name"),
+            department.iloc[0].get("Afdeling_Naam"),
             1.0
         ))
 
@@ -344,7 +344,7 @@ class AbsenceSimulator:
         if "Telt_als_verzuim" not in types.columns:
             types["Telt_als_verzuim"] = False
         return types[
-            ["AbsenceType_Key", "AbsenceType_Name", "Telt_als_verzuim"]
+            ["AbsenceType_Key", "Verzuim_Type_Naam", "Telt_als_verzuim"]
         ].to_dict(orient="records")
 
     def _choose_incident_type(
@@ -377,7 +377,7 @@ class AbsenceSimulator:
             )
             configured_weights = self.absence_cfg.get("type_weights", {})
             total_weight = sum(
-                configured_weights.get(absence_type["AbsenceType_Name"], 1.0)
+                configured_weights.get(absence_type["Verzuim_Type_Naam"], 1.0)
                 for absence_type in sickness_types
             )
             if total_weight <= 0:
@@ -385,7 +385,7 @@ class AbsenceSimulator:
                 configured_weights = {}
             for absence_type in sickness_types:
                 weight = configured_weights.get(
-                    absence_type["AbsenceType_Name"],
+                    absence_type["Verzuim_Type_Naam"],
                     1.0
                 )
                 candidates.append((
@@ -398,7 +398,7 @@ class AbsenceSimulator:
             if bool(absence_type["Telt_als_verzuim"]):
                 continue
 
-            rule = leave_rules.get(absence_type["AbsenceType_Name"])
+            rule = leave_rules.get(absence_type["Verzuim_Type_Naam"])
             if not rule or not self._eligible_for_leave_type(
                 employee,
                 employment,
@@ -448,7 +448,7 @@ class AbsenceSimulator:
         leave_event_counts=None,
     ):
         age = self._current_age(employee, today)
-        gender = employee.get("Gender")
+        gender = employee.get("Geslacht")
         genders = rule.get("genders")
         if genders and gender not in genders:
             return False
@@ -498,7 +498,7 @@ class AbsenceSimulator:
             return False
         name = shifts.loc[
             shifts["Shift_Key"] == shift_key,
-            "Shift_Name"
+            "Ploegendienst_Naam"
         ]
         return not name.empty and name.iloc[0] in required_names
 
@@ -525,7 +525,7 @@ class AbsenceSimulator:
     def _choose_absence_type(self, absence_types):
         """Choose a sickness type for backwards-compatible direct callers."""
         configured_weights = self.absence_cfg.get("type_weights", {})
-        names = [absence_type["AbsenceType_Name"] for absence_type in absence_types]
+        names = [absence_type["Verzuim_Type_Naam"] for absence_type in absence_types]
         weights = [configured_weights.get(name, 1.0) for name in names]
         if not weights or sum(weights) <= 0:
             weights = [1.0] * len(absence_types)
@@ -597,7 +597,7 @@ class AbsenceSimulator:
         start_offset = self.rng.randint(0, (latest_start - earliest_start).days)
         start = earliest_start + pd.Timedelta(days=start_offset)
         type_key = absence_type["AbsenceType_Key"]
-        type_name = absence_type["AbsenceType_Name"]
+        type_name = absence_type["Verzuim_Type_Naam"]
         duration = self._choose_duration(type_name)
         satisfaction = score_employee_satisfaction(
             self.satisfaction_model,

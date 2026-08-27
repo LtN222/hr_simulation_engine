@@ -17,7 +17,7 @@ def assign_ploegendienst_key(role_row, state, config, rng):
 
 def _key_for_name(shifts, name):
     matching = shifts.loc[
-        shifts["Shift_Name"] == name,
+        shifts["Ploegendienst_Naam"] == name,
         "Shift_Key"
     ]
     if matching.empty:

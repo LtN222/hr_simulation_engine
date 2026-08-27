@@ -4,7 +4,7 @@ SCHEMA_CONFIG = {
     "primary_key": "Department_Key",
     "types": {
       "Department_Key": "INT",
-      "Department_Name": "NVARCHAR(100)"
+      "Afdeling_Naam": "NVARCHAR(100)"
     }
   },
 
@@ -14,7 +14,7 @@ SCHEMA_CONFIG = {
     "types": {
       "Role_Key": "INT",
       "Department_Key": "INT",
-      "Role_Name": "NVARCHAR(100)",
+      "Functie_Naam": "NVARCHAR(100)",
       "Leidinggevend_Flag": "BIT",
       "Salaris_min": "INT",
       "Salaris_max": "INT",
@@ -31,7 +31,7 @@ SCHEMA_CONFIG = {
     "types": {
       "Employee_Key": "INT",
       "Leeftijd": "INT",
-      "Performance_Score": "DECIMAL(3,2)"
+      "Prestatie_Score": "DECIMAL(3,2)"
     }
   },
 
@@ -49,7 +49,7 @@ SCHEMA_CONFIG = {
     "primary_key": "EventType_Key",
     "types": {
       "EventType_Key": "INT",
-      "EventType": "NVARCHAR(50)"
+      "Gebeurtenis": "NVARCHAR(50)"
     }
   },
 
