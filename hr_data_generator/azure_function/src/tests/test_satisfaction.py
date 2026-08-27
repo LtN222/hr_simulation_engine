@@ -48,8 +48,8 @@ def test_satisfaction_explanation_can_resolve_a_dimension_key():
     )
     drivers = pd.DataFrame({
         "SatisfactionDriver_Key": [1, 13],
-        "Driver_Name": ["Beloning", "Geen dominant aandachtspunt"],
-        "Direction": ["Negatief", "Neutraal"],
+        "Factor_Naam": ["Beloning", "Geen dominant aandachtspunt"],
+        "Richting": ["Negatief", "Neutraal"],
     })
 
     assert model.driver_key_for(drivers, explanation) == 1
@@ -71,14 +71,14 @@ def test_satisfaction_explanation_uses_neutral_driver_without_material_factor():
 def _employee_and_employment():
     employee = pd.Series({
         "Employee_Key": 1,
-        "Performance_Score": 3.4,
+        "Prestatie_Score": 3.4,
         "Manager_Key": 5,
         "Aaneengesloten_Indienst_Datum": pd.Timestamp("2020-01-01"),
     })
     employment = pd.Series({
         "Employee_Key": 1,
         "Role_Key": 1,
-        "Target_Compa_Ratio": 1.0,
+        "Streef_Compa_Ratio": 1.0,
         "Startdatum": pd.Timestamp("2020-01-01"),
     })
     return employee, employment

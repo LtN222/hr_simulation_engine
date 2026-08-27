@@ -28,7 +28,7 @@ def _config(**safety_overrides):
 def _incident_types():
     return pd.DataFrame({
         "IncidentType_Key": [1, 2, 3, 4],
-        "IncidentType_Name": ["Bijna-ongeval", "EHBO-geval", "Medische behandeling", "Verzuimongeval"],
+        "Incidenttype_Naam": ["Bijna-ongeval", "EHBO-geval", "Medische behandeling", "Verzuimongeval"],
         "Recordable": [False, False, True, True],
     })
 
@@ -46,10 +46,10 @@ def test_annual_rate_scales_with_department_shift_and_new_hire_multipliers():
     config = _config()
     simulator = SafetyIncidentSimulator(config, schema=None, rng=random.Random(1))
     state = {
-        "dim_role": pd.DataFrame({"Role_Key": [1], "Role_Name": ["Operator"], "Department_Key": [1]}),
-        "dim_department": pd.DataFrame({"Department_Key": [1], "Department_Name": ["Productie"]}),
+        "dim_role": pd.DataFrame({"Role_Key": [1], "Functie_Naam": ["Operator"], "Department_Key": [1]}),
+        "dim_department": pd.DataFrame({"Department_Key": [1], "Afdeling_Naam": ["Productie"]}),
         "dim_shift": pd.DataFrame({
-            "Shift_Key": [0, 3], "Shift_Name": ["Niet van toepassing", "3-ploeg"],
+            "Shift_Key": [0, 3], "Ploegendienst_Naam": ["Niet van toepassing", "3-ploeg"],
         }),
     }
     long_tenure = _employment_row(startdatum=pd.Timestamp("2015-01-01"))
@@ -82,7 +82,7 @@ def test_choose_incident_type_respects_configured_weights():
     simulator = SafetyIncidentSimulator(config, schema=None, rng=random.Random(1))
     incident_types = _incident_types().to_dict(orient="records")
 
-    picks = [simulator._choose_incident_type(incident_types)["IncidentType_Name"] for _ in range(200)]
+    picks = [simulator._choose_incident_type(incident_types)["Incidenttype_Naam"] for _ in range(200)]
 
     assert picks.count("Bijna-ongeval") > 190
 
@@ -99,24 +99,24 @@ def test_choose_lost_workdays_stays_within_the_configured_range():
 def _base_state(config):
     return {
         "dim_employee": pd.DataFrame({
-            "Employee_Key": [1], "Geboortedatum": [pd.Timestamp("1990-01-01")], "Gender": ["V"],
+            "Employee_Key": [1], "Geboortedatum": [pd.Timestamp("1990-01-01")], "Geslacht": ["V"],
         }),
-        "dim_role": pd.DataFrame({"Role_Key": [1], "Role_Name": ["Operator"], "Department_Key": [1]}),
-        "dim_department": pd.DataFrame({"Department_Key": [1], "Department_Name": ["Productie"]}),
+        "dim_role": pd.DataFrame({"Role_Key": [1], "Functie_Naam": ["Operator"], "Department_Key": [1]}),
+        "dim_department": pd.DataFrame({"Department_Key": [1], "Afdeling_Naam": ["Productie"]}),
         "dim_shift": pd.DataFrame({
-            "Shift_Key": [0], "Shift_Name": ["Niet van toepassing"],
+            "Shift_Key": [0], "Ploegendienst_Naam": ["Niet van toepassing"],
         }),
         "dim_incident_type": _incident_types(),
         "dim_absence_type": pd.DataFrame({
-            "AbsenceType_Key": [1], "AbsenceType_Name": [LOST_TIME_ABSENCE_TYPE],
+            "AbsenceType_Key": [1], "Verzuim_Type_Naam": [LOST_TIME_ABSENCE_TYPE],
             "Telt_als_verzuim": [True],
         }),
         "dim_satisfaction_band": pd.DataFrame({
-            "SatisfactionBand_Key": [1], "SatisfactionBand_Name": ["Neutraal"],
+            "SatisfactionBand_Key": [1], "Tevredenheidsband_Naam": ["Neutraal"],
             "Minimum_Score": [0], "Maximum_Score": [10],
         }),
         "dim_salary_band": pd.DataFrame({
-            "SalaryBand_Key": [1], "SalaryBand_Name": ["Band"],
+            "SalaryBand_Key": [1], "Salarisband_Naam": ["Band"],
             "Minimum_Salaris": [0], "Maximum_Salaris": [None],
         }),
         "fact_employment": pd.DataFrame([{
@@ -144,7 +144,7 @@ def test_run_creates_a_linked_absence_episode_for_a_lost_time_incident():
     incidents = state["fact_safety_incident"]
     assert len(incidents) == 1
     incident = incidents.iloc[0]
-    assert incident["Lost_Workdays"] > 0
+    assert incident["Verloren_Werkdagen"] > 0
     assert pd.notna(incident["Absence_Key"])
 
     absence = state["fact_absence"]
@@ -171,7 +171,7 @@ def test_run_does_not_touch_fact_absence_for_a_non_lost_time_incident():
 
     incidents = state["fact_safety_incident"]
     assert len(incidents) == 1
-    assert incidents.iloc[0]["Lost_Workdays"] == 0
+    assert incidents.iloc[0]["Verloren_Werkdagen"] == 0
     assert pd.isna(incidents.iloc[0]["Absence_Key"])
     assert state["fact_absence"].empty
 
@@ -205,16 +205,16 @@ def test_full_run_with_real_config_produces_incidents_over_many_weeks():
         "dim_employee": pd.DataFrame({
             "Employee_Key": list(range(1, employee_count + 1)),
             "Geboortedatum": [pd.Timestamp("1990-01-01")] * employee_count,
-            "Gender": ["V"] * employee_count,
+            "Geslacht": ["V"] * employee_count,
         }),
         "dim_role": pd.DataFrame({
-            "Role_Key": [1], "Role_Name": ["Operator"], "Department_Key": [1],
+            "Role_Key": [1], "Functie_Naam": ["Operator"], "Department_Key": [1],
         }),
-        "dim_department": pd.DataFrame({"Department_Key": [1], "Department_Name": ["Productie"]}),
+        "dim_department": pd.DataFrame({"Department_Key": [1], "Afdeling_Naam": ["Productie"]}),
         "dim_shift": pd.DataFrame(config.dim_shift),
         "dim_incident_type": pd.DataFrame(config.dim_incident_type),
         "dim_absence_type": pd.DataFrame([
-            {"AbsenceType_Key": i + 1, "AbsenceType_Name": name, "Telt_als_verzuim": telt}
+            {"AbsenceType_Key": i + 1, "Verzuim_Type_Naam": name, "Telt_als_verzuim": telt}
             for i, (name, telt) in enumerate(config.dim_absence_type.items())
         ]),
         "dim_satisfaction_band": pd.DataFrame(config.dim_satisfaction_band),
@@ -233,7 +233,7 @@ def test_full_run_with_real_config_produces_incidents_over_many_weeks():
 
     incidents = state["fact_safety_incident"]
     assert not incidents.empty
-    lost_time = incidents[incidents["Lost_Workdays"] > 0]
+    lost_time = incidents[incidents["Verloren_Werkdagen"] > 0]
     if not lost_time.empty:
         linked_absences = state["fact_absence"]
         assert set(lost_time["Absence_Key"].dropna()).issubset(

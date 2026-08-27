@@ -75,7 +75,7 @@ class SafetyIncidentSimulator:
             absence_key = None
             lost_workdays = 0
 
-            if incident_type["IncidentType_Name"] == LOST_TIME_INCIDENT_TYPE:
+            if incident_type["Incidenttype_Naam"] == LOST_TIME_INCIDENT_TYPE:
                 lost_workdays, absence_record = self._build_lost_time_absence(
                     employee, employment, state, incident_date, next_absence_key
                 )
@@ -127,7 +127,7 @@ class SafetyIncidentSimulator:
         if not multipliers or shifts.empty or pd.isna(shift_key):
             return 1.0
         match = shifts.loc[
-            shifts["Shift_Key"] == shift_key, "Shift_Name"
+            shifts["Shift_Key"] == shift_key, "Ploegendienst_Naam"
         ]
         return float(multipliers.get(match.iloc[0], 1.0)) if not match.empty else 1.0
 
@@ -149,7 +149,7 @@ class SafetyIncidentSimulator:
     def _choose_incident_type(self, incident_types):
         weights_cfg = self.safety_cfg.get("type_weights", {})
         weights = [
-            float(weights_cfg.get(incident_type["IncidentType_Name"], 1.0))
+            float(weights_cfg.get(incident_type["Incidenttype_Naam"], 1.0))
             for incident_type in incident_types
         ]
         if sum(weights) <= 0:
@@ -177,7 +177,7 @@ class SafetyIncidentSimulator:
                 "Location_Key": employment.get("Location_Key"),
                 "Shift_Key": employment.get("Shift_Key"),
                 "Incident_Date": incident_date,
-                "Lost_Workdays": lost_workdays,
+                "Verloren_Werkdagen": lost_workdays,
                 "Absence_Key": absence_key,
             }
         )
@@ -302,9 +302,9 @@ class SafetyIncidentSimulator:
 
     def _absence_type_key(self, state, absence_type_name):
         types = state.get("dim_absence_type", pd.DataFrame())
-        if types.empty or "AbsenceType_Name" not in types.columns:
+        if types.empty or "Verzuim_Type_Naam" not in types.columns:
             return None
-        match = types.loc[types["AbsenceType_Name"] == absence_type_name, "AbsenceType_Key"]
+        match = types.loc[types["Verzuim_Type_Naam"] == absence_type_name, "AbsenceType_Key"]
         return match.iloc[0] if not match.empty else None
 
     @staticmethod
@@ -326,7 +326,7 @@ class SafetyIncidentSimulator:
         department = departments.loc[
             departments["Department_Key"] == role.iloc[0]["Department_Key"]
         ]
-        return department.iloc[0]["Department_Name"] if not department.empty else None
+        return department.iloc[0]["Afdeling_Naam"] if not department.empty else None
 
     @staticmethod
     def _next_key(dataframe, key_column):

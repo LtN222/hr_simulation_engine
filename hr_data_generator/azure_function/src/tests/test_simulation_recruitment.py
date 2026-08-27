@@ -29,8 +29,8 @@ def _config(**recruitment_overrides):
 def _dim_role():
     return pd.DataFrame({
         "Role_Key": [1],
-        "Role_Name": ["Monteur"],
-        "Department_Name": ["Techniek"],
+        "Functie_Naam": ["Monteur"],
+        "Afdeling_Naam": ["Techniek"],
         "Department_Key": [1],
     })
 
@@ -38,14 +38,14 @@ def _dim_role():
 def _dim_stages():
     return pd.DataFrame({
         "Stage_Key": [1, 2, 3, 4],
-        "Stage_Name": ["Sollicitatie", "Screening", "Gesprek", "Aanbod"],
+        "Fase_Naam": ["Sollicitatie", "Screening", "Gesprek", "Aanbod"],
     })
 
 
 def _dim_status():
     return pd.DataFrame({
         "RecruitmentStatus_Key": [1, 2, 3, 4],
-        "Status_Name": ["Aangenomen", "Afgewezen", "Geweigerd", "In behandeling"],
+        "Status_Naam": ["Aangenomen", "Afgewezen", "Geweigerd", "In behandeling"],
     })
 
 
@@ -56,7 +56,7 @@ def _pipeline_row(**overrides):
         "Role_Key": 1,
         "Department_Key": 1,
         "HireSource_Key": 1,
-        "Vacancy_Reason": "Growth",
+        "Vacature_Reden": "Groei",
         "Employee_Key": None,
         "Status": RecruitmentSimulator.IN_PROGRESS_STATUS,
         "RecruitmentStatus_Key": 4,
@@ -66,8 +66,8 @@ def _pipeline_row(**overrides):
         "Interview_Date": None,
         "Offer_Date": None,
         "Decision_Date": None,
-        "Days_To_Decision": None,
-        "Candidate_Quality": 4.0,
+        "Dagen_Tot_Beslissing": None,
+        "Kandidaat_Kwaliteit": 4.0,
         "DeclineReason_Key": None,
         "RejectionReason_Key": None,
     }
@@ -78,10 +78,10 @@ def _pipeline_row(**overrides):
 def _state_with_pipeline(rows):
     return {
         "dim_role": _dim_role(),
-        "dim_department": pd.DataFrame({"Department_Key": [1], "Department_Name": ["Techniek"]}),
+        "dim_department": pd.DataFrame({"Department_Key": [1], "Afdeling_Naam": ["Techniek"]}),
         "dim_hire_source": pd.DataFrame({
             "HireSource_Key": [1, 2],
-            "HireSource_Name": ["Vacaturebank", "Interne mobiliteit"],
+            "Bron_Naam": ["Vacaturebank", "Interne mobiliteit"],
             "Is_Internal": [False, True],
         }),
         "dim_recruitment_status": _dim_status(),
@@ -94,20 +94,20 @@ def _state_with_pipeline(rows):
 def _vacancy(vacancy_key=100):
     return pd.Series({
         "Vacancy_Key": vacancy_key, "Role_Key": 1, "Department_Key": 1,
-        "Vacancy_Reason": "Growth", "Status": "Open",
+        "Vacature_Reden": "Groei", "Status": "Open",
         "Created_Date": pd.Timestamp("2024-01-01"),
     })
 
 
 def _prime_lookups(simulator, state):
     simulator._status_keys = simulator._build_reason_lookup(
-        state, "dim_recruitment_status", "Status_Name", "RecruitmentStatus_Key"
+        state, "dim_recruitment_status", "Status_Naam", "RecruitmentStatus_Key"
     )
     simulator._stage_keys = simulator._build_reason_lookup(
-        state, "dim_recruitment_stage", "Stage_Name", "Stage_Key"
+        state, "dim_recruitment_stage", "Fase_Naam", "Stage_Key"
     )
     simulator._hire_source_names = simulator._build_reason_lookup(
-        state, "dim_hire_source", "HireSource_Key", "HireSource_Name"
+        state, "dim_hire_source", "HireSource_Key", "Bron_Naam"
     )
     simulator._decline_reason_keys = {}
     simulator._rejection_reason_keys = {NOT_SELECTED_REASON: 5, BELOW_MINIMUM_QUALITY_REASON: 4}
@@ -150,16 +150,16 @@ def test_new_pipeline_application_routes_internal_candidates_straight_to_gesprek
     state = _state_with_pipeline([])
     _prime_lookups(simulator, state)
     vacancy = _vacancy()
-    source_internal = pd.Series({"HireSource_Key": 2, "HireSource_Name": "Interne mobiliteit"})
-    source_external = pd.Series({"HireSource_Key": 1, "HireSource_Name": "Vacaturebank"})
+    source_internal = pd.Series({"HireSource_Key": 2, "Bron_Naam": "Interne mobiliteit"})
+    source_external = pd.Series({"HireSource_Key": 1, "Bron_Naam": "Vacaturebank"})
 
     internal_row = simulator._new_pipeline_application(
         1, vacancy, pd.Timestamp("2024-02-01"), source_internal, 42,
-        {"Candidate_Quality": 4.0}, RecruitmentSimulator.STAGE_GESPREK,
+        {"Kandidaat_Kwaliteit": 4.0}, RecruitmentSimulator.STAGE_GESPREK,
     )
     external_row = simulator._new_pipeline_application(
         2, vacancy, pd.Timestamp("2024-02-01"), source_external, None,
-        {"Candidate_Quality": 3.0}, RecruitmentSimulator.STAGE_SOLLICITATIE,
+        {"Kandidaat_Kwaliteit": 3.0}, RecruitmentSimulator.STAGE_SOLLICITATIE,
     )
 
     assert internal_row["Stage_Key"] == simulator._stage_keys["Gesprek"]
@@ -179,7 +179,7 @@ def test_resolve_screening_advances_an_eligible_candidate_to_gesprek():
     }
     _prime_lookups(simulator, state)
     target_role = pd.Series({
-        "Role_Name": "Monteur", "Min_Relevante_Ervaring_Jr": 0.0,
+        "Functie_Naam": "Monteur", "Min_Relevante_Ervaring_Jr": 0.0,
         "Formele_Kwalificatie_Vereist": False, "Leidinggevend": False,
     })
 
@@ -205,7 +205,7 @@ def test_resolve_screening_rejects_an_ineligible_candidate_with_the_causal_reaso
     _prime_lookups(simulator, state)
     simulator._rejection_reason_keys["Onvoldoende relevante werkervaring"] = 1
     target_role = pd.Series({
-        "Role_Name": "Monteur", "Min_Relevante_Ervaring_Jr": 8.0,
+        "Functie_Naam": "Monteur", "Min_Relevante_Ervaring_Jr": 8.0,
         "Formele_Kwalificatie_Vereist": False, "Leidinggevend": False,
     })
 
@@ -223,11 +223,11 @@ def test_resolve_interview_promotes_the_longest_waiting_candidate_first():
     simulator = RecruitmentSimulator(_config(), schema=None, rng=random.Random(1))
     state = _state_with_pipeline([
         _pipeline_row(
-            Recruitment_Key=1, Stage_Key=3, Candidate_Quality=4.0,
+            Recruitment_Key=1, Stage_Key=3, Kandidaat_Kwaliteit=4.0,
             Screening_Date=pd.Timestamp("2024-01-10"),
         ),
         _pipeline_row(
-            Recruitment_Key=2, Stage_Key=3, Candidate_Quality=4.0,
+            Recruitment_Key=2, Stage_Key=3, Kandidaat_Kwaliteit=4.0,
             Screening_Date=pd.Timestamp("2024-01-05"),
         ),
     ])
@@ -239,7 +239,7 @@ def test_resolve_interview_promotes_the_longest_waiting_candidate_first():
     assert fact.loc[2, "Stage_Key"] == simulator._stage_keys["Aanbod"]
     assert fact.loc[2, "Interview_Date"] == pd.Timestamp("2024-01-15")
     assert fact.loc[2, "Offer_Date"] == pd.Timestamp("2024-01-15")
-    assert pd.notna(fact.loc[2, "Days_To_Decision"])
+    assert pd.notna(fact.loc[2, "Dagen_Tot_Beslissing"])
     # The other waiting candidate is untouched this week.
     assert fact.loc[1, "Stage_Key"] == 3
 
@@ -262,7 +262,7 @@ def test_resolve_interview_rejects_a_candidate_below_the_quality_bar():
     config = _config(source_profiles={"Vacaturebank": {"minimum_offer_quality": 4.5}})
     simulator = RecruitmentSimulator(config, schema=None, rng=random.Random(1))
     state = _state_with_pipeline([
-        _pipeline_row(Stage_Key=3, Candidate_Quality=2.0, Screening_Date=pd.Timestamp("2024-01-05")),
+        _pipeline_row(Stage_Key=3, Kandidaat_Kwaliteit=2.0, Screening_Date=pd.Timestamp("2024-01-05")),
     ])
     _prime_lookups(simulator, state)
 
@@ -277,7 +277,7 @@ def test_resolve_interview_rejects_a_candidate_below_the_quality_bar():
 def test_resolve_offer_waits_until_the_scheduled_decision_date():
     simulator = RecruitmentSimulator(_config(), schema=None, rng=random.Random(1))
     state = _state_with_pipeline([
-        _pipeline_row(Stage_Key=4, Offer_Date=pd.Timestamp("2024-01-10"), Days_To_Decision=5),
+        _pipeline_row(Stage_Key=4, Offer_Date=pd.Timestamp("2024-01-10"), Dagen_Tot_Beslissing=5),
     ])
     _prime_lookups(simulator, state)
 
@@ -293,7 +293,7 @@ def test_resolve_offer_accepts_once_the_decision_date_arrives():
     state = _state_with_pipeline([
         _pipeline_row(
             Recruitment_Key=7, Stage_Key=4, Offer_Date=pd.Timestamp("2024-01-10"),
-            Days_To_Decision=5, Candidate_Quality=4.0,
+            Dagen_Tot_Beslissing=5, Kandidaat_Kwaliteit=4.0,
         ),
     ])
     state["_recruitment_pipeline_profiles"][7] = {
@@ -317,7 +317,7 @@ def test_resolve_offer_declines_and_samples_a_reason():
     simulator = RecruitmentSimulator(config, schema=None, rng=random.Random(1))
     simulator._decline_reason_keys = {"Ander aanbod geaccepteerd": 1, "Persoonlijke omstandigheden": 2}
     state = _state_with_pipeline([
-        _pipeline_row(Stage_Key=4, Offer_Date=pd.Timestamp("2024-01-10"), Days_To_Decision=5),
+        _pipeline_row(Stage_Key=4, Offer_Date=pd.Timestamp("2024-01-10"), Dagen_Tot_Beslissing=5),
     ])
     _prime_lookups(simulator, state)
     simulator._decline_reason_keys = {"Ander aanbod geaccepteerd": 1, "Persoonlijke omstandigheden": 2}
@@ -352,9 +352,9 @@ def test_full_funnel_hires_someone_over_several_simulated_weeks():
     with every stage/reason column populated consistently."""
     config = ConfigLoader().load()
     state = {
-        "dim_department": pd.DataFrame({"Department_Key": [1], "Department_Name": ["Techniek"]}),
+        "dim_department": pd.DataFrame({"Department_Key": [1], "Afdeling_Naam": ["Techniek"]}),
         "dim_role": pd.DataFrame({
-            "Role_Key": [1], "Department_Key": [1], "Role_Name": ["Monteur"],
+            "Role_Key": [1], "Department_Key": [1], "Functie_Naam": ["Monteur"],
             "SalaryScale_Key": [1], "Leidinggevend": [False],
             "Min_Relevante_Ervaring_Jr": [0.0], "Formele_Kwalificatie_Vereist": [False],
             "Min_Opleidingsniveau": ["Geen"], "Min_Leidinggevende_Ervaring_Jr": [0.0],
@@ -369,7 +369,7 @@ def test_full_funnel_hires_someone_over_several_simulated_weeks():
         "fact_employment": pd.DataFrame(),
         "fact_vacancy": pd.DataFrame({
             "Vacancy_Key": [1], "Created_Date": [pd.Timestamp("2024-01-01")], "Closed_Date": [None],
-            "Role_Key": [1], "Department_Key": [1], "Vacancy_Reason": ["Growth"], "Status": ["Open"],
+            "Role_Key": [1], "Department_Key": [1], "Vacature_Reden": ["Groei"], "Status": ["Open"],
             "Target_Start_Date": [pd.Timestamp("2024-02-01")], "Filled_Employee_Key": [None],
         }),
         "fact_recruitment": pd.DataFrame(),

@@ -6,7 +6,7 @@ import pandas as pd
 def driver_key_for(dimension, driver_name):
     if dimension is None or dimension.empty or not driver_name:
         return None
-    matches = dimension[dimension["Driver_Name"] == driver_name]
+    matches = dimension[dimension["Factor_Naam"] == driver_name]
     if matches.empty:
         return None
     key_column = next(column for column in dimension if column.endswith("Driver_Key"))

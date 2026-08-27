@@ -28,8 +28,8 @@ def _config():
 def _dim_role():
     return pd.DataFrame({
         "Role_Key": [1, 2],
-        "Role_Name": ["Staff", "CEO"],
-        "Department_Name": ["Directie", "Directie"],
+        "Functie_Naam": ["Staff", "CEO"],
+        "Afdeling_Naam": ["Directie", "Directie"],
         "Department_Key": [1, 1],
     })
 
@@ -37,7 +37,7 @@ def _dim_role():
 def _dim_department():
     return pd.DataFrame({
         "Department_Key": [1],
-        "Department_Name": ["Directie"],
+        "Afdeling_Naam": ["Directie"],
     })
 
 
@@ -55,7 +55,7 @@ def test_growth_selection_never_picks_a_role_that_is_already_at_its_max_count():
         role = simulator._choose_role_for_growth(
             state, dict(role_counts), target_headcount=10, pending_by_role={}
         )
-        assert role["Role_Name"] == "Staff"
+        assert role["Functie_Naam"] == "Staff"
 
 
 def test_growth_selection_returns_none_once_every_active_role_is_at_capacity():
@@ -90,7 +90,7 @@ def test_growth_selection_never_picks_a_role_already_covered_by_a_pending_vacanc
         role = simulator._choose_role_for_growth(
             state, dict(role_counts), target_headcount=10, pending_by_role=pending_by_role
         )
-        assert role["Role_Name"] == "Staff"
+        assert role["Functie_Naam"] == "Staff"
 
 
 def test_run_does_not_create_a_second_growth_vacancy_for_a_role_with_one_already_pending():
@@ -142,16 +142,16 @@ def test_minimum_for_role_scales_the_team_lead_role_with_department_headcount():
     state = {
         "dim_role": pd.DataFrame({
             "Role_Key": [1, 2],
-            "Role_Name": ["Operator", "Teamleider"],
-            "Department_Name": ["Productie", "Productie"],
+            "Functie_Naam": ["Operator", "Teamleider"],
+            "Afdeling_Naam": ["Productie", "Productie"],
             "Department_Key": [1, 1],
         }),
         "dim_department": pd.DataFrame({
             "Department_Key": [1],
-            "Department_Name": ["Productie"],
+            "Afdeling_Naam": ["Productie"],
         }),
     }
-    role_row = pd.Series({"Role_Key": 2, "Role_Name": "Teamleider", "Department_Key": 1})
+    role_row = pd.Series({"Role_Key": 2, "Functie_Naam": "Teamleider", "Department_Key": 1})
     role_counts = {1: 24, 2: 1}  # 24 operators, only 1 team lead so far
 
     assert simulator._minimum_for_role(state, role_row, role_counts) == 3  # ceil(24/10)

@@ -3,7 +3,7 @@
   "database": "db_hr_demo",
   "beschrijving": "Middelgroot productiebedrijf met ploegendienst en lichte jaarlijkse groei",
   "schema": "hr_maakindustrie_schema",
-  "start_year_simulation": 2023,
+  "start_year_simulation": 2020,
   "avatar": {
     "base_url": "https://stdemodashboards.blob.core.windows.net/hr-data/images",
     "assignment_seed": "hr-demo-avatar-v1",
@@ -62,8 +62,8 @@
     "burn_in_years": 2,
     "minimum_hire_age": 18,
     "tenure_years_distribution": {
-      "0-1": 0.4,
-      "1-3": 0.32,
+      "0-1": 0.32,
+      "1-3": 0.4,
       "3-5": 0.18,
       "5-10": 0.08,
       "10-20": 0.02
@@ -155,80 +155,80 @@
   "dim_hire_source": [
     {
       "HireSource_Key": 1,
-      "HireSource_Name": "Referral",
-      "Source_Group": "Extern",
-      "Source_Description": "Aangedragen door een bestaande medewerker",
+      "Bron_Naam": "Referral",
+      "Bron_Groep": "Extern",
+      "Bron_Omschrijving": "Aangedragen door een bestaande medewerker",
       "Is_Internal": false
     },
     {
       "HireSource_Key": 2,
-      "HireSource_Name": "Vacaturebank",
-      "Source_Group": "Extern",
-      "Source_Description": "Sollicitatie via een online vacatureplatform",
+      "Bron_Naam": "Vacaturebank",
+      "Bron_Groep": "Extern",
+      "Bron_Omschrijving": "Sollicitatie via een online vacatureplatform",
       "Is_Internal": false
     },
     {
       "HireSource_Key": 3,
-      "HireSource_Name": "Interne recruiter",
-      "Source_Group": "Extern",
-      "Source_Description": "Actief benaderd door het interne recruitmentteam",
+      "Bron_Naam": "Interne recruiter",
+      "Bron_Groep": "Extern",
+      "Bron_Omschrijving": "Actief benaderd door het interne recruitmentteam",
       "Is_Internal": false
     },
     {
       "HireSource_Key": 4,
-      "HireSource_Name": "Campus",
-      "Source_Group": "Extern",
-      "Source_Description": "School-, campus- of traineeshiprecruitment",
+      "Bron_Naam": "Campus",
+      "Bron_Groep": "Extern",
+      "Bron_Omschrijving": "School-, campus- of traineeshiprecruitment",
       "Is_Internal": false
     },
     {
       "HireSource_Key": 5,
-      "HireSource_Name": "Interne mobiliteit",
-      "Source_Group": "Intern",
-      "Source_Description": "Bestaande medewerker solliciteert op een interne vacature",
+      "Bron_Naam": "Interne mobiliteit",
+      "Bron_Groep": "Intern",
+      "Bron_Omschrijving": "Bestaande medewerker solliciteert op een interne vacature",
       "Is_Internal": true
     },
     {
       "HireSource_Key": 6,
-      "HireSource_Name": "Recruitmentbureau",
-      "Source_Group": "Extern",
-      "Source_Description": "Kandidaat voorgedragen door een extern recruitmentbureau",
+      "Bron_Naam": "Recruitmentbureau",
+      "Bron_Groep": "Extern",
+      "Bron_Omschrijving": "Kandidaat voorgedragen door een extern recruitmentbureau",
       "Is_Internal": false
     }
   ],
   "dim_recruitment_status": [
     {
       "RecruitmentStatus_Key": 1,
-      "Status_Name": "Aangenomen",
-      "Status_Verbose": "Kandidaat heeft het aanbod geaccepteerd",
-      "Status_Group": "Succesvol",
+      "Status_Naam": "Aangenomen",
+      "Status_Omschrijving": "Kandidaat heeft het aanbod geaccepteerd",
+      "Status_Groep": "Succesvol",
       "Is_Final": true,
       "Counts_As_Hire": true,
       "Sort_Order": 1
     },
     {
       "RecruitmentStatus_Key": 2,
-      "Status_Name": "Afgewezen",
-      "Status_Verbose": "Kandidaat is afgewezen door de werkgever",
-      "Status_Group": "Afwijzing werkgever",
+      "Status_Naam": "Afgewezen",
+      "Status_Omschrijving": "Kandidaat is afgewezen door de werkgever",
+      "Status_Groep": "Afwijzing werkgever",
       "Is_Final": true,
       "Counts_As_Hire": false,
       "Sort_Order": 2
     },
     {
       "RecruitmentStatus_Key": 3,
-      "Status_Name": "Geweigerd",
-      "Status_Verbose": "Kandidaat heeft het aanbod geweigerd",
-      "Status_Group": "Afwijzing kandidaat",
+      "Status_Naam": "Geweigerd",
+      "Status_Omschrijving": "Kandidaat heeft het aanbod geweigerd",
+      "Status_Groep": "Afwijzing kandidaat",
       "Is_Final": true,
       "Counts_As_Hire": false,
       "Sort_Order": 3
     },
     {
       "RecruitmentStatus_Key": 4,
-      "Status_Name": "In behandeling",
-      "Status_Verbose": "Sollicitatie doorloopt de wervingsfunnel",
-      "Status_Group": "In behandeling",
+      "Status_Naam": "In behandeling",
+      "Status_Omschrijving": "Sollicitatie doorloopt de wervingsfunnel",
+      "Status_Groep": "In behandeling",
       "Is_Final": false,
       "Counts_As_Hire": false,
       "Sort_Order": 0
@@ -237,417 +237,417 @@
   "dim_education": [
     {
       "Education_Key": 1,
-      "Education_Name": "Interne vakopleiding",
-      "Education_Level": "Certificaat",
-      "Education_Direction": "Rolrelevant"
+      "Opleiding_Naam": "Interne vakopleiding",
+      "Opleidingsniveau": "Certificaat",
+      "Opleidingsrichting": "Rolrelevant"
     },
     {
       "Education_Key": 2,
-      "Education_Name": "MBO Productietechniek",
-      "Education_Level": "MBO",
-      "Education_Direction": "Rolrelevant"
+      "Opleiding_Naam": "MBO Productietechniek",
+      "Opleidingsniveau": "MBO",
+      "Opleidingsrichting": "Rolrelevant"
     },
     {
       "Education_Key": 3,
-      "Education_Name": "MBO Procestechniek",
-      "Education_Level": "MBO",
-      "Education_Direction": "Rolrelevant"
+      "Opleiding_Naam": "MBO Procestechniek",
+      "Opleidingsniveau": "MBO",
+      "Opleidingsrichting": "Rolrelevant"
     },
     {
       "Education_Key": 4,
-      "Education_Name": "MBO Procesoperator A / VAPRO A",
-      "Education_Level": "MBO",
-      "Education_Direction": "Rolrelevant"
+      "Opleiding_Naam": "MBO Procesoperator A / VAPRO A",
+      "Opleidingsniveau": "MBO",
+      "Opleidingsrichting": "Rolrelevant"
     },
     {
       "Education_Key": 5,
-      "Education_Name": "MBO Procesoperator B / VAPRO B",
-      "Education_Level": "MBO",
-      "Education_Direction": "Rolrelevant"
+      "Opleiding_Naam": "MBO Procesoperator B / VAPRO B",
+      "Opleidingsniveau": "MBO",
+      "Opleidingsrichting": "Rolrelevant"
     },
     {
       "Education_Key": 6,
-      "Education_Name": "MBO Procesoperator C / VAPRO C",
-      "Education_Level": "MBO",
-      "Education_Direction": "Rolrelevant"
+      "Opleiding_Naam": "MBO Procesoperator C / VAPRO C",
+      "Opleidingsniveau": "MBO",
+      "Opleidingsrichting": "Rolrelevant"
     },
     {
       "Education_Key": 7,
-      "Education_Name": "HBO Technische Bedrijfskunde",
-      "Education_Level": "HBO",
-      "Education_Direction": "Rolrelevant"
+      "Opleiding_Naam": "HBO Technische Bedrijfskunde",
+      "Opleidingsniveau": "HBO",
+      "Opleidingsrichting": "Rolrelevant"
     },
     {
       "Education_Key": 8,
-      "Education_Name": "HBO/WO Procestechnologie",
-      "Education_Level": "HBO",
-      "Education_Direction": "Rolrelevant"
+      "Opleiding_Naam": "HBO/WO Procestechnologie",
+      "Opleidingsniveau": "HBO",
+      "Opleidingsrichting": "Rolrelevant"
     },
     {
       "Education_Key": 9,
-      "Education_Name": "HBO Voedingsmiddelentechnologie",
-      "Education_Level": "HBO",
-      "Education_Direction": "Rolrelevant"
+      "Opleiding_Naam": "HBO Voedingsmiddelentechnologie",
+      "Opleidingsniveau": "HBO",
+      "Opleidingsrichting": "Rolrelevant"
     },
     {
       "Education_Key": 10,
-      "Education_Name": "WO Food Technology",
-      "Education_Level": "WO",
-      "Education_Direction": "Rolrelevant"
+      "Opleiding_Naam": "WO Food Technology",
+      "Opleidingsniveau": "WO",
+      "Opleidingsrichting": "Rolrelevant"
     },
     {
       "Education_Key": 11,
-      "Education_Name": "HBO/WO Technische Bedrijfskunde",
-      "Education_Level": "HBO",
-      "Education_Direction": "Rolrelevant"
+      "Opleiding_Naam": "HBO/WO Technische Bedrijfskunde",
+      "Opleidingsniveau": "HBO",
+      "Opleidingsrichting": "Rolrelevant"
     },
     {
       "Education_Key": 12,
-      "Education_Name": "WO Bedrijfskunde",
-      "Education_Level": "WO",
-      "Education_Direction": "Rolrelevant"
+      "Opleiding_Naam": "WO Bedrijfskunde",
+      "Opleidingsniveau": "WO",
+      "Opleidingsrichting": "Rolrelevant"
     },
     {
       "Education_Key": 13,
-      "Education_Name": "MBO Mechatronica",
-      "Education_Level": "MBO",
-      "Education_Direction": "Rolrelevant"
+      "Opleiding_Naam": "MBO Mechatronica",
+      "Opleidingsniveau": "MBO",
+      "Opleidingsrichting": "Rolrelevant"
     },
     {
       "Education_Key": 14,
-      "Education_Name": "MBO Werktuigbouwkunde",
-      "Education_Level": "MBO",
-      "Education_Direction": "Rolrelevant"
+      "Opleiding_Naam": "MBO Werktuigbouwkunde",
+      "Opleidingsniveau": "MBO",
+      "Opleidingsrichting": "Rolrelevant"
     },
     {
       "Education_Key": 15,
-      "Education_Name": "MBO Elektrotechniek",
-      "Education_Level": "MBO",
-      "Education_Direction": "Rolrelevant"
+      "Opleiding_Naam": "MBO Elektrotechniek",
+      "Opleidingsniveau": "MBO",
+      "Opleidingsrichting": "Rolrelevant"
     },
     {
       "Education_Key": 16,
-      "Education_Name": "MBO/HBO Mechatronica",
-      "Education_Level": "MBO",
-      "Education_Direction": "Rolrelevant"
+      "Opleiding_Naam": "MBO/HBO Mechatronica",
+      "Opleidingsniveau": "MBO",
+      "Opleidingsrichting": "Rolrelevant"
     },
     {
       "Education_Key": 17,
-      "Education_Name": "MBO/HBO Werktuigbouwkunde",
-      "Education_Level": "MBO",
-      "Education_Direction": "Rolrelevant"
+      "Opleiding_Naam": "MBO/HBO Werktuigbouwkunde",
+      "Opleidingsniveau": "MBO",
+      "Opleidingsrichting": "Rolrelevant"
     },
     {
       "Education_Key": 18,
-      "Education_Name": "MBO/HBO Elektrotechniek",
-      "Education_Level": "MBO",
-      "Education_Direction": "Rolrelevant"
+      "Opleiding_Naam": "MBO/HBO Elektrotechniek",
+      "Opleidingsniveau": "MBO",
+      "Opleidingsrichting": "Rolrelevant"
     },
     {
       "Education_Key": 19,
-      "Education_Name": "MBO Voedingsmiddelentechnologie / Food",
-      "Education_Level": "MBO",
-      "Education_Direction": "Rolrelevant"
+      "Opleiding_Naam": "MBO Voedingsmiddelentechnologie / Food",
+      "Opleidingsniveau": "MBO",
+      "Opleidingsrichting": "Rolrelevant"
     },
     {
       "Education_Key": 20,
-      "Education_Name": "MBO Kwaliteitsmedewerker",
-      "Education_Level": "MBO",
-      "Education_Direction": "Rolrelevant"
+      "Opleiding_Naam": "MBO Kwaliteitsmedewerker",
+      "Opleidingsniveau": "MBO",
+      "Opleidingsrichting": "Rolrelevant"
     },
     {
       "Education_Key": 21,
-      "Education_Name": "Interne HACCP/GMP opleiding",
-      "Education_Level": "Certificaat",
-      "Education_Direction": "Rolrelevant"
+      "Opleiding_Naam": "Interne HACCP/GMP opleiding",
+      "Opleidingsniveau": "Certificaat",
+      "Opleidingsrichting": "Rolrelevant"
     },
     {
       "Education_Key": 22,
-      "Education_Name": "HBO Chemie",
-      "Education_Level": "HBO",
-      "Education_Direction": "Rolrelevant"
+      "Opleiding_Naam": "HBO Chemie",
+      "Opleidingsniveau": "HBO",
+      "Opleidingsrichting": "Rolrelevant"
     },
     {
       "Education_Key": 23,
-      "Education_Name": "HBO Life Sciences",
-      "Education_Level": "HBO",
-      "Education_Direction": "Rolrelevant"
+      "Opleiding_Naam": "HBO Life Sciences",
+      "Opleidingsniveau": "HBO",
+      "Opleidingsrichting": "Rolrelevant"
     },
     {
       "Education_Key": 24,
-      "Education_Name": "HBO Kwaliteitsmanagement",
-      "Education_Level": "HBO",
-      "Education_Direction": "Rolrelevant"
+      "Opleiding_Naam": "HBO Kwaliteitsmanagement",
+      "Opleidingsniveau": "HBO",
+      "Opleidingsrichting": "Rolrelevant"
     },
     {
       "Education_Key": 25,
-      "Education_Name": "WO Chemie",
-      "Education_Level": "WO",
-      "Education_Direction": "Rolrelevant"
+      "Opleiding_Naam": "WO Chemie",
+      "Opleidingsniveau": "WO",
+      "Opleidingsrichting": "Rolrelevant"
     },
     {
       "Education_Key": 26,
-      "Education_Name": "MBO Logistiek",
-      "Education_Level": "MBO",
-      "Education_Direction": "Rolrelevant"
+      "Opleiding_Naam": "MBO Logistiek",
+      "Opleidingsniveau": "MBO",
+      "Opleidingsrichting": "Rolrelevant"
     },
     {
       "Education_Key": 27,
-      "Education_Name": "HBO Logistics Management",
-      "Education_Level": "HBO",
-      "Education_Direction": "Rolrelevant"
+      "Opleiding_Naam": "HBO Logistics Management",
+      "Opleidingsniveau": "HBO",
+      "Opleidingsrichting": "Rolrelevant"
     },
     {
       "Education_Key": 28,
-      "Education_Name": "HBO Supply Chain Management",
-      "Education_Level": "HBO",
-      "Education_Direction": "Rolrelevant"
+      "Opleiding_Naam": "HBO Supply Chain Management",
+      "Opleidingsniveau": "HBO",
+      "Opleidingsrichting": "Rolrelevant"
     },
     {
       "Education_Key": 29,
-      "Education_Name": "HBO Food Innovation",
-      "Education_Level": "HBO",
-      "Education_Direction": "Rolrelevant"
+      "Opleiding_Naam": "HBO Food Innovation",
+      "Opleidingsniveau": "HBO",
+      "Opleidingsrichting": "Rolrelevant"
     },
     {
       "Education_Key": 30,
-      "Education_Name": "HBO/WO Chemische Technologie",
-      "Education_Level": "HBO",
-      "Education_Direction": "Rolrelevant"
+      "Opleiding_Naam": "HBO/WO Chemische Technologie",
+      "Opleidingsniveau": "HBO",
+      "Opleidingsrichting": "Rolrelevant"
     },
     {
       "Education_Key": 31,
-      "Education_Name": "WO Chemische Technologie",
-      "Education_Level": "WO",
-      "Education_Direction": "Rolrelevant"
+      "Opleiding_Naam": "WO Chemische Technologie",
+      "Opleidingsniveau": "WO",
+      "Opleidingsrichting": "Rolrelevant"
     },
     {
       "Education_Key": 32,
-      "Education_Name": "MBO ICT",
-      "Education_Level": "MBO",
-      "Education_Direction": "Rolrelevant"
+      "Opleiding_Naam": "MBO ICT",
+      "Opleidingsniveau": "MBO",
+      "Opleidingsrichting": "Rolrelevant"
     },
     {
       "Education_Key": 33,
-      "Education_Name": "HBO-ICT",
-      "Education_Level": "HBO",
-      "Education_Direction": "Rolrelevant"
+      "Opleiding_Naam": "HBO-ICT",
+      "Opleidingsniveau": "HBO",
+      "Opleidingsrichting": "Rolrelevant"
     },
     {
       "Education_Key": 34,
-      "Education_Name": "relevante applicatiecertificering",
-      "Education_Level": "Certificaat",
-      "Education_Direction": "Rolrelevant"
+      "Opleiding_Naam": "relevante applicatiecertificering",
+      "Opleidingsniveau": "Certificaat",
+      "Opleidingsrichting": "Rolrelevant"
     },
     {
       "Education_Key": 35,
-      "Education_Name": "HBO Business IT & Management",
-      "Education_Level": "HBO",
-      "Education_Direction": "Rolrelevant"
+      "Opleiding_Naam": "HBO Business IT & Management",
+      "Opleidingsniveau": "HBO",
+      "Opleidingsrichting": "Rolrelevant"
     },
     {
       "Education_Key": 36,
-      "Education_Name": "HBO Bedrijfskunde met IT-specialisatie",
-      "Education_Level": "HBO",
-      "Education_Direction": "Rolrelevant"
+      "Opleiding_Naam": "HBO Bedrijfskunde met IT-specialisatie",
+      "Opleidingsniveau": "HBO",
+      "Opleidingsrichting": "Rolrelevant"
     },
     {
       "Education_Key": 37,
-      "Education_Name": "HBO/WO Informatica",
-      "Education_Level": "HBO",
-      "Education_Direction": "Rolrelevant"
+      "Opleiding_Naam": "HBO/WO Informatica",
+      "Opleidingsniveau": "HBO",
+      "Opleidingsrichting": "Rolrelevant"
     },
     {
       "Education_Key": 38,
-      "Education_Name": "HBO Commerciële Economie",
-      "Education_Level": "HBO",
-      "Education_Direction": "Rolrelevant"
+      "Opleiding_Naam": "HBO Commerciële Economie",
+      "Opleidingsniveau": "HBO",
+      "Opleidingsrichting": "Rolrelevant"
     },
     {
       "Education_Key": 39,
-      "Education_Name": "HBO Food Business",
-      "Education_Level": "HBO",
-      "Education_Direction": "Rolrelevant"
+      "Opleiding_Naam": "HBO Food Business",
+      "Opleidingsniveau": "HBO",
+      "Opleidingsrichting": "Rolrelevant"
     },
     {
       "Education_Key": 40,
-      "Education_Name": "HBO/WO Commerciële Economie",
-      "Education_Level": "HBO",
-      "Education_Direction": "Rolrelevant"
+      "Opleiding_Naam": "HBO/WO Commerciële Economie",
+      "Opleidingsniveau": "HBO",
+      "Opleidingsrichting": "Rolrelevant"
     },
     {
       "Education_Key": 41,
-      "Education_Name": "MBO Human Resource Support",
-      "Education_Level": "MBO",
-      "Education_Direction": "Rolrelevant"
+      "Opleiding_Naam": "MBO Human Resource Support",
+      "Opleidingsniveau": "MBO",
+      "Opleidingsrichting": "Rolrelevant"
     },
     {
       "Education_Key": 42,
-      "Education_Name": "HBO Human Resource Management",
-      "Education_Level": "HBO",
-      "Education_Direction": "Rolrelevant"
+      "Opleiding_Naam": "HBO Human Resource Management",
+      "Opleidingsniveau": "HBO",
+      "Opleidingsrichting": "Rolrelevant"
     },
     {
       "Education_Key": 43,
-      "Education_Name": "WO Arbeids- en Organisatiepsychologie",
-      "Education_Level": "WO",
-      "Education_Direction": "Rolrelevant"
+      "Opleiding_Naam": "WO Arbeids- en Organisatiepsychologie",
+      "Opleidingsniveau": "WO",
+      "Opleidingsrichting": "Rolrelevant"
     },
     {
       "Education_Key": 44,
-      "Education_Name": "MBO Bedrijfsadministratie",
-      "Education_Level": "MBO",
-      "Education_Direction": "Rolrelevant"
+      "Opleiding_Naam": "MBO Bedrijfsadministratie",
+      "Opleidingsniveau": "MBO",
+      "Opleidingsrichting": "Rolrelevant"
     },
     {
       "Education_Key": 45,
-      "Education_Name": "HBO Finance & Control",
-      "Education_Level": "HBO",
-      "Education_Direction": "Rolrelevant"
+      "Opleiding_Naam": "HBO Finance & Control",
+      "Opleidingsniveau": "HBO",
+      "Opleidingsrichting": "Rolrelevant"
     },
     {
       "Education_Key": 46,
-      "Education_Name": "HBO Accountancy",
-      "Education_Level": "HBO",
-      "Education_Direction": "Rolrelevant"
+      "Opleiding_Naam": "HBO Accountancy",
+      "Opleidingsniveau": "HBO",
+      "Opleidingsrichting": "Rolrelevant"
     },
     {
       "Education_Key": 47,
-      "Education_Name": "WO Bedrijfseconomie",
-      "Education_Level": "WO",
-      "Education_Direction": "Rolrelevant"
+      "Opleiding_Naam": "WO Bedrijfseconomie",
+      "Opleidingsniveau": "WO",
+      "Opleidingsrichting": "Rolrelevant"
     },
     {
       "Education_Key": 48,
-      "Education_Name": "relevante technische of operationele HBO/WO-opleiding",
-      "Education_Level": "Certificaat",
-      "Education_Direction": "Rolrelevant"
+      "Opleiding_Naam": "relevante technische of operationele HBO/WO-opleiding",
+      "Opleidingsniveau": "Certificaat",
+      "Opleidingsrichting": "Rolrelevant"
     },
     {
       "Education_Key": 49,
-      "Education_Name": "technische of bedrijfskundige HBO/WO-opleiding",
-      "Education_Level": "Certificaat",
-      "Education_Direction": "Rolrelevant"
+      "Opleiding_Naam": "technische of bedrijfskundige HBO/WO-opleiding",
+      "Opleidingsniveau": "Certificaat",
+      "Opleidingsrichting": "Rolrelevant"
     },
     {
       "Education_Key": 50,
-      "Education_Name": "HBO/WO Werktuigbouwkunde",
-      "Education_Level": "HBO",
-      "Education_Direction": "Rolrelevant"
+      "Opleiding_Naam": "HBO/WO Werktuigbouwkunde",
+      "Opleidingsniveau": "HBO",
+      "Opleidingsrichting": "Rolrelevant"
     },
     {
       "Education_Key": 51,
-      "Education_Name": "HBO/WO Mechatronica",
-      "Education_Level": "HBO",
-      "Education_Direction": "Rolrelevant"
+      "Opleiding_Naam": "HBO/WO Mechatronica",
+      "Opleidingsniveau": "HBO",
+      "Opleidingsrichting": "Rolrelevant"
     },
     {
       "Education_Key": 52,
-      "Education_Name": "HBO/WO Elektrotechniek",
-      "Education_Level": "HBO",
-      "Education_Direction": "Rolrelevant"
+      "Opleiding_Naam": "HBO/WO Elektrotechniek",
+      "Opleidingsniveau": "HBO",
+      "Opleidingsrichting": "Rolrelevant"
     },
     {
       "Education_Key": 53,
-      "Education_Name": "HBO Werktuigbouwkunde",
-      "Education_Level": "HBO",
-      "Education_Direction": "Rolrelevant"
+      "Opleiding_Naam": "HBO Werktuigbouwkunde",
+      "Opleidingsniveau": "HBO",
+      "Opleidingsrichting": "Rolrelevant"
     },
     {
       "Education_Key": 54,
-      "Education_Name": "HBO Mechatronica",
-      "Education_Level": "HBO",
-      "Education_Direction": "Rolrelevant"
+      "Opleiding_Naam": "HBO Mechatronica",
+      "Opleidingsniveau": "HBO",
+      "Opleidingsrichting": "Rolrelevant"
     },
     {
       "Education_Key": 55,
-      "Education_Name": "HBO Elektrotechniek",
-      "Education_Level": "HBO",
-      "Education_Direction": "Rolrelevant"
+      "Opleiding_Naam": "HBO Elektrotechniek",
+      "Opleidingsniveau": "HBO",
+      "Opleidingsrichting": "Rolrelevant"
     },
     {
       "Education_Key": 56,
-      "Education_Name": "relevante maintenance/reliability-certificering",
-      "Education_Level": "Certificaat",
-      "Education_Direction": "Rolrelevant"
+      "Opleiding_Naam": "relevante maintenance/reliability-certificering",
+      "Opleidingsniveau": "Certificaat",
+      "Opleidingsrichting": "Rolrelevant"
     },
     {
       "Education_Key": 57,
-      "Education_Name": "MBO Laboratoriumtechniek",
-      "Education_Level": "MBO",
-      "Education_Direction": "Rolrelevant"
+      "Opleiding_Naam": "MBO Laboratoriumtechniek",
+      "Opleidingsniveau": "MBO",
+      "Opleidingsrichting": "Rolrelevant"
     },
     {
       "Education_Key": 58,
-      "Education_Name": "MBO Chemisch-Fysisch Analist",
-      "Education_Level": "MBO",
-      "Education_Direction": "Rolrelevant"
+      "Opleiding_Naam": "MBO Chemisch-Fysisch Analist",
+      "Opleidingsniveau": "MBO",
+      "Opleidingsrichting": "Rolrelevant"
     },
     {
       "Education_Key": 59,
-      "Education_Name": "MBO Allround Laborant",
-      "Education_Level": "MBO",
-      "Education_Direction": "Rolrelevant"
+      "Opleiding_Naam": "MBO Allround Laborant",
+      "Opleidingsniveau": "MBO",
+      "Opleidingsrichting": "Rolrelevant"
     },
     {
       "Education_Key": 60,
-      "Education_Name": "HBO/WO Supply Chain Management",
-      "Education_Level": "HBO",
-      "Education_Direction": "Rolrelevant"
+      "Opleiding_Naam": "HBO/WO Supply Chain Management",
+      "Opleidingsniveau": "HBO",
+      "Opleidingsrichting": "Rolrelevant"
     },
     {
       "Education_Key": 61,
-      "Education_Name": "HBO/WO Packaging Technology",
-      "Education_Level": "HBO",
-      "Education_Direction": "Rolrelevant"
+      "Opleiding_Naam": "HBO/WO Packaging Technology",
+      "Opleidingsniveau": "HBO",
+      "Opleidingsrichting": "Rolrelevant"
     },
     {
       "Education_Key": 62,
-      "Education_Name": "HBO/WO Materiaalkunde",
-      "Education_Level": "HBO",
-      "Education_Direction": "Rolrelevant"
+      "Opleiding_Naam": "HBO/WO Materiaalkunde",
+      "Opleidingsniveau": "HBO",
+      "Opleidingsrichting": "Rolrelevant"
     },
     {
       "Education_Key": 63,
-      "Education_Name": "relevante applicatie- en integratiecertificering",
-      "Education_Level": "Certificaat",
-      "Education_Direction": "Rolrelevant"
+      "Opleiding_Naam": "relevante applicatie- en integratiecertificering",
+      "Opleidingsniveau": "Certificaat",
+      "Opleidingsrichting": "Rolrelevant"
     },
     {
       "Education_Key": 64,
-      "Education_Name": "HBO Integrale Veiligheidskunde",
-      "Education_Level": "HBO",
-      "Education_Direction": "Rolrelevant"
+      "Opleiding_Naam": "HBO Integrale Veiligheidskunde",
+      "Opleidingsniveau": "HBO",
+      "Opleidingsrichting": "Rolrelevant"
     },
     {
       "Education_Key": 65,
-      "Education_Name": "MBO/HBO Milieukunde",
-      "Education_Level": "MBO",
-      "Education_Direction": "Rolrelevant"
+      "Opleiding_Naam": "MBO/HBO Milieukunde",
+      "Opleidingsniveau": "MBO",
+      "Opleidingsrichting": "Rolrelevant"
     },
     {
       "Education_Key": 66,
-      "Education_Name": "relevante QHSE-certificering",
-      "Education_Level": "Certificaat",
-      "Education_Direction": "Rolrelevant"
+      "Opleiding_Naam": "relevante QHSE-certificering",
+      "Opleidingsniveau": "Certificaat",
+      "Opleidingsrichting": "Rolrelevant"
     },
     {
       "Education_Key": 67,
-      "Education_Name": "HVK",
-      "Education_Level": "Certificaat",
-      "Education_Direction": "Rolrelevant"
+      "Opleiding_Naam": "HVK",
+      "Opleidingsniveau": "Certificaat",
+      "Opleidingsrichting": "Rolrelevant"
     },
     {
       "Education_Key": 68,
-      "Education_Name": "HBO/WO Milieukunde",
-      "Education_Level": "HBO",
-      "Education_Direction": "Rolrelevant"
+      "Opleiding_Naam": "HBO/WO Milieukunde",
+      "Opleidingsniveau": "HBO",
+      "Opleidingsrichting": "Rolrelevant"
     },
     {
       "Education_Key": 69,
-      "Education_Name": "HBO/WO Integrale Veiligheidskunde",
-      "Education_Level": "HBO",
-      "Education_Direction": "Rolrelevant"
+      "Opleiding_Naam": "HBO/WO Integrale Veiligheidskunde",
+      "Opleidingsniveau": "HBO",
+      "Opleidingsrichting": "Rolrelevant"
     }
   ],
   "dim_absence_type": {
@@ -665,27 +665,27 @@
   },
   "dim_satisfaction_band": [
     {
-      "SatisfactionBand_Name": "Zeer laag",
+      "Tevredenheidsband_Naam": "Zeer laag",
       "Minimum_Score": 1.0,
       "Maximum_Score": 4.49
     },
     {
-      "SatisfactionBand_Name": "Laag",
+      "Tevredenheidsband_Naam": "Laag",
       "Minimum_Score": 4.5,
       "Maximum_Score": 5.99
     },
     {
-      "SatisfactionBand_Name": "Neutraal",
+      "Tevredenheidsband_Naam": "Neutraal",
       "Minimum_Score": 6.0,
       "Maximum_Score": 7.49
     },
     {
-      "SatisfactionBand_Name": "Hoog",
+      "Tevredenheidsband_Naam": "Hoog",
       "Minimum_Score": 7.5,
       "Maximum_Score": 8.49
     },
     {
-      "SatisfactionBand_Name": "Zeer hoog",
+      "Tevredenheidsband_Naam": "Zeer hoog",
       "Minimum_Score": 8.5,
       "Maximum_Score": 10.0
     }
@@ -693,188 +693,188 @@
   "dim_satisfaction_driver": [
     {
       "SatisfactionDriver_Key": 1,
-      "Driver_Name": "Beloning",
-      "Direction": "Negatief"
+      "Factor_Naam": "Beloning",
+      "Richting": "Negatief"
     },
     {
       "SatisfactionDriver_Key": 2,
-      "Driver_Name": "Beloning",
-      "Direction": "Positief"
+      "Factor_Naam": "Beloning",
+      "Richting": "Positief"
     },
     {
       "SatisfactionDriver_Key": 3,
-      "Driver_Name": "Leiderschap",
-      "Direction": "Negatief"
+      "Factor_Naam": "Leiderschap",
+      "Richting": "Negatief"
     },
     {
       "SatisfactionDriver_Key": 4,
-      "Driver_Name": "Leiderschap",
-      "Direction": "Positief"
+      "Factor_Naam": "Leiderschap",
+      "Richting": "Positief"
     },
     {
       "SatisfactionDriver_Key": 5,
-      "Driver_Name": "Teamdynamiek",
-      "Direction": "Negatief"
+      "Factor_Naam": "Teamdynamiek",
+      "Richting": "Negatief"
     },
     {
       "SatisfactionDriver_Key": 6,
-      "Driver_Name": "Teamdynamiek",
-      "Direction": "Positief"
+      "Factor_Naam": "Teamdynamiek",
+      "Richting": "Positief"
     },
     {
       "SatisfactionDriver_Key": 7,
-      "Driver_Name": "Cultuur en verbondenheid",
-      "Direction": "Negatief"
+      "Factor_Naam": "Cultuur en verbondenheid",
+      "Richting": "Negatief"
     },
     {
       "SatisfactionDriver_Key": 8,
-      "Driver_Name": "Cultuur en verbondenheid",
-      "Direction": "Positief"
+      "Factor_Naam": "Cultuur en verbondenheid",
+      "Richting": "Positief"
     },
     {
       "SatisfactionDriver_Key": 9,
-      "Driver_Name": "Carriere en opleidingsmogelijkheden",
-      "Direction": "Negatief"
+      "Factor_Naam": "Carriere en opleidingsmogelijkheden",
+      "Richting": "Negatief"
     },
     {
       "SatisfactionDriver_Key": 10,
-      "Driver_Name": "Carriere en opleidingsmogelijkheden",
-      "Direction": "Positief"
+      "Factor_Naam": "Carriere en opleidingsmogelijkheden",
+      "Richting": "Positief"
     },
     {
       "SatisfactionDriver_Key": 11,
-      "Driver_Name": "Werkcontext",
-      "Direction": "Negatief"
+      "Factor_Naam": "Werkcontext",
+      "Richting": "Negatief"
     },
     {
       "SatisfactionDriver_Key": 12,
-      "Driver_Name": "Werkcontext",
-      "Direction": "Positief"
+      "Factor_Naam": "Werkcontext",
+      "Richting": "Positief"
     },
     {
       "SatisfactionDriver_Key": 13,
-      "Driver_Name": "Geen dominant aandachtspunt",
-      "Direction": "Neutraal"
+      "Factor_Naam": "Geen dominant aandachtspunt",
+      "Richting": "Neutraal"
     }
   ],
   "dim_engagement_band": [
     {
-      "EngagementBand_Name": "Zeer laag",
+      "Betrokkenheidsband_Naam": "Zeer laag",
       "Minimum_Score": 1.0,
       "Maximum_Score": 4.49
     },
     {
-      "EngagementBand_Name": "Laag",
+      "Betrokkenheidsband_Naam": "Laag",
       "Minimum_Score": 4.5,
       "Maximum_Score": 5.99
     },
     {
-      "EngagementBand_Name": "Neutraal",
+      "Betrokkenheidsband_Naam": "Neutraal",
       "Minimum_Score": 6.0,
       "Maximum_Score": 7.49
     },
     {
-      "EngagementBand_Name": "Hoog",
+      "Betrokkenheidsband_Naam": "Hoog",
       "Minimum_Score": 7.5,
       "Maximum_Score": 8.49
     },
     {
-      "EngagementBand_Name": "Zeer hoog",
+      "Betrokkenheidsband_Naam": "Zeer hoog",
       "Minimum_Score": 8.5,
       "Maximum_Score": 10.0
     }
   ],
   "dim_performance_driver": [
     {
-      "Driver_Name": "Resultaat en werkuitvoering"
+      "Factor_Naam": "Resultaat en werkuitvoering"
     },
     {
-      "Driver_Name": "Vakmanschap en relevante ervaring"
+      "Factor_Naam": "Vakmanschap en relevante ervaring"
     },
     {
-      "Driver_Name": "Samenwerking en flexibiliteit"
+      "Factor_Naam": "Samenwerking en flexibiliteit"
     },
     {
-      "Driver_Name": "Initiatief en verbeteren"
+      "Factor_Naam": "Initiatief en verbeteren"
     },
     {
-      "Driver_Name": "Coachen, kennisdeling en ontwikkeling van anderen"
+      "Factor_Naam": "Coachen, kennisdeling en ontwikkeling van anderen"
     },
     {
-      "Driver_Name": "Relevante startkwalificatie"
+      "Factor_Naam": "Relevante startkwalificatie"
     }
   ],
   "dim_engagement_driver": [
     {
-      "Driver_Name": "Initiatief en verbeteren"
+      "Factor_Naam": "Initiatief en verbeteren"
     },
     {
-      "Driver_Name": "Kennisdeling en mentoring"
+      "Factor_Naam": "Kennisdeling en mentoring"
     },
     {
-      "Driver_Name": "Samenwerking buiten de eigen rol"
+      "Factor_Naam": "Samenwerking buiten de eigen rol"
     },
     {
-      "Driver_Name": "Medewerkersstem en participatie"
+      "Factor_Naam": "Medewerkersstem en participatie"
     },
     {
-      "Driver_Name": "Organisatieverbondenheid"
+      "Factor_Naam": "Organisatieverbondenheid"
     },
     {
-      "Driver_Name": "Rolverbondenheid/eigenaarschap"
+      "Factor_Naam": "Rolverbondenheid/eigenaarschap"
     },
     {
-      "Driver_Name": "Geen dominant aandachtspunt"
+      "Factor_Naam": "Geen dominant aandachtspunt"
     }
   ],
   "dim_candidate_quality_driver": [
     {
-      "Driver_Name": "Relevante werkervaring"
+      "Factor_Naam": "Relevante werkervaring"
     },
     {
-      "Driver_Name": "Relevante opleiding"
+      "Factor_Naam": "Relevante opleiding"
     },
     {
-      "Driver_Name": "Technische vaardigheden en kwalificaties"
+      "Factor_Naam": "Technische vaardigheden en kwalificaties"
     },
     {
-      "Driver_Name": "Rolrelevante soft skills"
+      "Factor_Naam": "Rolrelevante soft skills"
     },
     {
-      "Driver_Name": "Motivatie en voorbereiding"
+      "Factor_Naam": "Motivatie en voorbereiding"
     },
     {
-      "Driver_Name": "Gebalanceerd profiel"
+      "Factor_Naam": "Gebalanceerd profiel"
     }
   ],
   "dim_salary_band": [
     {
-      "SalaryBand_Name": "Onder EUR 35.000",
+      "Salarisband_Naam": "Onder EUR 35.000",
       "Minimum_Salaris": 0,
       "Maximum_Salaris": 34999
     },
     {
-      "SalaryBand_Name": "EUR 35.000 - 44.999",
+      "Salarisband_Naam": "EUR 35.000 - 44.999",
       "Minimum_Salaris": 35000,
       "Maximum_Salaris": 44999
     },
     {
-      "SalaryBand_Name": "EUR 45.000 - 59.999",
+      "Salarisband_Naam": "EUR 45.000 - 59.999",
       "Minimum_Salaris": 45000,
       "Maximum_Salaris": 59999
     },
     {
-      "SalaryBand_Name": "EUR 60.000 - 79.999",
+      "Salarisband_Naam": "EUR 60.000 - 79.999",
       "Minimum_Salaris": 60000,
       "Maximum_Salaris": 79999
     },
     {
-      "SalaryBand_Name": "EUR 80.000 - 99.999",
+      "Salarisband_Naam": "EUR 80.000 - 99.999",
       "Minimum_Salaris": 80000,
       "Maximum_Salaris": 99999
     },
     {
-      "SalaryBand_Name": "EUR 100.000 en hoger",
+      "Salarisband_Naam": "EUR 100.000 en hoger",
       "Minimum_Salaris": 100000,
       "Maximum_Salaris": null
     }
@@ -882,56 +882,56 @@
   "dim_salary_scale": [
     {
       "SalaryScale_Key": 1,
-      "SalaryScale_Code": "A",
-      "SalaryScale_Name": "Schaal A",
+      "Salarisschaal_Code": "A",
+      "Salarisschaal_Naam": "Schaal A",
       "Minimum_Salaris": 29000,
       "Maximum_Salaris": 38000,
       "Aantal_Treden": 10
     },
     {
       "SalaryScale_Key": 2,
-      "SalaryScale_Code": "B",
-      "SalaryScale_Name": "Schaal B",
+      "Salarisschaal_Code": "B",
+      "Salarisschaal_Naam": "Schaal B",
       "Minimum_Salaris": 32000,
       "Maximum_Salaris": 50000,
       "Aantal_Treden": 10
     },
     {
       "SalaryScale_Key": 3,
-      "SalaryScale_Code": "C",
-      "SalaryScale_Name": "Schaal C",
+      "Salarisschaal_Code": "C",
+      "Salarisschaal_Naam": "Schaal C",
       "Minimum_Salaris": 40000,
       "Maximum_Salaris": 60000,
       "Aantal_Treden": 10
     },
     {
       "SalaryScale_Key": 4,
-      "SalaryScale_Code": "D",
-      "SalaryScale_Name": "Schaal D",
+      "Salarisschaal_Code": "D",
+      "Salarisschaal_Naam": "Schaal D",
       "Minimum_Salaris": 47000,
       "Maximum_Salaris": 80000,
       "Aantal_Treden": 10
     },
     {
       "SalaryScale_Key": 5,
-      "SalaryScale_Code": "E",
-      "SalaryScale_Name": "Schaal E",
+      "Salarisschaal_Code": "E",
+      "Salarisschaal_Naam": "Schaal E",
       "Minimum_Salaris": 60000,
       "Maximum_Salaris": 100000,
       "Aantal_Treden": 10
     },
     {
       "SalaryScale_Key": 6,
-      "SalaryScale_Code": "F",
-      "SalaryScale_Name": "Schaal F",
+      "Salarisschaal_Code": "F",
+      "Salarisschaal_Naam": "Schaal F",
       "Minimum_Salaris": 85000,
       "Maximum_Salaris": 120000,
       "Aantal_Treden": 10
     },
     {
       "SalaryScale_Key": 7,
-      "SalaryScale_Code": "G",
-      "SalaryScale_Name": "Schaal G",
+      "Salarisschaal_Code": "G",
+      "Salarisschaal_Naam": "Schaal G",
       "Minimum_Salaris": 105000,
       "Maximum_Salaris": 190000,
       "Aantal_Treden": 10
@@ -2628,11 +2628,11 @@
   ],
   "recruitment": {
     "candidate_quality_weights": {
-      "Candidate_Experience_Score": 0.28,
-      "Candidate_Education_Relevance_Score": 0.18,
-      "Candidate_Technical_Skills_Score": 0.26,
-      "Candidate_Soft_Skills_Score": 0.16,
-      "Candidate_Motivation_Score": 0.12
+      "Kandidaat_Ervaring_Score": 0.28,
+      "Kandidaat_Opleiding_Relevantie_Score": 0.18,
+      "Kandidaat_Technische_Vaardigheden_Score": 0.26,
+      "Kandidaat_Sociale_Vaardigheden_Score": 0.16,
+      "Kandidaat_Motivatie_Score": 0.12
     },
     "decision_days": {
       "min": 3,
@@ -3734,98 +3734,98 @@
   "dim_decline_reason": [
     {
       "DeclineReason_Key": 1,
-      "DeclineReason_Name": "Ander aanbod geaccepteerd",
-      "Category": "Extern aanbod"
+      "Weigeringsreden_Naam": "Ander aanbod geaccepteerd",
+      "Categorie": "Extern aanbod"
     },
     {
       "DeclineReason_Key": 2,
-      "DeclineReason_Name": "Tegenbod huidige werkgever",
-      "Category": "Extern aanbod"
+      "Weigeringsreden_Naam": "Tegenbod huidige werkgever",
+      "Categorie": "Extern aanbod"
     },
     {
       "DeclineReason_Key": 3,
-      "DeclineReason_Name": "Arbeidsvoorwaarden onvoldoende",
-      "Category": "Arbeidsvoorwaarden"
+      "Weigeringsreden_Naam": "Arbeidsvoorwaarden onvoldoende",
+      "Categorie": "Arbeidsvoorwaarden"
     },
     {
       "DeclineReason_Key": 4,
-      "DeclineReason_Name": "Persoonlijke omstandigheden",
-      "Category": "Persoonlijk"
+      "Weigeringsreden_Naam": "Persoonlijke omstandigheden",
+      "Categorie": "Persoonlijk"
     },
     {
       "DeclineReason_Key": 5,
-      "DeclineReason_Name": "Reisafstand of verhuizing",
-      "Category": "Persoonlijk"
+      "Weigeringsreden_Naam": "Reisafstand of verhuizing",
+      "Categorie": "Persoonlijk"
     }
   ],
   "dim_rejection_reason": [
     {
       "RejectionReason_Key": 1,
-      "RejectionReason_Name": "Onvoldoende relevante werkervaring",
-      "Category": "Kwalificatie"
+      "Afwijzingsreden_Naam": "Onvoldoende relevante werkervaring",
+      "Categorie": "Kwalificatie"
     },
     {
       "RejectionReason_Key": 2,
-      "RejectionReason_Name": "Opleiding of kwalificatie onvoldoende",
-      "Category": "Kwalificatie"
+      "Afwijzingsreden_Naam": "Opleiding of kwalificatie onvoldoende",
+      "Categorie": "Kwalificatie"
     },
     {
       "RejectionReason_Key": 3,
-      "RejectionReason_Name": "Onvoldoende leidinggevende ervaring",
-      "Category": "Kwalificatie"
+      "Afwijzingsreden_Naam": "Onvoldoende leidinggevende ervaring",
+      "Categorie": "Kwalificatie"
     },
     {
       "RejectionReason_Key": 4,
-      "RejectionReason_Name": "Kwaliteit onder minimumniveau",
-      "Category": "Kwaliteit"
+      "Afwijzingsreden_Naam": "Kwaliteit onder minimumniveau",
+      "Categorie": "Kwaliteit"
     },
     {
       "RejectionReason_Key": 5,
-      "RejectionReason_Name": "Andere kandidaat gekozen",
-      "Category": "Niet geselecteerd"
+      "Afwijzingsreden_Naam": "Andere kandidaat gekozen",
+      "Categorie": "Niet geselecteerd"
     }
   ],
   "dim_recruitment_stage": [
     {
       "Stage_Key": 1,
-      "Stage_Name": "Sollicitatie",
+      "Fase_Naam": "Sollicitatie",
       "Sort_Order": 1
     },
     {
       "Stage_Key": 2,
-      "Stage_Name": "Screening",
+      "Fase_Naam": "Screening",
       "Sort_Order": 2
     },
     {
       "Stage_Key": 3,
-      "Stage_Name": "Gesprek",
+      "Fase_Naam": "Gesprek",
       "Sort_Order": 3
     },
     {
       "Stage_Key": 4,
-      "Stage_Name": "Aanbod",
+      "Fase_Naam": "Aanbod",
       "Sort_Order": 4
     }
   ],
   "dim_incident_type": [
     {
       "IncidentType_Key": 1,
-      "IncidentType_Name": "Bijna-ongeval",
+      "Incidenttype_Naam": "Bijna-ongeval",
       "Recordable": false
     },
     {
       "IncidentType_Key": 2,
-      "IncidentType_Name": "EHBO-geval",
+      "Incidenttype_Naam": "EHBO-geval",
       "Recordable": false
     },
     {
       "IncidentType_Key": 3,
-      "IncidentType_Name": "Medische behandeling",
+      "Incidenttype_Naam": "Medische behandeling",
       "Recordable": true
     },
     {
       "IncidentType_Key": 4,
-      "IncidentType_Name": "Verzuimongeval",
+      "Incidenttype_Naam": "Verzuimongeval",
       "Recordable": true
     }
   ],
@@ -3869,22 +3869,22 @@
   "dim_shift": [
     {
       "Shift_Key": 0,
-      "Shift_Name": "Niet van toepassing",
+      "Ploegendienst_Naam": "Niet van toepassing",
       "Is_Shift_Work": false
     },
     {
       "Shift_Key": 1,
-      "Shift_Name": "Dag",
+      "Ploegendienst_Naam": "Dag",
       "Is_Shift_Work": true
     },
     {
       "Shift_Key": 2,
-      "Shift_Name": "2-ploeg",
+      "Ploegendienst_Naam": "2-ploeg",
       "Is_Shift_Work": true
     },
     {
       "Shift_Key": 3,
-      "Shift_Name": "3-ploeg",
+      "Ploegendienst_Naam": "3-ploeg",
       "Is_Shift_Work": true
     }
   ],

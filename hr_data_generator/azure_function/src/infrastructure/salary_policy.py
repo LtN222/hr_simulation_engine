@@ -24,13 +24,13 @@ class SalaryPolicy:
         """Return the market benchmark for one role and employee tenure."""
         benchmark = self.role_benchmark(role, snapshot_date)
         step = self._step_for_service(service_start, snapshot_date, benchmark)
-        benchmark["SalaryStep"] = step
+        benchmark["Salaris_Trede"] = step
         benchmark["Benchmark_Salaris"] = self.step_salary(benchmark, step)
         return benchmark
 
     def role_benchmark(self, role, snapshot_date):
         """Return the role-level market range before assigning a salary step."""
-        role_name = role.get("Role_Name", "")
+        role_name = role.get("Functie_Naam", "")
         medians = self.config.get("market_median_by_role", {})
         base_median = float(medians.get(
             role_name,
@@ -44,15 +44,15 @@ class SalaryPolicy:
         return {
             "SalaryScale_Key": int(scale["SalaryScale_Key"]),
             "Aantal_Treden": int(scale["Aantal_Treden"]),
-            "Scale_Min_Salaris": int(round(
+            "Schaal_Min_Salaris": int(round(
                 float(scale["Minimum_Salaris"]) * growth_factor
             )),
-            "Scale_Max_Salaris": int(round(
+            "Schaal_Max_Salaris": int(round(
                 float(scale["Maximum_Salaris"]) * growth_factor
             )),
-            "Market_P25": int(round(median * (1 - spread))),
-            "Market_Median": median,
-            "Market_P75": int(round(median * (1 + spread)))
+            "Markt_P25": int(round(median * (1 - spread))),
+            "Markt_Mediaan": median,
+            "Markt_P75": int(round(median * (1 + spread)))
         }
 
     def initial_salary(self, role, department_name, today, service_start, rng, is_new_hire):
@@ -167,11 +167,11 @@ class SalaryPolicy:
     def step_salary(benchmark, step):
         step_count = int(benchmark["Aantal_Treden"])
         if step_count <= 1:
-            return int(benchmark["Market_Median"])
+            return int(benchmark["Markt_Mediaan"])
         progress = (int(step) - 1) / (step_count - 1)
         return int(round(
-            benchmark["Market_P25"]
-            + (benchmark["Market_P75"] - benchmark["Market_P25"]) * progress
+            benchmark["Markt_P25"]
+            + (benchmark["Markt_P75"] - benchmark["Markt_P25"]) * progress
         ))
 
     @staticmethod

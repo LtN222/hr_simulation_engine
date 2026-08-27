@@ -14,7 +14,7 @@ def build_dim_department(structure: dict):
             next(iter(structure[name].values())).get("department_key", i)
             for i, name in enumerate(departments, 1)
         ],
-        "Department_Name": departments
+        "Afdeling_Naam": departments
     })
 
 
@@ -32,7 +32,7 @@ def build_dim_role(
 
     dept_lookup = dict(
         zip(
-            dim_department["Department_Name"],
+            dim_department["Afdeling_Naam"],
             dim_department["Department_Key"]
         )
     )
@@ -59,9 +59,9 @@ def build_dim_role(
 
             rows.append({
                 "Role_Key": details.get("role_key", len(rows) + 1),
-                "Role_Name": role_name,
+                "Functie_Naam": role_name,
                 "Department_Key": dept_lookup[dept],
-                "Department_Name": dept,
+                "Afdeling_Naam": dept,
                 "Leidinggevend": details["leidinggevend"],
                 "Salaris_min": details["salaris_range"][0],
                 "Salaris_max": details["salaris_range"][1],
@@ -91,7 +91,7 @@ def build_dim_event_type(event_types: list):
 
         rows.append({
             "EventType_Key": i,
-            "EventType": event
+            "Gebeurtenis": event
         })
 
     return pd.DataFrame(rows)
@@ -112,8 +112,8 @@ def build_dim_departure_reason(departure_reasons: dict):
 
             rows.append({
                 "DepartureReason_Key": key,
-                "DepartureReason": reason,
-                "Category": category
+                "Vertrekreden": reason,
+                "Categorie": category
             })
 
             key += 1
@@ -133,7 +133,7 @@ def build_dim_hire_source(hire_sources: list):
 
         rows.append({
             "HireSource_Key": i,
-            "HireSource_Name": source
+            "Bron_Naam": source
         })
 
     return pd.DataFrame(rows)
@@ -151,9 +151,9 @@ def build_dim_education(educations: list):
 
         rows.append({
             "Education_Key": education.get("Education_Key", i),
-            "Education_Name": education["Education_Name"],
-            "Education_Level": education["Education_Level"],
-            "Education_Direction": education["Education_Direction"],
+            "Opleiding_Naam": education["Opleiding_Naam"],
+            "Opleidingsniveau": education["Opleidingsniveau"],
+            "Opleidingsrichting": education["Opleidingsrichting"],
         })
 
     return pd.DataFrame(rows)
@@ -171,7 +171,7 @@ def build_dim_location(locations: dict):
 
         rows.append({
             "Location_Key": i,
-            "Location_Name": loc
+            "Vestiging_Naam": loc
         })
 
     return pd.DataFrame(rows)
@@ -192,7 +192,7 @@ def build_dim_absence_type(absence_types: dict):
 
         rows.append({
             "AbsenceType_Key": i,
-            "AbsenceType_Name": absence_type,
+            "Verzuim_Type_Naam": absence_type,
             "Telt_als_verzuim": telt_als_verzuim
         })
 
@@ -211,7 +211,7 @@ def _salary_scale_for_role(
 
     if "salary_scale_code" in details:
         matching = dim_salary_scale.loc[
-            dim_salary_scale["SalaryScale_Code"] == details["salary_scale_code"],
+            dim_salary_scale["Salarisschaal_Code"] == details["salary_scale_code"],
             "SalaryScale_Key"
         ]
         if not matching.empty:

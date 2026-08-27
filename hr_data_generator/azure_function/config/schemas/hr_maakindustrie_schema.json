@@ -4,7 +4,7 @@
     "primary_key": "Department_Key",
     "types": {
       "Department_Key": "INT",
-      "Department_Name": "NVARCHAR(100)"
+      "Afdeling_Naam": "NVARCHAR(100)"
     }
   },
   "dim_role": {
@@ -13,8 +13,8 @@
     "types": {
       "Role_Key": "INT",
       "Department_Key": "INT",
-      "Department_Name": "NVARCHAR(100)",
-      "Role_Name": "NVARCHAR(100)",
+      "Afdeling_Naam": "NVARCHAR(100)",
+      "Functie_Naam": "NVARCHAR(100)",
       "Leidinggevend": "BIT",
       "Salaris_min": "INT",
       "Salaris_max": "INT",
@@ -55,7 +55,7 @@
     "primary_key": "Location_Key",
     "types": {
       "Location_Key": "INT",
-      "Location_Name": "NVARCHAR(100)"
+      "Vestiging_Naam": "NVARCHAR(100)"
     }
   },
   "dim_hire_source": {
@@ -63,9 +63,9 @@
     "primary_key": "HireSource_Key",
     "types": {
       "HireSource_Key": "INT",
-      "HireSource_Name": "NVARCHAR(100)",
-      "Source_Group": "NVARCHAR(50)",
-      "Source_Description": "NVARCHAR(250)",
+      "Bron_Naam": "NVARCHAR(100)",
+      "Bron_Groep": "NVARCHAR(50)",
+      "Bron_Omschrijving": "NVARCHAR(250)",
       "Is_Internal": "BIT"
     }
   },
@@ -74,9 +74,9 @@
     "primary_key": "RecruitmentStatus_Key",
     "types": {
       "RecruitmentStatus_Key": "INT",
-      "Status_Name": "NVARCHAR(50)",
-      "Status_Verbose": "NVARCHAR(250)",
-      "Status_Group": "NVARCHAR(100)",
+      "Status_Naam": "NVARCHAR(50)",
+      "Status_Omschrijving": "NVARCHAR(250)",
+      "Status_Groep": "NVARCHAR(100)",
       "Is_Final": "BIT",
       "Counts_As_Hire": "BIT",
       "Sort_Order": "INT"
@@ -87,7 +87,7 @@
     "primary_key": "Stage_Key",
     "types": {
       "Stage_Key": "INT",
-      "Stage_Name": "NVARCHAR(50)",
+      "Fase_Naam": "NVARCHAR(50)",
       "Sort_Order": "INT"
     }
   },
@@ -96,8 +96,8 @@
     "primary_key": "DeclineReason_Key",
     "types": {
       "DeclineReason_Key": "INT",
-      "DeclineReason_Name": "NVARCHAR(100)",
-      "Category": "NVARCHAR(50)"
+      "Weigeringsreden_Naam": "NVARCHAR(100)",
+      "Categorie": "NVARCHAR(50)"
     }
   },
   "dim_rejection_reason": {
@@ -105,8 +105,8 @@
     "primary_key": "RejectionReason_Key",
     "types": {
       "RejectionReason_Key": "INT",
-      "RejectionReason_Name": "NVARCHAR(100)",
-      "Category": "NVARCHAR(50)"
+      "Afwijzingsreden_Naam": "NVARCHAR(100)",
+      "Categorie": "NVARCHAR(50)"
     }
   },
   "dim_education": {
@@ -114,9 +114,9 @@
     "primary_key": "Education_Key",
     "types": {
       "Education_Key": "INT",
-      "Education_Name": "NVARCHAR(150)",
-      "Education_Level": "NVARCHAR(20)",
-      "Education_Direction": "NVARCHAR(100)"
+      "Opleiding_Naam": "NVARCHAR(150)",
+      "Opleidingsniveau": "NVARCHAR(20)",
+      "Opleidingsrichting": "NVARCHAR(100)"
     }
   },
   "dim_absence_type": {
@@ -124,7 +124,7 @@
     "primary_key": "AbsenceType_Key",
     "types": {
       "AbsenceType_Key": "INT",
-      "AbsenceType_Name": "NVARCHAR(100)",
+      "Verzuim_Type_Naam": "NVARCHAR(100)",
       "Telt_als_verzuim": "BIT"
     }
   },
@@ -133,7 +133,7 @@
     "primary_key": "SatisfactionBand_Key",
     "types": {
       "SatisfactionBand_Key": "INT",
-      "SatisfactionBand_Name": "NVARCHAR(50)",
+      "Tevredenheidsband_Naam": "NVARCHAR(50)",
       "Minimum_Score": "DECIMAL(4,2)",
       "Maximum_Score": "DECIMAL(4,2)"
     }
@@ -143,12 +143,12 @@
     "primary_key": "SatisfactionDriver_Key",
     "types": {
       "SatisfactionDriver_Key": "INT",
-      "Driver_Name": "NVARCHAR(100)",
-      "Direction": "NVARCHAR(20)"
+      "Factor_Naam": "NVARCHAR(100)",
+      "Richting": "NVARCHAR(20)"
     },
     "indexes": [
-      "Driver_Name",
-      "Direction"
+      "Factor_Naam",
+      "Richting"
     ]
   },
   "dim_engagement_band": {
@@ -156,7 +156,7 @@
     "primary_key": "EngagementBand_Key",
     "types": {
       "EngagementBand_Key": "INT",
-      "EngagementBand_Name": "NVARCHAR(50)",
+      "Betrokkenheidsband_Naam": "NVARCHAR(50)",
       "Minimum_Score": "DECIMAL(4,2)",
       "Maximum_Score": "DECIMAL(4,2)"
     }
@@ -166,10 +166,10 @@
     "primary_key": "PerformanceDriver_Key",
     "types": {
       "PerformanceDriver_Key": "INT",
-      "Driver_Name": "NVARCHAR(100)"
+      "Factor_Naam": "NVARCHAR(100)"
     },
     "indexes": [
-      "Driver_Name"
+      "Factor_Naam"
     ]
   },
   "dim_engagement_driver": {
@@ -177,10 +177,10 @@
     "primary_key": "EngagementDriver_Key",
     "types": {
       "EngagementDriver_Key": "INT",
-      "Driver_Name": "NVARCHAR(100)"
+      "Factor_Naam": "NVARCHAR(100)"
     },
     "indexes": [
-      "Driver_Name"
+      "Factor_Naam"
     ]
   },
   "dim_candidate_quality_driver": {
@@ -188,10 +188,10 @@
     "primary_key": "CandidateQualityDriver_Key",
     "types": {
       "CandidateQualityDriver_Key": "INT",
-      "Driver_Name": "NVARCHAR(100)"
+      "Factor_Naam": "NVARCHAR(100)"
     },
     "indexes": [
-      "Driver_Name"
+      "Factor_Naam"
     ]
   },
   "dim_salary_band": {
@@ -199,7 +199,7 @@
     "primary_key": "SalaryBand_Key",
     "types": {
       "SalaryBand_Key": "INT",
-      "SalaryBand_Name": "NVARCHAR(100)",
+      "Salarisband_Naam": "NVARCHAR(100)",
       "Minimum_Salaris": "INT",
       "Maximum_Salaris": "INT"
     }
@@ -209,8 +209,8 @@
     "primary_key": "SalaryScale_Key",
     "types": {
       "SalaryScale_Key": "INT",
-      "SalaryScale_Code": "NVARCHAR(10)",
-      "SalaryScale_Name": "NVARCHAR(100)",
+      "Salarisschaal_Code": "NVARCHAR(10)",
+      "Salarisschaal_Naam": "NVARCHAR(100)",
       "Minimum_Salaris": "INT",
       "Maximum_Salaris": "INT",
       "Aantal_Treden": "INT"
@@ -221,7 +221,7 @@
     "primary_key": "Shift_Key",
     "types": {
       "Shift_Key": "INT",
-      "Shift_Name": "NVARCHAR(50)",
+      "Ploegendienst_Naam": "NVARCHAR(50)",
       "Is_Shift_Work": "BIT"
     }
   },
@@ -230,7 +230,7 @@
     "primary_key": "IncidentType_Key",
     "types": {
       "IncidentType_Key": "INT",
-      "IncidentType_Name": "NVARCHAR(50)",
+      "Incidenttype_Naam": "NVARCHAR(50)",
       "Recordable": "BIT"
     }
   },
@@ -241,7 +241,7 @@
       "Employee_Key": "INT",
       "Voornaam": "NVARCHAR(100)",
       "Achternaam": "NVARCHAR(100)",
-      "Gender": "NVARCHAR(20)",
+      "Geslacht": "NVARCHAR(20)",
       "Avatar_FileName": "NVARCHAR(100)",
       "Avatar_URL": "NVARCHAR(500)",
       "Geboortedatum": "DATE",
@@ -253,8 +253,8 @@
       "Manager_Key": "INT",
       "Role_Key": "INT",
       "Department_Key": "INT",
-      "Performance_Score": "DECIMAL(3,2)",
-      "Initial_Performance_Score": "DECIMAL(3,2)",
+      "Prestatie_Score": "DECIMAL(3,2)",
+      "Aanvangs_Prestatie_Score": "DECIMAL(3,2)",
       "Eerste_Indienst_Datum": "DATE",
       "Aaneengesloten_Indienst_Datum": "DATE",
       "Datum_uitdienst": "DATE",
@@ -300,8 +300,8 @@
     "primary_key": "DepartureReason_Key",
     "types": {
       "DepartureReason_Key": "INT",
-      "DepartureReason": "NVARCHAR(100)",
-      "Category": "NVARCHAR(50)"
+      "Vertrekreden": "NVARCHAR(100)",
+      "Categorie": "NVARCHAR(50)"
     }
   },
   "dim_event_type": {
@@ -309,7 +309,7 @@
     "primary_key": "EventType_Key",
     "types": {
       "EventType_Key": "INT",
-      "EventType": "NVARCHAR(50)"
+      "Gebeurtenis": "NVARCHAR(50)"
     }
   },
   "fact_employee_qualification": {
@@ -347,7 +347,7 @@
       "Location_Key": "INT",
       "Shift_Key": "INT",
       "SalaryScale_Key": "INT",
-      "Target_Compa_Ratio": "DECIMAL(5,4)",
+      "Streef_Compa_Ratio": "DECIMAL(5,4)",
       "Relevante_Ervaring_Jaren_Bij_Start": "DECIMAL(5,2)",
       "Startdatum": "DATE",
       "Einddatum": "DATE",
@@ -527,7 +527,7 @@
       "Location_Key": "INT",
       "Shift_Key": "INT",
       "Incident_Date": "DATE",
-      "Lost_Workdays": "INT",
+      "Verloren_Werkdagen": "INT",
       "Absence_Key": "INT"
     },
     "foreign_keys": [
@@ -584,7 +584,7 @@
       "Closed_Date": "DATE",
       "Role_Key": "INT",
       "Department_Key": "INT",
-      "Vacancy_Reason": "NVARCHAR(50)",
+      "Vacature_Reden": "NVARCHAR(50)",
       "Status": "NVARCHAR(50)",
       "Target_Start_Date": "DATE",
       "Filled_Employee_Key": "INT"
@@ -627,15 +627,15 @@
       "RecruitmentStatus_Key": "INT",
       "Status": "NVARCHAR(50)",
       "Employee_Key": "INT",
-      "Vacancy_Reason": "NVARCHAR(50)",
-      "Candidate_Quality": "DECIMAL(3,2)",
-      "Candidate_Experience_Score": "DECIMAL(3,2)",
-      "Candidate_Education_Relevance_Score": "DECIMAL(3,2)",
-      "Candidate_Technical_Skills_Score": "DECIMAL(3,2)",
-      "Candidate_Soft_Skills_Score": "DECIMAL(3,2)",
-      "Candidate_Motivation_Score": "DECIMAL(3,2)",
+      "Vacature_Reden": "NVARCHAR(50)",
+      "Kandidaat_Kwaliteit": "DECIMAL(3,2)",
+      "Kandidaat_Ervaring_Score": "DECIMAL(3,2)",
+      "Kandidaat_Opleiding_Relevantie_Score": "DECIMAL(3,2)",
+      "Kandidaat_Technische_Vaardigheden_Score": "DECIMAL(3,2)",
+      "Kandidaat_Sociale_Vaardigheden_Score": "DECIMAL(3,2)",
+      "Kandidaat_Motivatie_Score": "DECIMAL(3,2)",
       "CandidateQualityDriver_Key": "INT",
-      "Days_To_Decision": "INT",
+      "Dagen_Tot_Beslissing": "INT",
       "DeclineReason_Key": "INT",
       "RejectionReason_Key": "INT",
       "Stage_Key": "INT",
@@ -724,7 +724,7 @@
       "Contracturen": "INT",
       "FTE": "DECIMAL(5,2)",
       "Salaris": "INT",
-      "Performance_Score": "DECIMAL(3,2)",
+      "Prestatie_Score": "DECIMAL(3,2)",
       "Aaneengesloten_Indienst_Datum": "DATE",
       "Dienstjaren": "DECIMAL(6,2)",
       "Relevante_Ervaring_Jaren": "DECIMAL(5,2)",
@@ -745,7 +745,7 @@
       "Verzuim_Uren": "DECIMAL(8,2)",
       "Aantal_Afwezigheid_Episodes": "INT",
       "Aantal_Verzuimgevallen": "INT",
-      "SalaryStep": "INT",
+      "Salaris_Trede": "INT",
       "Benchmark_Salaris": "INT",
       "Benchmark_Verschil": "INT",
       "Benchmark_Status": "NVARCHAR(30)"
@@ -885,12 +885,12 @@
       "Benchmark_Date": "DATE",
       "Role_Key": "INT",
       "SalaryScale_Key": "INT",
-      "SalaryStep": "INT",
-      "Scale_Min_Salaris": "INT",
-      "Scale_Max_Salaris": "INT",
-      "Market_P25": "INT",
-      "Market_Median": "INT",
-      "Market_P75": "INT",
+      "Salaris_Trede": "INT",
+      "Schaal_Min_Salaris": "INT",
+      "Schaal_Max_Salaris": "INT",
+      "Markt_P25": "INT",
+      "Markt_Mediaan": "INT",
+      "Markt_P75": "INT",
       "Benchmark_Salaris": "INT"
     },
     "foreign_keys": [
@@ -918,7 +918,7 @@
       "PerformanceReview_Key": "INT",
       "Employee_Key": "INT",
       "Review_Datum": "DATE",
-      "Performance_Score": "DECIMAL(3,2)",
+      "Prestatie_Score": "DECIMAL(3,2)",
       "PerformanceDriver_Key": "INT"
     },
     "foreign_keys": [

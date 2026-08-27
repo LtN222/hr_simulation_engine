@@ -67,7 +67,7 @@ def test_engagement_driver_matches_a_score_contribution():
     state = {
         "dim_engagement_driver": pd.DataFrame({
             "EngagementDriver_Key": list(range(1, 8)),
-            "Driver_Name": [
+            "Factor_Naam": [
                 "Initiatief en verbeteren",
                 "Kennisdeling en mentoring",
                 "Samenwerking buiten de eigen rol",
@@ -92,7 +92,7 @@ def test_engagement_driver_matches_a_score_contribution():
 
     expected_name = max(contributions, key=contributions.get)
     expected_key = state["dim_engagement_driver"].loc[
-        state["dim_engagement_driver"]["Driver_Name"] == expected_name,
+        state["dim_engagement_driver"]["Factor_Naam"] == expected_name,
         "EngagementDriver_Key",
     ].iloc[0]
     assert key == expected_key
@@ -105,7 +105,7 @@ def test_score_employee_engagement_caches_identical_resolved_inputs():
     employment = pd.Series({
         "Employee_Key": 1,
         "Role_Key": 1,
-        "Target_Compa_Ratio": 1.0,
+        "Streef_Compa_Ratio": 1.0,
     })
 
     first = score_employee_engagement(
@@ -127,19 +127,19 @@ def test_score_employee_engagement_caches_identical_resolved_inputs():
 def test_candidate_quality_profile_has_explanatory_components_and_driver():
     config = ConfigLoader().load()
     simulator = RecruitmentSimulator(config, schema=None, rng=random.Random(42))
-    source = {"HireSource_Name": "Vacaturebank"}
+    source = {"Bron_Naam": "Vacaturebank"}
 
     profile = simulator._profile_from_quality(3.5, source)
 
     components = [
-        "Candidate_Experience_Score",
-        "Candidate_Education_Relevance_Score",
-        "Candidate_Technical_Skills_Score",
-        "Candidate_Soft_Skills_Score",
-        "Candidate_Motivation_Score",
+        "Kandidaat_Ervaring_Score",
+        "Kandidaat_Opleiding_Relevantie_Score",
+        "Kandidaat_Technische_Vaardigheden_Score",
+        "Kandidaat_Sociale_Vaardigheden_Score",
+        "Kandidaat_Motivatie_Score",
     ]
     assert all(1 <= profile[column] <= 5 for column in components)
-    assert 1 <= profile["Candidate_Quality"] <= 5
+    assert 1 <= profile["Kandidaat_Kwaliteit"] <= 5
     assert profile["CandidateQualityDriver_Key"] in range(1, 7)
 
 
@@ -162,8 +162,8 @@ def build_initial_state(config):
 
             roles.append({
                 "Role_Key": role_key,
-                "Role_Name": role_name,
-                "Department_Name": dept_name,
+                "Functie_Naam": role_name,
+                "Afdeling_Naam": dept_name,
                 "Department_Key": hash(dept_name) % 1000,
                 "Leidinggevend": role_cfg["leidinggevend"],
                 "Salaris_min": role_cfg["salaris_range"][0],
@@ -185,12 +185,12 @@ def build_initial_state(config):
     dim_education["Education_Key"] = list(range(1, len(dim_education) + 1))
 
     dim_location = pd.DataFrame({
-        "Location_Name": list(config.dim_location.keys()),
+        "Vestiging_Naam": list(config.dim_location.keys()),
         "Location_Key": list(range(1, len(config.dim_location) + 1))
     })
 
     dim_event_type = pd.DataFrame({
-        "EventType": config.dim_event_type,
+        "Gebeurtenis": config.dim_event_type,
         "EventType_Key": list(range(1, len(config.dim_event_type) + 1))
     })
     dim_shift = pd.DataFrame(config.dim_shift)
@@ -252,7 +252,7 @@ def test_allocate_headcount_keeps_management_roles_above_minimum():
         staffing_rules={"minimum_count_for_manager_role": 1}
     )
     counts = {
-        (row["Department_Name"], row["Role_Name"]): row["count"]
+        (row["Afdeling_Naam"], row["Functie_Naam"]): row["count"]
         for row in allocations
     }
 
@@ -288,8 +288,8 @@ def test_generate_dimensions_supports_salary_scales():
         "get": lambda self, key, default=None: {
             "dim_salary_scale": [
                 {
-                    "SalaryScale_Code": "A",
-                    "SalaryScale_Name": "Operationeel basis",
+                    "Salarisschaal_Code": "A",
+                    "Salarisschaal_Naam": "Operationeel basis",
                     "Minimum_Salaris": 28000,
                     "Maximum_Salaris": 35999,
                     "Aantal_Treden": 6
@@ -303,8 +303,8 @@ def test_generate_dimensions_supports_salary_scales():
             "primary_key": "SalaryScale_Key",
             "types": {
                 "SalaryScale_Key": "INT",
-                "SalaryScale_Code": "NVARCHAR(10)",
-                "SalaryScale_Name": "NVARCHAR(50)",
+                "Salarisschaal_Code": "NVARCHAR(10)",
+                "Salarisschaal_Naam": "NVARCHAR(50)",
                 "Minimum_Salaris": "INT",
                 "Maximum_Salaris": "INT",
                 "Aantal_Treden": "INT"
@@ -316,8 +316,8 @@ def test_generate_dimensions_supports_salary_scales():
 
     assert result.iloc[0].to_dict() == {
         "SalaryScale_Key": 1,
-        "SalaryScale_Code": "A",
-        "SalaryScale_Name": "Operationeel basis",
+        "Salarisschaal_Code": "A",
+        "Salarisschaal_Naam": "Operationeel basis",
         "Minimum_Salaris": 28000,
         "Maximum_Salaris": 35999,
         "Aantal_Treden": 6
@@ -337,7 +337,7 @@ def test_dim_role_stamps_department_name_for_hierarchical_visuals():
 
     result = build_dim_role(structure, departments)
 
-    assert result.iloc[0]["Department_Name"] == "Productie"
+    assert result.iloc[0]["Afdeling_Naam"] == "Productie"
 
 
 def test_sector_roles_use_their_explicit_salary_scale_codes():
@@ -360,11 +360,11 @@ def test_sector_roles_use_their_explicit_salary_scale_codes():
         "Operations Director": "G",
         "Managing Director": "G",
     }
-    code_by_key = salary_scales.set_index("SalaryScale_Key")["SalaryScale_Code"]
+    code_by_key = salary_scales.set_index("SalaryScale_Key")["Salarisschaal_Code"]
 
     for role_name, expected_code in expected_codes.items():
         scale_key = roles.loc[
-            roles["Role_Name"] == role_name,
+            roles["Functie_Naam"] == role_name,
             "SalaryScale_Key",
         ].iloc[0]
         assert code_by_key[scale_key] == expected_code
@@ -372,7 +372,7 @@ def test_sector_roles_use_their_explicit_salary_scale_codes():
     for department_roles in config.structure.values():
         for role_name, role_config in department_roles.items():
             role_scale_key = roles.loc[
-                roles["Role_Name"] == role_name,
+                roles["Functie_Naam"] == role_name,
                 "SalaryScale_Key",
             ].iloc[0]
             assert code_by_key[role_scale_key] == role_config["salary_scale_code"]
@@ -404,13 +404,13 @@ def test_incremental_run_repairs_missing_configured_role_dimension_member():
     }
     state = {
         "dim_department": pd.DataFrame({
-            "Department_Key": [1], "Department_Name": ["Productie"]
+            "Department_Key": [1], "Afdeling_Naam": ["Productie"]
         }),
         "dim_role": pd.DataFrame({
-            "Role_Key": [1], "Role_Name": ["Operator"]
+            "Role_Key": [1], "Functie_Naam": ["Operator"]
         }),
         "dim_departure_reason": pd.DataFrame({
-            "DepartureReason_Key": [1], "DepartureReason": ["Nieuwe baan"]
+            "DepartureReason_Key": [1], "Vertrekreden": ["Nieuwe baan"]
         })
     }
 
@@ -419,7 +419,7 @@ def test_incremental_run_repairs_missing_configured_role_dimension_member():
     assert set(state["dim_role"]["Role_Key"]) == {1, 2}
     assert state["dim_role"].loc[
         state["dim_role"]["Role_Key"] == 2,
-        "Role_Name"
+        "Functie_Naam"
     ].iloc[0] == "Teamleider"
 
 
@@ -675,7 +675,7 @@ def test_assign_managers_has_no_cycles_and_balances_staff():
     dim_role = pd.DataFrame({
         "Role_Key": [1, 2, 3, 4],
         "Department_Key": [10, 10, 10, 10],
-        "Role_Name": ["Director", "Teamlead A", "Teamlead B", "Medewerker"],
+        "Functie_Naam": ["Director", "Teamlead A", "Teamlead B", "Medewerker"],
         "Leidinggevend": [True, True, True, False],
         "Salaris_min": [90000, 55000, 55000, 32000],
         "Salaris_max": [120000, 70000, 70000, 42000]
@@ -721,7 +721,7 @@ def test_assign_managers_balances_parallel_team_leads():
     dim_role = pd.DataFrame({
         "Role_Key": [1, 2],
         "Department_Key": [10, 10],
-        "Role_Name": ["Teamleider", "Medewerker"],
+        "Functie_Naam": ["Teamleider", "Medewerker"],
         "Leidinggevend": [True, False],
         "Salaris_min": [50000, 32000],
         "Salaris_max": [65000, 42000]
@@ -758,7 +758,7 @@ def test_assign_managers_keeps_historical_employees_connected():
     dim_role = pd.DataFrame({
         "Role_Key": [1, 2],
         "Department_Key": [10, 10],
-        "Role_Name": ["Medewerker", "Teamleider"],
+        "Functie_Naam": ["Medewerker", "Teamleider"],
         "Leidinggevend": [False, True],
         "Salaris_min": [32000, 55000],
         "Salaris_max": [42000, 70000]
@@ -782,7 +782,7 @@ def test_salary_policy_places_initial_salary_near_its_benchmark():
     config = ConfigLoader().load()
     role = pd.Series({
         "Role_Key": 1,
-        "Role_Name": "Productiemedewerker",
+        "Functie_Naam": "Productiemedewerker",
         "Salaris_min": 30000,
         "Salaris_max": 35000,
         "SalaryScale_Key": 1
@@ -837,7 +837,7 @@ def test_generated_employment_contains_shift_and_salary_scale_context():
     assert "fact_employment_attribute" not in state
     assert employment["Shift_Key"].notna().all()
     assert employment["SalaryScale_Key"].notna().all()
-    assert employment["Target_Compa_Ratio"].between(0.75, 1.30).all()
+    assert employment["Streef_Compa_Ratio"].between(0.75, 1.30).all()
 
 
 def test_salary_review_weeks_are_spread_over_year():
@@ -866,8 +866,8 @@ def test_workforce_snapshot_captures_historical_workforce_context():
             "Employee_Key": [1, 2],
             "HireSource_Key": [1, 2],
             "Education_Key": [2, 3],
-            "Performance_Score": [3.0, 3.5],
-            "Initial_Performance_Score": [3.0, 3.5],
+            "Prestatie_Score": [3.0, 3.5],
+            "Aanvangs_Prestatie_Score": [3.0, 3.5],
             "Aaneengesloten_Indienst_Datum": pd.to_datetime([
                 "2024-01-01", "2024-01-01"
             ])
@@ -878,7 +878,7 @@ def test_workforce_snapshot_captures_historical_workforce_context():
         }),
         "dim_department": pd.DataFrame({
             "Department_Key": [10],
-            "Department_Name": ["IT"]
+            "Afdeling_Naam": ["IT"]
         }),
         "dim_salary_band": pd.DataFrame({
             "SalaryBand_Key": [3],
@@ -901,7 +901,7 @@ def test_workforce_snapshot_captures_historical_workforce_context():
             "Location_Key": [3, 3],
             "Shift_Key": [0, 0],
             "SalaryScale_Key": [3, 3],
-            "Target_Compa_Ratio": [1.0, 1.0],
+            "Streef_Compa_Ratio": [1.0, 1.0],
             "Startdatum": pd.to_datetime(["2024-01-01", "2024-01-01"]),
             "Einddatum": [None, None],
             "Contracttype": ["Vast", "Vast"],
@@ -911,7 +911,7 @@ def test_workforce_snapshot_captures_historical_workforce_context():
         "fact_performance_review": pd.DataFrame({
             "Employee_Key": [1],
             "Review_Datum": [pd.Timestamp("2024-03-10")],
-            "Performance_Score": [4.2]
+            "Prestatie_Score": [4.2]
         }),
         "fact_manager_assignment": pd.DataFrame({
             "ManagerAssignment_Key": [1, 2],
@@ -947,7 +947,7 @@ def test_workforce_snapshot_captures_historical_workforce_context():
     assert snapshots["WorkforceSnapshot_Key"].is_unique
     assert march_employee_one["HireSource_Key"] == 1
     assert march_employee_one["Education_Key"] == 2
-    assert march_employee_one["Performance_Score"] == 4.2
+    assert march_employee_one["Prestatie_Score"] == 4.2
     assert march_employee_one["Manager_Key"] == 2
     assert march_employee_one["Dienstjaren"] == 0.25
     assert march_employee_one["Relevante_Ervaring_Jaren"] == 0.25
@@ -1030,17 +1030,17 @@ def test_internal_recruitment_move_reuses_employee_and_requests_backfill():
     state = {
         "dim_employee": pd.DataFrame({
             "Employee_Key": [1],
-            "Performance_Score": [4.0],
+            "Prestatie_Score": [4.0],
             "Aaneengesloten_Indienst_Datum": [pd.Timestamp("2020-01-01")]
         }),
         "dim_department": pd.DataFrame({
             "Department_Key": [1, 2],
-            "Department_Name": ["Productie", "Techniek"]
+            "Afdeling_Naam": ["Productie", "Techniek"]
         }),
         "dim_role": pd.DataFrame({
             "Role_Key": [1, 2],
             "Department_Key": [1, 2],
-            "Role_Name": ["Operator A", "Monteur"],
+            "Functie_Naam": ["Operator A", "Monteur"],
             "SalaryScale_Key": [1, 2],
             "Salaris_min": [28000, 36000],
             "Salaris_max": [35999, 44999]
@@ -1056,7 +1056,7 @@ def test_internal_recruitment_move_reuses_employee_and_requests_backfill():
             "Location_Key": [1],
             "Shift_Key": [None],
             "SalaryScale_Key": [1],
-            "Target_Compa_Ratio": [0.90],
+            "Streef_Compa_Ratio": [0.90],
             "Startdatum": [pd.Timestamp("2020-01-01")],
             "Einddatum": [None],
             "Dienstverband_status": ["Actief"],
@@ -1092,7 +1092,7 @@ def test_internal_recruitment_move_reuses_employee_and_requests_backfill():
     assert backfill == {
         "Role_Key": 1,
         "Department_Key": 1,
-        "Vacancy_Reason": "Internal mobility backfill"
+        "Vacature_Reden": "Interne doorstroom"
     }
 
 
@@ -1106,17 +1106,17 @@ def test_hiring_internal_application_does_not_create_a_second_employee():
     state = {
         "dim_employee": pd.DataFrame({
             "Employee_Key": [1],
-            "Performance_Score": [4.0],
+            "Prestatie_Score": [4.0],
             "Aaneengesloten_Indienst_Datum": [pd.Timestamp("2020-01-01")]
         }),
         "dim_department": pd.DataFrame({
             "Department_Key": [1, 2],
-            "Department_Name": ["Productie", "Techniek"]
+            "Afdeling_Naam": ["Productie", "Techniek"]
         }),
         "dim_role": pd.DataFrame({
             "Role_Key": [1, 2],
             "Department_Key": [1, 2],
-            "Role_Name": ["Operator A", "Monteur"],
+            "Functie_Naam": ["Operator A", "Monteur"],
             "SalaryScale_Key": [1, 2],
             "Salaris_min": [28000, 36000],
             "Salaris_max": [35999, 44999],
@@ -1133,7 +1133,7 @@ def test_hiring_internal_application_does_not_create_a_second_employee():
             "Location_Key": [1],
             "Shift_Key": [None],
             "SalaryScale_Key": [1],
-            "Target_Compa_Ratio": [0.90],
+            "Streef_Compa_Ratio": [0.90],
             "Startdatum": [pd.Timestamp("2020-01-01")],
             "Einddatum": [None],
             "Dienstverband_status": ["Actief"],
@@ -1147,7 +1147,7 @@ def test_hiring_internal_application_does_not_create_a_second_employee():
             "Vacancy_Key": [20],
             "Role_Key": [2],
             "Department_Key": [2],
-            "Vacancy_Reason": ["Growth"],
+            "Vacature_Reden": ["Groei"],
             "Status": ["Open"],
             "Filled_Employee_Key": [None]
         }),
@@ -1161,9 +1161,9 @@ def test_hiring_internal_application_does_not_create_a_second_employee():
             "Role_Key": 2,
             "Department_Key": 2,
             "HireSource_Key": 5,
-            "Vacancy_Reason": "Growth",
+            "Vacature_Reden": "Groei",
             "Employee_Key": 1,
-            "Candidate_Quality": 4.2,
+            "Kandidaat_Kwaliteit": 4.2,
             "Is_Internal_Mobility": True
         }]
     }
@@ -1182,7 +1182,7 @@ def test_hiring_internal_application_does_not_create_a_second_employee():
     assert result["_vacancy_requests"] == [{
         "Role_Key": 1,
         "Department_Key": 1,
-        "Vacancy_Reason": "Internal mobility backfill"
+        "Vacature_Reden": "Interne doorstroom"
     }]
 
 
@@ -1193,7 +1193,7 @@ def test_credentials_for_reads_the_qualification_achievement_date_column():
     state = {
         "dim_education": pd.DataFrame({
             "Education_Key": [1],
-            "Education_Name": ["MBO Werktuigbouw"],
+            "Opleiding_Naam": ["MBO Werktuigbouw"],
         }),
         "fact_employee_qualification": pd.DataFrame({
             "Employee_Key": [1],
@@ -1226,18 +1226,18 @@ def test_education_relevance_score_rewards_a_matching_sufficient_credential():
     })()
     simulator = RecruitmentSimulator(config, schema=None, rng=random.Random(3))
     target_role = pd.Series({
-        "Role_Name": "Senior Monteur",
+        "Functie_Naam": "Senior Monteur",
         "Min_Opleidingsniveau": "MBO",
     })
 
     no_match = simulator._education_relevance_score(target_role, [])
     below_level = simulator._education_relevance_score(
         target_role,
-        [{"Education_Name": "MBO Werktuigbouw", "Education_Level": "Geen"}]
+        [{"Opleiding_Naam": "MBO Werktuigbouw", "Opleidingsniveau": "Geen"}]
     )
     meets = simulator._education_relevance_score(
         target_role,
-        [{"Education_Name": "MBO Werktuigbouw", "Education_Level": "MBO"}]
+        [{"Opleiding_Naam": "MBO Werktuigbouw", "Opleidingsniveau": "MBO"}]
     )
 
     assert no_match < below_level < meets
@@ -1256,7 +1256,7 @@ def test_hiring_external_candidate_uses_the_screened_profile_not_a_new_draw():
         if name in config.education_distribution_by_role
     )
     role_row = state["dim_role"].loc[
-        state["dim_role"]["Role_Name"] == role_name
+        state["dim_role"]["Functie_Naam"] == role_name
     ].iloc[0]
     education_row = state["dim_education"].iloc[0]
 
@@ -1264,7 +1264,7 @@ def test_hiring_external_candidate_uses_the_screened_profile_not_a_new_draw():
     # HiringSimulator relies on have a non-empty column to read from.
     state["dim_employee"] = pd.DataFrame({
         "Employee_Key": [1],
-        "Performance_Score": [3.0],
+        "Prestatie_Score": [3.0],
     })
     state["fact_employment"] = pd.DataFrame({
         "Employment_Key": [1],
@@ -1281,13 +1281,13 @@ def test_hiring_external_candidate_uses_the_screened_profile_not_a_new_draw():
     })
     state["dim_department"] = pd.DataFrame({
         "Department_Key": [role_row["Department_Key"]],
-        "Department_Name": [role_row["Department_Name"]],
+        "Afdeling_Naam": [role_row["Afdeling_Naam"]],
     })
     state["fact_vacancy"] = pd.DataFrame({
         "Vacancy_Key": [20],
         "Role_Key": [role_row["Role_Key"]],
         "Department_Key": [role_row["Department_Key"]],
-        "Vacancy_Reason": ["Growth"],
+        "Vacature_Reden": ["Groei"],
         "Status": ["Open"],
         "Filled_Employee_Key": [None]
     })
@@ -1301,9 +1301,9 @@ def test_hiring_external_candidate_uses_the_screened_profile_not_a_new_draw():
         "Role_Key": role_row["Role_Key"],
         "Department_Key": role_row["Department_Key"],
         "HireSource_Key": 1,
-        "Vacancy_Reason": "Growth",
+        "Vacature_Reden": "Groei",
         "Employee_Key": None,
-        "Candidate_Quality": 4.0,
+        "Kandidaat_Kwaliteit": 4.0,
         "Education_Key": education_row["Education_Key"],
         "Relevante_Ervaring_Jaren": 6.5,
         "Is_Internal_Mobility": False
@@ -1341,13 +1341,13 @@ def test_growth_selection_does_not_always_pick_the_same_under_minimum_role():
     state = {
         "dim_role": pd.DataFrame({
             "Role_Key": [1, 2],
-            "Role_Name": ["Manager A", "Manager B"],
+            "Functie_Naam": ["Manager A", "Manager B"],
             "Department_Key": [1, 2],
-            "Department_Name": ["A", "B"],
+            "Afdeling_Naam": ["A", "B"],
         }),
         "dim_department": pd.DataFrame({
             "Department_Key": [1, 2],
-            "Department_Name": ["A", "B"],
+            "Afdeling_Naam": ["A", "B"],
         }),
     }
     simulator = VacancySimulator(config, schema=None, rng=random.Random(0))
@@ -1372,16 +1372,16 @@ def test_attrition_uses_fact_employment_salary():
     state = {
         "dim_department": pd.DataFrame({
             "Department_Key": [1],
-            "Department_Name": ["Sales"]
+            "Afdeling_Naam": ["Sales"]
         }),
         "dim_role": pd.DataFrame({
             "Role_Key": [1],
             "Department_Key": [1],
-            "Role_Name": ["Analist"]
+            "Functie_Naam": ["Analist"]
         }),
         "dim_employee": pd.DataFrame({
             "Employee_Key": [1],
-            "Performance_Score": [4.0]
+            "Prestatie_Score": [4.0]
         }),
         "fact_employment": pd.DataFrame({
             "Employment_Key": [1],
@@ -1426,7 +1426,7 @@ def test_retirement_exits_are_age_gated_and_use_pensioen_reason():
     today = pd.Timestamp("2026-01-05")
     state = {
         "dim_department": pd.DataFrame({
-            "Department_Key": [1], "Department_Name": ["Productie"]
+            "Department_Key": [1], "Afdeling_Naam": ["Productie"]
         }),
         "dim_role": pd.DataFrame({
             "Role_Key": [1], "Department_Key": [1]
@@ -1437,7 +1437,7 @@ def test_retirement_exits_are_age_gated_and_use_pensioen_reason():
                 pd.Timestamp("1958-01-01"),
                 pd.Timestamp("1977-01-01")
             ],
-            "Performance_Score": [3.0, 3.0]
+            "Prestatie_Score": [3.0, 3.0]
         }),
         "fact_employment": pd.DataFrame({
             "Employment_Key": [1, 2],
@@ -1515,7 +1515,7 @@ def test_absence_uses_enabled_types_and_respects_employment_end():
         }),
         "dim_shift": pd.DataFrame({
             "Shift_Key": [0, 2],
-            "Shift_Name": ["Niet van toepassing", "2-ploeg"]
+            "Ploegendienst_Naam": ["Niet van toepassing", "2-ploeg"]
         }),
         "dim_salary_band": pd.DataFrame({
             "SalaryBand_Key": [3],
@@ -1524,7 +1524,7 @@ def test_absence_uses_enabled_types_and_respects_employment_end():
         }),
         "dim_absence_type": pd.DataFrame({
             "AbsenceType_Key": [1, 2],
-            "AbsenceType_Name": ["Vakantie", "Lang verzuim"],
+            "Verzuim_Type_Naam": ["Vakantie", "Lang verzuim"],
             "Telt_als_verzuim": [False, True]
         }),
         "fact_absence": pd.DataFrame()
@@ -1578,7 +1578,7 @@ def test_absence_does_not_overlap_existing_episode():
         }),
         "dim_absence_type": pd.DataFrame({
             "AbsenceType_Key": [1],
-            "AbsenceType_Name": ["Kort verzuim"],
+            "Verzuim_Type_Naam": ["Kort verzuim"],
             "Telt_als_verzuim": [True]
         }),
         "fact_absence": pd.DataFrame({
@@ -1661,7 +1661,7 @@ def test_sickness_type_directly_identifies_duration_class_and_worktime():
     })
     sickness = {
         "AbsenceType_Key": 2,
-        "AbsenceType_Name": "Middellang verzuim",
+        "Verzuim_Type_Naam": "Middellang verzuim",
         "Telt_als_verzuim": True,
     }
     employee = {"Employee_Key": 1}
@@ -1708,7 +1708,7 @@ def test_non_sickness_episode_has_no_sickness_hours():
     })
     leave = {
         "AbsenceType_Key": 2,
-        "AbsenceType_Name": "Bijzonder verlof",
+        "Verzuim_Type_Naam": "Bijzonder verlof",
         "Telt_als_verzuim": False,
     }
 
@@ -1792,7 +1792,7 @@ def test_avatar_backfill_preserves_existing_custom_urls():
     state = {
         "dim_employee": pd.DataFrame({
             "Employee_Key": [1, 2],
-            "Gender": ["M", "F"],
+            "Geslacht": ["M", "F"],
             "Avatar_URL": [None, "https://example.test/custom.png"],
         })
     }
@@ -1827,7 +1827,7 @@ def test_avatar_blob_discovery_and_reassignment_are_configurable(monkeypatch):
     state = {
         "dim_employee": pd.DataFrame({
             "Employee_Key": [1, 2, 3],
-            "Gender": ["M", "F", "Anders"],
+            "Geslacht": ["M", "F", "Anders"],
             "Avatar_URL": [
                 "https://example.test/old.png",
                 "https://example.test/old.png",
@@ -1874,7 +1874,7 @@ def test_absence_satisfaction_is_stamped_as_of_episode_start():
     state = {
         "dim_employee": pd.DataFrame({
             "Employee_Key": [1],
-            "Performance_Score": [3.4],
+            "Prestatie_Score": [3.4],
             "Aaneengesloten_Indienst_Datum": [pd.Timestamp("2020-01-01")],
             "Manager_Key": [None],
         }),
@@ -1882,7 +1882,7 @@ def test_absence_satisfaction_is_stamped_as_of_episode_start():
             "Role_Key": [1], "Department_Key": [1]
         }),
         "dim_department": pd.DataFrame({
-            "Department_Key": [1], "Department_Name": ["IT"]
+            "Department_Key": [1], "Afdeling_Naam": ["IT"]
         }),
         "dim_satisfaction_band": pd.DataFrame({
             "SatisfactionBand_Key": [1, 2],
@@ -1895,7 +1895,7 @@ def test_absence_satisfaction_is_stamped_as_of_episode_start():
             "Role_Key": [1],
             "Startdatum": [pd.Timestamp("2020-01-01")],
             "Einddatum": [None],
-            "Target_Compa_Ratio": [1.0],
+            "Streef_Compa_Ratio": [1.0],
         }),
         "fact_absence": pd.DataFrame({
             "Absence_Key": [1],
@@ -1923,18 +1923,18 @@ def test_absence_leave_eligibility_respects_gender_and_shift_work():
     })
     state = {"dim_shift": pd.DataFrame({
         "Shift_Key": [0, 2, 3],
-        "Shift_Name": ["Niet van toepassing", "2-ploeg", "3-ploeg"]
+        "Ploegendienst_Naam": ["Niet van toepassing", "2-ploeg", "3-ploeg"]
     })}
     empty_absence = pd.DataFrame(columns=[
         "Employee_Key", "AbsenceType_Key", "Startdatum"
     ])
     pregnancy_type = {
         "AbsenceType_Key": 4,
-        "AbsenceType_Name": "Zwangerschap"
+        "Verzuim_Type_Naam": "Zwangerschap"
     }
     time_for_time_type = {
         "AbsenceType_Key": 9,
-        "AbsenceType_Name": "Tijd voor tijd"
+        "Verzuim_Type_Naam": "Tijd voor tijd"
     }
     pregnancy_rule = {
         "genders": ["F"],
@@ -1946,8 +1946,8 @@ def test_absence_leave_eligibility_respects_gender_and_shift_work():
         "required_ploegendienst": ["2-ploeg", "3-ploeg"]
     }
     today = pd.Timestamp("2024-01-01")
-    woman = {"Employee_Key": 1, "Gender": "F", "Geboortedatum": pd.Timestamp("1990-01-01")}
-    man = {"Employee_Key": 2, "Gender": "M", "Geboortedatum": pd.Timestamp("1990-01-01")}
+    woman = {"Employee_Key": 1, "Geslacht": "F", "Geboortedatum": pd.Timestamp("1990-01-01")}
+    man = {"Employee_Key": 2, "Geslacht": "M", "Geboortedatum": pd.Timestamp("1990-01-01")}
 
     assert simulator._eligible_for_leave_type(
         woman, employment, state, pregnancy_type, pregnancy_rule,
@@ -1993,7 +1993,7 @@ def test_absence_simulator_can_generate_non_sickness_leave():
     simulator = AbsenceSimulator(config, schema=None, rng=AlwaysIncidentRandom(42))
     employee = {
         "Employee_Key": 1,
-        "Gender": "F",
+        "Geslacht": "F",
         "Geboortedatum": pd.Timestamp("1990-01-01")
     }
     employment = pd.Series({
@@ -2002,7 +2002,7 @@ def test_absence_simulator_can_generate_non_sickness_leave():
     })
     vacation = {
         "AbsenceType_Key": 8,
-        "AbsenceType_Name": "Vakantie",
+        "Verzuim_Type_Naam": "Vakantie",
         "Telt_als_verzuim": False
     }
 

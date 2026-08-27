@@ -49,7 +49,7 @@ class PerformanceSimulator:
 
             education = edu_lookup.loc[
                 emp["Education_Key"]
-            ]["Education_Level"]
+            ]["Opleidingsniveau"]
 
             startdatum = employment_row["Startdatum"]
 
@@ -114,7 +114,7 @@ class PerformanceSimulator:
 
             emp = employee_lookup.loc[employee_key]
             role = role_lookup.loc[employment["Role_Key"]]
-            education = edu_lookup.loc[emp["Education_Key"]]["Education_Level"]
+            education = edu_lookup.loc[emp["Education_Key"]]["Opleidingsniveau"]
             tenure_days = (today - employment["Startdatum"]).days
 
             if tenure_days < 180:
@@ -160,7 +160,7 @@ class PerformanceSimulator:
                         "PerformanceReview_Key": review_key,
                         "Employee_Key": employee_key,
                         "Review_Datum": today,
-                        "Performance_Score": score,
+                        "Prestatie_Score": score,
                         "PerformanceDriver_Key": driver_key,
                     }
                 )
@@ -238,7 +238,7 @@ class PerformanceSimulator:
                         "PerformanceReview_Key": review_key,
                         "Employee_Key": employee_key,
                         "Review_Datum": review_date,
-                        "Performance_Score": score,
+                        "Prestatie_Score": score,
                         "PerformanceDriver_Key": self._performance_driver_key(
                             state,
                             employee_key,
@@ -356,14 +356,14 @@ class PerformanceSimulator:
 
     def _latest_score(self, reviews, employee):
         if reviews.empty:
-            return employee.get("Performance_Score", 3.4)
+            return employee.get("Prestatie_Score", 3.4)
 
         employee_reviews = reviews[reviews["Employee_Key"] == employee.name]
         if employee_reviews.empty:
-            return employee.get("Performance_Score", 3.4)
+            return employee.get("Prestatie_Score", 3.4)
 
         latest = employee_reviews.sort_values("Review_Datum").iloc[-1]
-        return latest["Performance_Score"]
+        return latest["Prestatie_Score"]
 
     def _sync_latest_scores_to_employee(self, state):
         reviews = state.get("fact_performance_review", pd.DataFrame())
@@ -373,14 +373,14 @@ class PerformanceSimulator:
         latest_scores = (
             reviews.sort_values("Review_Datum")
             .drop_duplicates(subset=["Employee_Key"], keep="last")
-            .set_index("Employee_Key")["Performance_Score"]
+            .set_index("Employee_Key")["Prestatie_Score"]
         )
 
         dim_employee = state["dim_employee"].copy()
-        dim_employee["Performance_Score"] = dim_employee.apply(
+        dim_employee["Prestatie_Score"] = dim_employee.apply(
             lambda row: latest_scores.get(
                 row["Employee_Key"],
-                row["Performance_Score"]
+                row["Prestatie_Score"]
             ),
             axis=1
         )
