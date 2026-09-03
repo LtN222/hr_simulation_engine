@@ -9,6 +9,8 @@ from src.infrastructure.record_builder import build_record
 
 NOT_SELECTED_REASON = "Andere kandidaat gekozen"
 BELOW_MINIMUM_QUALITY_REASON = "Kwaliteit onder minimumniveau"
+VACANCY_EXPIRED_REASON = "Vacature ingetrokken"
+CANDIDATE_WITHDREW_REASON = "Kandidaat heeft zich teruggetrokken"
 
 
 def _numeric(value, default=0.0):
@@ -29,7 +31,25 @@ class RecruitmentSimulator:
     each stage's resolution is probabilistic. Internal mobility uses the
     same fact and skips straight to Gesprek, since `eligible_internal` has
     already screened it - but still competes for the same single Aanbod
-    slot per vacancy as any external candidate.
+    slot per vacancy as any external candidate, and goes through the same
+    interview quality gate (it is never pre-marked as interviewed).
+
+    Interview throughput is department-scaled (`interview_capacity_by_department`)
+    rather than a flat one-candidate-per-week ceiling, since a high-volume
+    department's Gesprek queue otherwise grows faster than it can ever be
+    processed. Extending an actual job offer stays serial - only one
+    candidate is ever at Aanbod for a given vacancy at a time - but
+    evaluating *other* Gesprek candidates no longer freezes while that offer
+    is outstanding; a candidate who clears the quality gate while another
+    offer is still pending simply waits, already evaluated, for the next
+    free Aanbod slot. Two backstops guard against a vacancy or a candidate
+    getting stuck indefinitely: a candidate who has waited in Gesprek past
+    `gesprek_patience_days` withdraws, and a vacancy still open past
+    `vacancy_expiry_days` is closed without a hire (the normal
+    understaffing check will raise a fresh vacancy if the seat is still
+    needed). `max_pending_pipeline_per_vacancy` also stops sourcing new
+    applications once a vacancy already has more candidates queued than it
+    can plausibly work through.
     """
 
     ACCEPTED_STATUS = "Aangenomen"
@@ -84,15 +104,20 @@ class RecruitmentSimulator:
         accepted_applications = []
 
         for _, vacancy in self._open_vacancies(state).iterrows():
+            if self._expire_stale_vacancy(state, vacancy, today):
+                continue
+
             department_name = self._department_name(vacancy["Department_Key"], state)
             target_role = self._role_row(state, vacancy["Role_Key"])
+            interview_capacity = self._interview_capacity(department_name)
 
+            self._withdraw_stale_candidates(state, vacancy["Vacancy_Key"], today)
             next_key = self._generate_new_applications(
                 state, vacancy, target_role, department_name, today,
                 reserved_internal_employees, next_key,
             )
             self._resolve_screening(state, vacancy, target_role, today)
-            self._resolve_interview(state, vacancy, today)
+            self._resolve_interview(state, vacancy, today, interview_capacity)
             accepted = self._resolve_offer(state, vacancy, today)
             if accepted is not None:
                 accepted_applications.append(accepted)
@@ -130,6 +155,16 @@ class RecruitmentSimulator:
         self, state, vacancy, target_role, department_name, today,
         reserved_internal_employees, next_key,
     ):
+        max_pending = self.recruitment_cfg.get("max_pending_pipeline_per_vacancy")
+        if max_pending is not None:
+            pending_count = len(self._pipeline(state, vacancy["Vacancy_Key"]))
+            if pending_count >= int(max_pending):
+                # Already more candidates queued than this vacancy can
+                # plausibly work through - a real recruiter would pause
+                # sourcing rather than keep piling applications onto a
+                # backlog it can't process.
+                return next_key
+
         pipeline_profiles = state["_recruitment_pipeline_profiles"]
         average = float(
             self.recruitment_cfg.get("weekly_applications_by_department", {})
@@ -195,19 +230,26 @@ class RecruitmentSimulator:
                     state, idx, self.STAGE_GESPREK, date_columns=["Screening_Date"], today=today
                 )
 
-    def _resolve_interview(self, state, vacancy, today):
+    def _resolve_interview(self, state, vacancy, today, interview_capacity):
         vacancy_key = vacancy["Vacancy_Key"]
         pipeline = self._pipeline(state, vacancy_key)
         if pipeline.empty:
             return
-        aanbod_key = self._stage_keys.get(self.STAGE_AANBOD)
-        if (pipeline["Stage_Key"] == aanbod_key).any():
-            # One offer already outstanding for this vacancy - nobody else
-            # gets promoted (or even evaluated) until it resolves.
-            return
-
         gesprek_key = self._stage_keys.get(self.STAGE_GESPREK)
-        waiting = pipeline[pipeline["Stage_Key"] == gesprek_key]
+        aanbod_key = self._stage_keys.get(self.STAGE_AANBOD)
+        offer_outstanding = (pipeline["Stage_Key"] == aanbod_key).any()
+
+        if not offer_outstanding:
+            if self._promote_queued_candidate(state, pipeline, gesprek_key, today):
+                offer_outstanding = True
+                pipeline = self._pipeline(state, vacancy_key)
+
+        # Candidates already evaluated (Interview_Date set) this call are
+        # either now at Aanbod or still queued behind the one active offer -
+        # only never-evaluated candidates compete for this week's capacity.
+        waiting = pipeline[
+            (pipeline["Stage_Key"] == gesprek_key) & pipeline["Interview_Date"].isna()
+        ]
         if waiting.empty:
             return
 
@@ -215,33 +257,76 @@ class RecruitmentSimulator:
         # externally-screened candidate, or Application_Date for an
         # internal candidate who skipped straight there.
         entered_gesprek = waiting["Screening_Date"].fillna(waiting["Application_Date"])
-        idx = entered_gesprek.sort_values().index[0]
-        row = state["fact_recruitment"].loc[idx]
+        ordered_idx = entered_gesprek.sort_values().index
 
         rate = float(self.recruitment_cfg.get("interview_decision_rate", 0.3))
-        if self.rng.random() >= rate:
-            return
+        minimum_offer_quality_default = 1.0
+        attempts = 0
 
-        source_name = self._hire_source_names.get(row["HireSource_Key"])
-        minimum_quality = float(
-            self._source_profile_by_name(source_name).get("minimum_offer_quality", 1.0)
-        )
-        if float(row["Kandidaat_Kwaliteit"]) < minimum_quality:
-            self._finalize(
-                state, idx, self.REJECTED_STATUS, today,
-                rejection_reason=BELOW_MINIMUM_QUALITY_REASON, date_columns=["Interview_Date"],
+        for idx in ordered_idx:
+            if attempts >= interview_capacity:
+                break
+            attempts += 1
+            if self.rng.random() >= rate:
+                continue
+
+            row = state["fact_recruitment"].loc[idx]
+            source_name = self._hire_source_names.get(row["HireSource_Key"])
+            minimum_quality = float(
+                self._source_profile_by_name(source_name).get(
+                    "minimum_offer_quality", minimum_offer_quality_default
+                )
             )
-            return
+            if float(row["Kandidaat_Kwaliteit"]) < minimum_quality:
+                self._finalize(
+                    state, idx, self.REJECTED_STATUS, today,
+                    rejection_reason=BELOW_MINIMUM_QUALITY_REASON,
+                    date_columns=["Interview_Date"],
+                )
+                continue
 
+            if offer_outstanding:
+                # Qualified, but the vacancy's one active offer hasn't
+                # resolved yet - mark them evaluated so they aren't
+                # re-evaluated, and pick them up via
+                # _promote_queued_candidate once a slot frees.
+                state["fact_recruitment"].loc[idx, "Interview_Date"] = today
+                continue
+
+            self._advance_to_stage(
+                state, idx, self.STAGE_AANBOD,
+                date_columns=["Interview_Date", "Offer_Date"], today=today,
+            )
+            decision_cfg = self.recruitment_cfg.get("decision_days", {})
+            days_to_decision = self.rng.randint(
+                decision_cfg.get("min", 3), decision_cfg.get("max", 28)
+            )
+            state["fact_recruitment"].loc[idx, "Dagen_Tot_Beslissing"] = days_to_decision
+            offer_outstanding = True
+
+    def _promote_queued_candidate(self, state, pipeline, gesprek_key, today):
+        """Promote the longest-waiting already-qualified candidate to Aanbod.
+
+        A candidate can clear the quality gate in a week when another offer
+        is still outstanding (offers stay serial); they wait here, already
+        evaluated (Interview_Date set), until the current offer resolves.
+        """
+        qualified = pipeline[
+            (pipeline["Stage_Key"] == gesprek_key) & pipeline["Interview_Date"].notna()
+        ]
+        if qualified.empty:
+            return False
+
+        idx = qualified["Interview_Date"].sort_values().index[0]
         self._advance_to_stage(
-            state, idx, self.STAGE_AANBOD,
-            date_columns=["Interview_Date", "Offer_Date"], today=today,
+            state, idx, self.STAGE_AANBOD, date_columns=["Offer_Date"], today=today,
         )
         decision_cfg = self.recruitment_cfg.get("decision_days", {})
         days_to_decision = self.rng.randint(
             decision_cfg.get("min", 3), decision_cfg.get("max", 28)
         )
         state["fact_recruitment"].loc[idx, "Dagen_Tot_Beslissing"] = days_to_decision
+        return True
 
     def _resolve_offer(self, state, vacancy, today):
         pipeline = self._pipeline(state, vacancy["Vacancy_Key"])
@@ -296,12 +381,78 @@ class RecruitmentSimulator:
         self._finalize(state, idx, self.ACCEPTED_STATUS, today)
         return accepted
 
-    def _close_out_remaining_pipeline(self, state, vacancy_key, today):
+    def _close_out_remaining_pipeline(self, state, vacancy_key, today, rejection_reason=NOT_SELECTED_REASON):
         pipeline = self._pipeline(state, vacancy_key)
         for idx in pipeline.index:
             self._finalize(
-                state, idx, self.REJECTED_STATUS, today, rejection_reason=NOT_SELECTED_REASON
+                state, idx, self.REJECTED_STATUS, today, rejection_reason=rejection_reason
             )
+
+    def _expire_stale_vacancy(self, state, vacancy, today):
+        """Close a vacancy that has been open too long without a hire.
+
+        Rather than let a struggling vacancy sit open forever, treat it as
+        withdrawn once it passes `vacancy_expiry_days`. If the seat is still
+        genuinely needed, the normal understaffing check raises a fresh
+        vacancy for it on a later week - this is a backstop against a
+        vacancy or a source-quality mismatch stranding a role unfilled
+        indefinitely, not a replacement for fixing that mismatch.
+        """
+        expiry_days = self.recruitment_cfg.get("vacancy_expiry_days")
+        if not expiry_days or int(expiry_days) <= 0:
+            return False
+
+        created_date = pd.Timestamp(vacancy["Created_Date"])
+        if (pd.Timestamp(today) - created_date).days < int(expiry_days):
+            return False
+
+        vacancy_key = vacancy["Vacancy_Key"]
+        fact_vacancy = state["fact_vacancy"]
+        mask = fact_vacancy["Vacancy_Key"] == vacancy_key
+        fact_vacancy.loc[mask, "Status"] = "Gesloten"
+        fact_vacancy.loc[mask, "Closed_Date"] = today
+        state["fact_vacancy"] = fact_vacancy
+        self._close_out_remaining_pipeline(
+            state, vacancy_key, today, rejection_reason=VACANCY_EXPIRED_REASON
+        )
+        return True
+
+    def _withdraw_stale_candidates(self, state, vacancy_key, today):
+        """Withdraw a candidate who has waited too long in Gesprek.
+
+        Mirrors real candidate behaviour: nobody waits indefinitely for an
+        interview (or for an offer slot behind one) - they take another job
+        and drop out. This shrinks a stuck backlog directly rather than
+        only processing it faster.
+        """
+        patience_days = self.recruitment_cfg.get("gesprek_patience_days")
+        if not patience_days or int(patience_days) <= 0:
+            return
+
+        pipeline = self._pipeline(state, vacancy_key)
+        if pipeline.empty:
+            return
+        gesprek_key = self._stage_keys.get(self.STAGE_GESPREK)
+        waiting = pipeline[pipeline["Stage_Key"] == gesprek_key]
+        if waiting.empty:
+            return
+
+        entered_gesprek = pd.to_datetime(
+            waiting["Screening_Date"].fillna(waiting["Application_Date"])
+        )
+        waited_days = (pd.Timestamp(today) - entered_gesprek).dt.days
+        stale = waiting[waited_days >= int(patience_days)]
+        for idx in stale.index:
+            self._finalize(
+                state, idx, self.DECLINED_STATUS, today,
+                decline_reason=CANDIDATE_WITHDREW_REASON,
+            )
+
+    def _interview_capacity(self, department_name):
+        capacity = self.recruitment_cfg.get("interview_capacity_by_department", {}).get(
+            department_name, 1
+        )
+        return max(1, int(capacity))
 
     def _advance_to_stage(self, state, idx, stage_name, date_columns, today):
         fact_recruitment = state["fact_recruitment"]
@@ -351,7 +502,7 @@ class RecruitmentSimulator:
                 "Vacature_Reden": vacancy["Vacature_Reden"],
                 "Stage_Key": self._stage_keys.get(stage_name),
                 "Screening_Date": None,
-                "Interview_Date": today if stage_name == self.STAGE_GESPREK else None,
+                "Interview_Date": None,
                 "Offer_Date": None,
                 "Dagen_Tot_Beslissing": None,
                 **candidate_fields,

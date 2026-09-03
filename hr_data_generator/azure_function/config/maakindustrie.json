@@ -2642,7 +2642,7 @@
       "Vacaturebank": {
         "application_volume_weight": 4.8,
         "candidate_quality_mean": 2.6,
-        "minimum_offer_quality": 3.25,
+        "minimum_offer_quality": 2.5,
         "candidate_decline_rate": 0.1,
         "candidate_decline_per_quality_point": 0.02,
         "department_weights": {
@@ -2755,7 +2755,22 @@
       "Directie": 0.5
     },
     "screening_decision_rate": 0.6,
-    "interview_decision_rate": 0.3
+    "interview_decision_rate": 0.3,
+    "interview_capacity_by_department": {
+      "Productie": 3,
+      "Techniek": 2,
+      "Kwaliteit": 1,
+      "Logistiek": 2,
+      "R&D": 1,
+      "IT": 1,
+      "Sales": 2,
+      "HR": 1,
+      "Finance": 1,
+      "Directie": 1
+    },
+    "gesprek_patience_days": 56,
+    "max_pending_pipeline_per_vacancy": 15,
+    "vacancy_expiry_days": 90
   },
   "seasonality": {
     "enabled": true,
@@ -3738,6 +3753,11 @@
       "Categorie": "Extern aanbod"
     },
     {
+      "DeclineReason_Key": 6,
+      "Weigeringsreden_Naam": "Kandidaat heeft zich teruggetrokken",
+      "Categorie": "Geen reactie"
+    },
+    {
       "DeclineReason_Key": 2,
       "Weigeringsreden_Naam": "Tegenbod huidige werkgever",
       "Categorie": "Extern aanbod"
@@ -3763,6 +3783,11 @@
       "RejectionReason_Key": 1,
       "Afwijzingsreden_Naam": "Onvoldoende relevante werkervaring",
       "Categorie": "Kwalificatie"
+    },
+    {
+      "RejectionReason_Key": 6,
+      "Afwijzingsreden_Naam": "Vacature ingetrokken",
+      "Categorie": "Organisatie"
     },
     {
       "RejectionReason_Key": 2,

@@ -203,15 +203,84 @@ pages - not needed on either of these two.)
 ## Recruitment (first-pass numbers, revisit after a longer run)
 
 - `recruitment.weekly_applications_by_department`, `screening_decision_rate`
-  (0.6) and `interview_decision_rate` (0.3) are first-draft estimates, scaled
-  down from the old one-shot `applications_per_hire_by_department` model.
-  Revisit once a longer run shows actual time-to-fill per department.
+  (0.6) and `interview_decision_rate` (0.3, now a per-candidate scheduling
+  chance within each week's `interview_capacity_by_department` slots rather
+  than a single candidate's only chance - see the fix below) are
+  first-draft estimates, scaled down from the old one-shot
+  `applications_per_hire_by_department` model. Revisit once a longer run
+  shows actual time-to-fill per department.
 - A rare edge case is now handled defensively rather than eliminated: if
   `HiringSimulator` closes a vacancy without a hire (a capacity conflict with
   a capped role - see below), any other in-progress pipeline applications for
   that vacancy are closed out as "Afgewezen" too, so nothing is left stuck at
   "In behandeling" forever. This is a backstop for an already-rare race, not
   a normal funnel outcome.
+
+### ✅ Fixed: vacancies stuck open for months (time-to-close bug)
+
+A live-data check found Productie vacancies open 100-180+ days, with dozens
+of candidates piling up "In behandeling" at Gesprek and never reaching a
+hire. Root-caused to two compounding issues, both fixed:
+
+- **`source_profiles.Vacaturebank.minimum_offer_quality` was miscalibrated.**
+  Every other source has its quality bar comfortably below its own
+  `candidate_quality_mean` (so most candidates pass); Vacaturebank had it
+  *above* its mean (3.25 vs. 2.6 - only ~16% of candidates could ever clear
+  it), and Vacaturebank is by far Productie's dominant source
+  (`application_volume_weight` 4.8, plus a 1.6x Productie-specific
+  multiplier - roughly half of all Productie applicants). Lowered to 2.5,
+  putting its pass rate (~57%) in line with Campus, the other open-channel
+  source (~53%).
+- **Interview throughput was structurally incapable of keeping up with
+  inflow.** `_resolve_interview` evaluated exactly one Gesprek candidate per
+  vacancy per week (at a 30% chance even then), while an outstanding Aanbod
+  offer froze *all* evaluation for that vacancy until it resolved (up to 28
+  days). Productie's Gesprek inflow (~1.8/week) vastly exceeded this
+  throughput, so the backlog could only grow. Fixed in
+  `simulation_recruitment.py`:
+  - `interview_capacity_by_department` (new config) lets multiple Gesprek
+    candidates be evaluated per week, scaled to each department's actual
+    application volume (Productie/Techniek/Logistiek/Sales get 2-3;
+    low-volume departments keep 1, since they never had a queueing problem).
+  - Extending an actual offer is still serial (only one candidate is ever
+    at Aanbod per vacancy), but evaluating *other* Gesprek candidates no
+    longer freezes while that offer is outstanding - a candidate who clears
+    the quality gate in the meantime waits, already evaluated
+    (`_promote_queued_candidate`), for the next free Aanbod slot.
+  - Internal-mobility candidates are no longer pre-marked as interviewed at
+    application time - a pre-existing quirk that would have silently
+    exempted them from the new "not yet evaluated" bookkeeping; they now go
+    through the same interview quality gate as external candidates, as the
+    class docstring already claimed.
+
+  Two additional backstops guard against a recurrence of this failure mode
+  in general, not just this specific bug:
+  - `gesprek_patience_days` (56) - a candidate who has waited too long in
+    Gesprek withdraws (`Kandidaat heeft zich teruggetrokken`, a new
+    `dim_decline_reason` entry), shrinking a stuck backlog directly rather
+    than only processing it faster.
+  - `vacancy_expiry_days` (90) - a vacancy still open past this threshold
+    closes without a hire (`Vacature ingetrokken`, a new
+    `dim_rejection_reason` entry); the normal understaffing check raises a
+    fresh vacancy on a later week if the seat is still needed.
+  - `max_pending_pipeline_per_vacancy` (15) - stops sourcing new
+    applications once a vacancy already has more candidates queued than it
+    can plausibly work through.
+
+  Verified with a 90-simulated-week in-memory run (seed 3, full production
+  pipeline, real config): 87 of 95 Productie vacancies closed within the
+  window, median time-to-close 28 days (was 100+), max 91 days; 86 of those
+  87 closed via an actual hire (only one via the expiry backstop); max
+  simultaneous backlog per vacancy was 8, well under the 15 cap; 21
+  candidates withdrew via the new patience mechanism. Full test suite green
+  (142 passed) plus updated/added unit tests for the new interview-capacity,
+  offer-serialization, and internal-candidate-evaluation behavior.
+
+  All four new config values (`interview_capacity_by_department`,
+  `gesprek_patience_days`, `max_pending_pipeline_per_vacancy`,
+  `vacancy_expiry_days`) are first-draft numbers themselves - revisit
+  alongside the other recruitment estimates once a longer real run is
+  available.
 
 ## Multi-site locations (implemented, first-pass numbers)
 
