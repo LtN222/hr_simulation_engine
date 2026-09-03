@@ -163,7 +163,9 @@ def test_new_pipeline_application_routes_internal_candidates_straight_to_gesprek
     )
 
     assert internal_row["Stage_Key"] == simulator._stage_keys["Gesprek"]
-    assert internal_row["Interview_Date"] == pd.Timestamp("2024-02-01")
+    # Never pre-marked as interviewed - internal candidates still go through
+    # the same interview quality gate as anyone else at Gesprek.
+    assert internal_row["Interview_Date"] is None
     assert internal_row["Employee_Key"] == 42
     assert external_row["Stage_Key"] == simulator._stage_keys["Sollicitatie"]
     assert external_row["Interview_Date"] is None
@@ -233,29 +235,40 @@ def test_resolve_interview_promotes_the_longest_waiting_candidate_first():
     ])
     _prime_lookups(simulator, state)
 
-    simulator._resolve_interview(state, _vacancy(), pd.Timestamp("2024-01-15"))
+    simulator._resolve_interview(state, _vacancy(), pd.Timestamp("2024-01-15"), interview_capacity=1)
 
     fact = state["fact_recruitment"].set_index("Recruitment_Key")
     assert fact.loc[2, "Stage_Key"] == simulator._stage_keys["Aanbod"]
     assert fact.loc[2, "Interview_Date"] == pd.Timestamp("2024-01-15")
     assert fact.loc[2, "Offer_Date"] == pd.Timestamp("2024-01-15")
     assert pd.notna(fact.loc[2, "Dagen_Tot_Beslissing"])
-    # The other waiting candidate is untouched this week.
+    # The other waiting candidate is untouched this week (capacity was 1).
     assert fact.loc[1, "Stage_Key"] == 3
 
 
-def test_resolve_interview_does_nothing_while_an_offer_is_already_outstanding():
-    simulator = RecruitmentSimulator(_config(), schema=None, rng=random.Random(1))
+def test_resolve_interview_keeps_offers_serial_while_evaluating_others():
+    """An outstanding offer no longer freezes evaluation of other Gesprek
+    candidates, but only one candidate is ever promoted to Aanbod at a time -
+    a second qualified candidate waits, already evaluated, for the offer to
+    resolve."""
+    config = _config(interview_decision_rate=1.0)
+    simulator = RecruitmentSimulator(config, schema=None, rng=random.Random(1))
     state = _state_with_pipeline([
         _pipeline_row(Recruitment_Key=1, Stage_Key=4, Offer_Date=pd.Timestamp("2024-01-10")),
-        _pipeline_row(Recruitment_Key=2, Stage_Key=3, Screening_Date=pd.Timestamp("2024-01-05")),
+        _pipeline_row(
+            Recruitment_Key=2, Stage_Key=3, Kandidaat_Kwaliteit=4.0,
+            Screening_Date=pd.Timestamp("2024-01-05"),
+        ),
     ])
     _prime_lookups(simulator, state)
 
-    simulator._resolve_interview(state, _vacancy(), pd.Timestamp("2024-01-15"))
+    simulator._resolve_interview(state, _vacancy(), pd.Timestamp("2024-01-15"), interview_capacity=5)
 
     fact = state["fact_recruitment"].set_index("Recruitment_Key")
-    assert fact.loc[2, "Stage_Key"] == 3  # never even evaluated
+    # Not promoted - the one active offer stays serial...
+    assert fact.loc[2, "Stage_Key"] == 3
+    # ...but already evaluated, so it won't be re-evaluated next week.
+    assert fact.loc[2, "Interview_Date"] == pd.Timestamp("2024-01-15")
 
 
 def test_resolve_interview_rejects_a_candidate_below_the_quality_bar():
@@ -266,7 +279,7 @@ def test_resolve_interview_rejects_a_candidate_below_the_quality_bar():
     ])
     _prime_lookups(simulator, state)
 
-    simulator._resolve_interview(state, _vacancy(), pd.Timestamp("2024-01-15"))
+    simulator._resolve_interview(state, _vacancy(), pd.Timestamp("2024-01-15"), interview_capacity=1)
 
     row = state["fact_recruitment"].iloc[0]
     assert row["Status"] == RecruitmentSimulator.REJECTED_STATUS
