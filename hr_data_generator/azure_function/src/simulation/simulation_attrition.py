@@ -4,6 +4,7 @@ import math
 
 import pandas as pd
 
+from src.infrastructure.departure_records import build_departure_row
 from src.infrastructure.satisfaction import (
     SatisfactionModel,
     score_employee_satisfaction,
@@ -17,8 +18,9 @@ from src.infrastructure.engagement import (
 class AttritionSimulator:
     """Simulate employee exits while retaining their event-time context."""
 
-    def __init__(self, config, rng, event_type_map, departure_reason_map):
+    def __init__(self, config, schema, rng, event_type_map, departure_reason_map):
         self.config = config
+        self.schema = schema
         self.rng = rng
         self.event_type_map = event_type_map
         self.departure_reason_map = departure_reason_map
@@ -66,6 +68,9 @@ class AttritionSimulator:
             if self.rng.random() < 0.02
             else 1.0
         )
+
+        next_key = int(fact_employment["Employment_Key"].max()) + 1
+        departure_records = []
 
         for index, employment in active_employment.iterrows():
             employee = employee_lookup.loc[employment["Employee_Key"]]
@@ -150,29 +155,37 @@ class AttritionSimulator:
             if is_retirement:
                 reason = "Pensioen"
 
-            fact_employment.loc[index, "Dienstverband_status"] = "Uit dienst"
+            departure_reason_key = self.departure_reason_map.get(
+                reason,
+                next(iter(self.departure_reason_map.values())),
+            )
+
+            # Close this employment period without touching its own
+            # EventType_Key: that field still correctly describes whatever
+            # happened at *this* row's Startdatum (a hire, promotion, transfer
+            # or routine salary review), matching how every other superseded
+            # row in this table works. The departure itself is a distinct
+            # instant, not a continuation of that period, so it gets its own
+            # terminal row below - the same reason a promotion or transfer
+            # never overwrites the row it supersedes, it closes it and adds a
+            # new one.
+            fact_employment.loc[index, "Dienstverband_status"] = "Inactief"
             fact_employment.loc[index, "Einddatum"] = today
-            fact_employment.loc[index, "DepartureReason_Key"] = (
-                self.departure_reason_map.get(
-                    reason,
-                    next(iter(self.departure_reason_map.values())),
-                )
-            )
-            fact_employment.loc[index, "EventType_Key"] = self.event_type_map[
-                "Uit dienst"
-            ]
-            fact_employment.loc[index, "Tevredenheid_Score_Bij_Uitdienst"] = (
-                satisfaction
-            )
-            fact_employment.loc[index, "SatisfactionBand_Key_Bij_Uitdienst"] = (
-                satisfaction_band_key
-            )
-            fact_employment.loc[index, "Betrokkenheid_Score_Bij_Uitdienst"] = (
-                engagement
-            )
-            fact_employment.loc[index, "EngagementBand_Key_Bij_Uitdienst"] = (
-                engagement_band_key
-            )
+
+            departure_records.append(build_departure_row(
+                self.schema,
+                employment,
+                next_key,
+                today,
+                self.event_type_map["Uit dienst"],
+                departure_reason_key,
+                satisfaction,
+                satisfaction_band_key,
+                engagement,
+                engagement_band_key,
+            ))
+            next_key += 1
+
             dim_employee.loc[
                 dim_employee["Employee_Key"] == employment["Employee_Key"],
                 "In_Dienst",
@@ -188,6 +201,12 @@ class AttritionSimulator:
                 "Department_Key": role["Department_Key"],
                 "Vacature_Reden": "Vervanging",
             })
+
+        if departure_records:
+            fact_employment = pd.concat(
+                [fact_employment, pd.DataFrame(departure_records)],
+                ignore_index=True,
+            )
 
         state["fact_employment"] = fact_employment
         state["dim_employee"] = dim_employee

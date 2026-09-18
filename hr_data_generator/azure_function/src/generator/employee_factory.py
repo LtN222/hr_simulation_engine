@@ -42,13 +42,18 @@ class EmployeeFactory:
         # 2️⃣ Person
         # =====================================================
 
+        # Gender is drawn first (role/department-informed) so it can also
+        # inform salary determination below - the compa-ratio gender offset
+        # would otherwise have no gender to apply to at that point.
+        gender = self.person_factory.choose_gender(role_name, department_name)
 
         job, contract, performance = self.employment_factory.create(
             role_row=role_row,
             role_name=role_name,
             department_name=department_name,
             today=today,
-            employment_start_date=employment_start_date
+            employment_start_date=employment_start_date,
+            gender=gender
         )
         job.ploegendienst_key = assign_ploegendienst_key(
             role_row,
@@ -62,7 +67,9 @@ class EmployeeFactory:
         person_data = self.person_factory.create(
             role_name,
             today,
-            employment_start_date=contract.start_date
+            employment_start_date=contract.start_date,
+            gender=gender,
+            department_name=department_name
         )
 
         person = Person(

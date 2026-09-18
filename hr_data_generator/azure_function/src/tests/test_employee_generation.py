@@ -518,6 +518,39 @@ def test_employee_status_resets_continuous_service_on_rehire():
     assert result["Aaneengesloten_Indienst_Datum"] == pd.Timestamp("2023-03-01")
     assert pd.isna(result["Datum_uitdienst"])
     assert result["In_Dienst"]
+
+
+def test_employee_status_follows_the_chain_through_a_same_day_departure_row():
+    """Regression test for the attrition fix: the terminal 'Uit dienst' row
+    has Startdatum == Einddatum (it records the departure instant, not a
+    continuing employment period) and must not break continuous-service
+    tracking, which walks Previous_Employment_Key back through the chain."""
+    state = {
+        "dim_employee": pd.DataFrame({"Employee_Key": [1]}),
+        "fact_employment": pd.DataFrame({
+            "Employment_Key": [1, 2, 3],
+            "Previous_Employment_Key": [None, 1, 2],
+            "Employee_Key": [1, 1, 1],
+            "Startdatum": pd.to_datetime([
+                "2015-01-01",  # original hire
+                "2022-06-01",  # a salary review a few years later
+                "2024-03-15",  # the departure instant
+            ]),
+            "Einddatum": pd.to_datetime([
+                "2022-06-01",
+                "2024-03-15",
+                "2024-03-15",
+            ]),
+            "Dienstverband_status": ["Inactief", "Inactief", "Uit dienst"],
+        })
+    }
+
+    result = sync_employee_employment_status(state)["dim_employee"].iloc[0]
+
+    assert result["Eerste_Indienst_Datum"] == pd.Timestamp("2015-01-01")
+    assert result["Aaneengesloten_Indienst_Datum"] == pd.Timestamp("2015-01-01")
+    assert result["Datum_uitdienst"] == pd.Timestamp("2024-03-15")
+    assert not result["In_Dienst"]
 # =====================================================
 
 def test_build_dim_manager_deduplicates_manager_rows():
@@ -778,6 +811,54 @@ def test_assign_managers_keeps_historical_employees_connected():
     ].iloc[0] == 2
 
 
+def test_assign_managers_resolves_role_from_a_same_day_departure_row():
+    """Regression test for the attrition fix: a departed employee's 'current'
+    row is now the zero-duration terminal 'Uit dienst' row, not the closed
+    row it superseded. Role_Key must still resolve from it (it's a copy of
+    the closed row's), or a departed employee would silently lose their
+    department/role connection in reporting."""
+    dim_employee_df = pd.DataFrame({
+        "Employee_Key": [1, 2],
+        "Manager_Key": [None, None]
+    })
+
+    fact_employment_df = pd.DataFrame({
+        "Employment_Key": [1, 3, 2],
+        "Previous_Employment_Key": [None, 1, None],
+        "Employee_Key": [1, 1, 2],
+        "Role_Key": [1, 1, 2],
+        "Startdatum": pd.to_datetime(["2020-01-01", "2022-01-01", "2020-01-01"]),
+        "Einddatum": pd.to_datetime(["2022-01-01", "2022-01-01", None]),
+        "Dienstverband_status": ["Inactief", "Uit dienst", "Actief"]
+    })
+
+    dim_role = pd.DataFrame({
+        "Role_Key": [1, 2],
+        "Department_Key": [10, 10],
+        "Functie_Naam": ["Medewerker", "Teamleider"],
+        "Leidinggevend": [False, True],
+        "Salaris_min": [32000, 55000],
+        "Salaris_max": [42000, 70000]
+    })
+
+    assigned = assign_managers(
+        dim_employee_df,
+        fact_employment_df,
+        dim_role,
+        random.Random(42),
+        today=pd.Timestamp("2024-01-01")
+    )
+
+    assert assigned.loc[
+        assigned["Employee_Key"] == 1,
+        "Manager_Key"
+    ].iloc[0] == 2
+    assert assigned.loc[
+        assigned["Employee_Key"] == 1,
+        "Department_Key"
+    ].iloc[0] == 10
+
+
 def test_salary_policy_places_initial_salary_near_its_benchmark():
     config = ConfigLoader().load()
     role = pd.Series({
@@ -820,6 +901,71 @@ def test_salary_policy_keeps_all_benchmark_categories_visible():
 
     assert all(count > 10 for count in category_counts.values())
     assert 0.99 < sum(ratios) / len(ratios) < 1.04
+
+
+def _salary_policy_with_gender_gap(starting_offset, review_offset):
+    config = type("Config", (), {
+        "salary_benchmark": {
+            "compa_ratio": {
+                "gender_pay_gap": {
+                    "female_starting_offset": starting_offset,
+                    "female_review_offset": review_offset,
+                }
+            }
+        },
+        "dim_salary_scale": [
+            {"SalaryScale_Key": 1, "Minimum_Salaris": 30000,
+             "Maximum_Salaris": 50000, "Aantal_Treden": 1}
+        ]
+    })()
+    return SalaryPolicy(config)
+
+
+def test_draw_target_ratio_applies_the_configured_female_starting_offset():
+    policy = _salary_policy_with_gender_gap(starting_offset=-0.05, review_offset=0.0)
+
+    male_ratios = [
+        policy.draw_target_ratio("Finance", random.Random(seed), gender="M")
+        for seed in range(1, 501)
+    ]
+    female_ratios = [
+        policy.draw_target_ratio("Finance", random.Random(seed), gender="F")
+        for seed in range(1, 501)
+    ]
+
+    average_gap = sum(male_ratios) / len(male_ratios) - sum(female_ratios) / len(female_ratios)
+    assert 0.03 < average_gap < 0.07
+
+
+def test_draw_target_ratio_leaves_non_female_genders_at_the_baseline():
+    policy = _salary_policy_with_gender_gap(starting_offset=-0.05, review_offset=0.0)
+
+    without_gender = policy.draw_target_ratio("Finance", random.Random(9))
+    with_male = policy.draw_target_ratio("Finance", random.Random(9), gender="M")
+
+    assert without_gender == with_male
+
+
+def test_review_salary_applies_the_configured_female_review_offset():
+    policy = _salary_policy_with_gender_gap(starting_offset=0.0, review_offset=-0.01)
+    role = pd.Series({
+        "Role_Key": 1,
+        "Functie_Naam": "Financieel Medewerker",
+        "Salaris_min": 32000,
+        "Salaris_max": 42000,
+        "SalaryScale_Key": 1
+    })
+
+    _, male_ratio = policy.review_salary(
+        role, None, pd.Timestamp("2020-01-01"), pd.Timestamp("2024-01-01"),
+        current_salary=40000, target_ratio=1.0, performance=3.5, gender="M"
+    )
+    _, female_ratio = policy.review_salary(
+        role, None, pd.Timestamp("2020-01-01"), pd.Timestamp("2024-01-01"),
+        current_salary=40000, target_ratio=1.0, performance=3.5, gender="F"
+    )
+
+    assert male_ratio - female_ratio == pytest.approx(0.01)
 
 
 def test_generated_employment_contains_shift_and_salary_scale_context():
@@ -1399,6 +1545,7 @@ def test_attrition_uses_fact_employment_salary():
 
     simulator = AttritionSimulator(
         config,
+        None,
         random.Random(42),
         {"Uit dienst": 1},
         {"Ontslag": 1}
@@ -1407,7 +1554,7 @@ def test_attrition_uses_fact_employment_salary():
     result = simulator.run(state, pd.Timestamp("2024-01-01"))
 
     assert "fact_employment" in result
-    assert result["fact_employment"]["Employee_Key"].tolist() == [1]
+    assert set(result["fact_employment"]["Employee_Key"].tolist()) == {1}
 
 
 def test_retirement_exits_are_age_gated_and_use_pensioen_reason():
@@ -1457,16 +1604,29 @@ def test_retirement_exits_are_age_gated_and_use_pensioen_reason():
 
     simulator = AttritionSimulator(
         config,
+        None,
         random.Random(42),
         {"Uit dienst": 1},
         {"Pensioen": 2, "Nieuwe baan elders": 3, "Ontslag": 4}
     )
     result = simulator.run(state, today)
 
-    employment = result["fact_employment"].set_index("Employee_Key")
-    assert employment.loc[1, "Dienstverband_status"] == "Uit dienst"
-    assert employment.loc[1, "DepartureReason_Key"] == 2
-    assert employment.loc[2, "Dienstverband_status"] == "Actief"
+    employment = result["fact_employment"]
+    employee_1_rows = employment[employment["Employee_Key"] == 1].sort_values("Startdatum")
+    # The retiree's original row is closed (its own EventType_Key untouched,
+    # matching how any other superseded row works), and a separate terminal
+    # row records the departure itself - not an overwrite of the same row.
+    assert len(employee_1_rows) == 2
+    assert employee_1_rows.iloc[0]["Dienstverband_status"] == "Inactief"
+    terminal = employee_1_rows.iloc[1]
+    assert terminal["Dienstverband_status"] == "Uit dienst"
+    assert terminal["DepartureReason_Key"] == 2
+    assert terminal["Startdatum"] == terminal["Einddatum"] == today
+    assert terminal["Previous_Employment_Key"] == employee_1_rows.iloc[0]["Employment_Key"]
+
+    employee_2_rows = employment[employment["Employee_Key"] == 2]
+    assert len(employee_2_rows) == 1
+    assert employee_2_rows.iloc[0]["Dienstverband_status"] == "Actief"
 
 
 def test_absence_uses_enabled_types_and_respects_employment_end():

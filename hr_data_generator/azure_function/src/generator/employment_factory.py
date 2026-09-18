@@ -17,7 +17,8 @@ class EmploymentFactory:
         role_name,
         department_name,
         today,
-        employment_start_date=None
+        employment_start_date=None,
+        gender=None
     ):
         """Create employment data for an initial employee or a new hire.
 
@@ -36,7 +37,8 @@ class EmploymentFactory:
             department_name,
             start_date=start_date,
             today=today,
-            is_new_hire=is_new_hire
+            is_new_hire=is_new_hire,
+            gender=gender
         )
         performance = self._choose_performance()
 
@@ -76,7 +78,8 @@ class EmploymentFactory:
         department_name,
         start_date=None,
         today=None,
-        is_new_hire=False
+        is_new_hire=False,
+        gender=None
     ):
         if today is None:
             today = pd.Timestamp.today()
@@ -86,7 +89,8 @@ class EmploymentFactory:
             today,
             start_date or today,
             self.rng,
-            is_new_hire=is_new_hire
+            is_new_hire=is_new_hire,
+            gender=gender
         )
 
     def _choose_initial_start_date(self, today):
@@ -123,7 +127,23 @@ class EmploymentFactory:
         if contract_type == "Tijdelijk":
             tenure_years = (today - start_date).days // 365
             contract_round = tenure_years + 1
-            end_date = start_date + pd.DateOffset(years=contract_round)
+            chain_cfg = getattr(self.config, "career_events", {}).get(
+                "chain_rule", {}
+            )
+            max_contract_rounds = int(chain_cfg.get("max_contract_rounds", 3))
+            max_temporary_years = float(chain_cfg.get("max_temporary_years", 3.0))
+            if contract_round > max_contract_rounds or tenure_years >= max_temporary_years:
+                # Ketenregeling: this much backdated tenure means a real
+                # employee would already have been converted to Vast (or
+                # left) long before today - they can't still be placed on an
+                # N-th temporary round now. This only affects backdated
+                # initial-population placements; a genuine new hire always
+                # has tenure_years == 0.
+                contract_type = "Vast"
+                contract_round = None
+                end_date = None
+            else:
+                end_date = start_date + pd.DateOffset(years=contract_round)
         else:
             end_date = None
             contract_round = None

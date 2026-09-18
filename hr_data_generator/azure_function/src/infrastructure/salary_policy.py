@@ -55,18 +55,20 @@ class SalaryPolicy:
             "Markt_P75": int(round(median * (1 + spread)))
         }
 
-    def initial_salary(self, role, department_name, today, service_start, rng, is_new_hire):
+    def initial_salary(self, role, department_name, today, service_start, rng, is_new_hire,
+                       gender=None):
         """Draw a realistic pay position and return its matching salary."""
         target_ratio = self.draw_target_ratio(
             department_name,
             rng,
-            is_new_hire=is_new_hire
+            is_new_hire=is_new_hire,
+            gender=gender
         )
         benchmark = self.employee_benchmark(role, today, service_start)
         salary = int(round(benchmark["Benchmark_Salaris"] * target_ratio))
         return salary, target_ratio
 
-    def draw_target_ratio(self, department_name, rng, is_new_hire=False):
+    def draw_target_ratio(self, department_name, rng, is_new_hire=False, gender=None):
         """Draw from configured benchmark-status bands instead of a narrow mean."""
         policy = self.config.get("compa_ratio", {})
         distribution_key = (
@@ -86,16 +88,18 @@ class SalaryPolicy:
         adjustment = float(
             policy.get("department_adjustments", {}).get(department_name, 0.0)
         )
+        ratio += self._gender_offset(gender, "female_starting_offset")
         return self.clamp_ratio(ratio + adjustment)
 
     def review_salary(self, role, department_name, service_start, today, current_salary,
-                      target_ratio, performance):
+                      target_ratio, performance, gender=None):
         """Advance salary toward the employee's market-aligned target position."""
         policy = self.config.get("compa_ratio", {})
         midpoint = float(policy.get("performance_midpoint", 3.5))
         movement = float(policy.get("annual_performance_ratio_movement", 0.004))
         adjusted_ratio = self.clamp_ratio(
             float(target_ratio) + (float(performance) - midpoint) * movement
+            + self._gender_offset(gender, "female_review_offset")
         )
         benchmark = self.employee_benchmark(role, today, service_start)
         target_salary = int(round(benchmark["Benchmark_Salaris"] * adjusted_ratio))
@@ -114,6 +118,17 @@ class SalaryPolicy:
             new_salary = int(round(float(current_salary) * (1 + minimum_raise)))
 
         return new_salary, adjusted_ratio
+
+    def _gender_offset(self, gender, key):
+        """Small, deliberate compa-ratio nudge modeling an unexplained
+        (function-corrected) gender pay gap - see maakindustrie.json's
+        compa_ratio.gender_pay_gap. Only "F" carries a nonzero offset; every
+        other value (including "Anders"/"Onbekend") stays at the baseline.
+        """
+        if gender != "F":
+            return 0.0
+        gap = self.config.get("compa_ratio", {}).get("gender_pay_gap", {})
+        return float(gap.get(key, 0.0))
 
     def clamp_ratio(self, ratio):
         policy = self.config.get("compa_ratio", {})

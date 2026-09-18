@@ -527,8 +527,7 @@
       "Location_Key": "INT",
       "Shift_Key": "INT",
       "Incident_Date": "DATE",
-      "Verloren_Werkdagen": "INT",
-      "Absence_Key": "INT"
+      "Verloren_Werkdagen": "INT"
     },
     "foreign_keys": [
       [
@@ -560,11 +559,6 @@
         "Shift_Key",
         "dim_shift",
         "Shift_Key"
-      ],
-      [
-        "Absence_Key",
-        "fact_absence",
-        "Absence_Key"
       ]
     ],
     "indexes": [

@@ -5,6 +5,13 @@ generator bouwt een historische workforce op, simuleert vervolgens wekelijkse
 HR-gebeurtenissen en schrijft het resultaat naar Azure SQL. Een Azure Function
 biedt zowel een handmatige HTTP-trigger als een wekelijkse incremental run.
 
+De primaire consument van deze data is een webapp (met AI/LLM-functionaliteit
+als reden om niet voor Power BI als primair kanaal te kiezen). Het datamodel
+moet daarnaast bruikbaar blijven als Power BI-semantisch model, voor het geval
+een Power BI-dashboard alsnog gewenst is. Beide consumenten lezen dezelfde
+Azure SQL-tabellen; het datamodel mag dus geen aannames bevatten die alleen in
+een van de twee kloppen.
+
 De startbezetting en de volwassen organisatiemix zijn afzonderlijk
 configureerbaar. `workforce_planning.department_target_weights` stuurt de
 langetermijnverdeling per afdeling; `fte_ratio` (of `target_weight`) bepaalt de
@@ -20,7 +27,12 @@ De huidige sectorconfiguratie is `maakindustrie`.
 - Organisatiestructuur, rollen, locaties, contracten en managers.
 - Groei, vacatures, sollicitaties, hires en non-hires.
 - Uitstroom, inclusief leeftijdsafhankelijk pensioen.
-- Promoties, transfers, contractwijzigingen, performance en salarisreviews.
+- Promoties, transfers, performance en salarisreviews.
+- Contractwijzigingen volgens de Nederlandse ketenregeling: een tijdelijk
+  contract wordt verlengd, omgezet naar vast, of niet verlengd zodra het
+  afloopt - uiterlijk bij het derde contract of na drie jaar moet het vast
+  worden. Goed presterende medewerkers (top 10% van de actuele
+  prestatiescores) krijgen vaker een vroegtijdige omzetting naar vast.
 - Ziekteverzuim en verlof, waaronder kort, middellang en lang verzuim,
   zwangerschap, ouderschapsverlof, vakantie, tijd-voor-tijd en
   calamiteitenverzuim.
@@ -32,6 +44,19 @@ De huidige sectorconfiguratie is `maakindustrie`.
 - Betrokkenheid, als afzonderlijke score voor energie en verbondenheid met het
   werk. Deze beweegt mee met tevredenheid, performance, manager,
   loopbaanmomentum en relatieve beloning.
+- Veiligheidsincidenten, met een risico dat per afdeling, ploegendienst en
+  diensttijd verschilt; een deel daarvan levert ook verzuim op (`Bedrijfsongeval`).
+- Locatietransfers: laterale verhuizingen tussen productielocaties voor
+  medewerkers in een `multi_site`-rol, zonder rol- of afdelingswijziging.
+- Man/vrouw-verhouding per afdeling en, waar relevant, per rol
+  (`gender_ratio` in de sectorconfiguratie), zodat de samenstelling
+  aansluit bij een echt productiebedrijf (bijv. Productie/Techniek
+  overwegend mannelijk, Kwaliteit/HR overwegend vrouwelijk) in plaats van
+  een vlakke 50/50-verdeling voor elke rol.
+- Een bewuste, functie-gecorrigeerde beloningskloof tussen mannen en
+  vrouwen (`salary_benchmark.compa_ratio.gender_pay_gap`), kleiner dan het
+  Nederlandse bedrijfsleven-gemiddelde maar niet nul - zie de toelichting
+  bij `Streef_Compa_Ratio` verderop.
 
 De gedragsregels en verdelingen staan centraal in
 `azure_function/config/maakindustrie.json`.
@@ -51,7 +76,11 @@ state dictionary with pandas DataFrames
 schema-driven Azure SQL writer
           |
           v
-Azure SQL and Power BI semantic model
+       Azure SQL
+        /      \
+       v        v
+   web app   Power BI semantic model
+  (LLM feature)  (optional)
 ```
 
 De hoofdcode staat in `azure_function/`:
@@ -76,8 +105,8 @@ Belangrijke dimensies zijn `dim_employee`, `dim_department`, `dim_role`,
 `dim_manager`, `dim_hire_source`, `dim_recruitment_status`, `dim_education`,
 `dim_absence_type`, `dim_ploegendienst`, `dim_salary_band`,
 `dim_salary_scale`, `dim_satisfaction_band`, `dim_engagement_band`,
-`dim_satisfaction_driver`, `dim_performance_driver` en
-`dim_engagement_driver`.
+`dim_satisfaction_driver`, `dim_performance_driver`,
+`dim_engagement_driver` en `dim_incident_type`.
 
 `dim_education` vervangt de eerdere niveau-dimensie. Elke rij combineert een
 opleidingsnaam, niveau en richting. `dim_role` bewaart daarnaast de leesbare
@@ -118,6 +147,13 @@ Belangrijke facts zijn:
 - `fact_salary_benchmark`: maandelijkse marktbenchmark per rol, schaal en
   salaristrede.
 - `fact_performance_review`.
+- `fact_safety_incident`: één regel per veiligheidsincident, inclusief het
+  incidenttype, de rol/afdeling/locatie/ploegendienst op het moment van het
+  incident en de verloren werkdagen. Een incident met werkelijk verzuim
+  (`Incidenttype_Naam = "Verzuimongeval"`) koppelt via `Absence_Key` aan de
+  bijbehorende `fact_absence`-episode van het type `Bedrijfsongeval`, zodat
+  bedrijfsongevallen in dezelfde verzuimrapportage meelopen als gewone
+  ziekmeldingen in plaats van in een geïsoleerde tabel te blijven staan.
 
 `fact_employment` is event-gebaseerd: promoties, transfers en salarisreviews
 kunnen meerdere regels voor een medewerker opleveren. Gebruik voor trends in
@@ -227,7 +263,7 @@ ondersteunt alleen de historische managercontext van de snapshot en kan in
 Power BI verborgen blijven.
 
 `Ploegendienst_Key`, `SalaryScale_Key` en de technische
-`Target_Compa_Ratio` horen bij `fact_employment`. Een promotie, transfer of
+`Streef_Compa_Ratio` horen bij `fact_employment`. Een promotie, transfer of
 salarisreview maakt een nieuwe employment-regel met die historische context.
 `fact_absence` kopieert de ploegendienst, schaal en salarisband bij aanvang
 van de afwezigheid, zodat het rapport geen facts aan elkaar hoeft te koppelen.
@@ -237,6 +273,20 @@ Werkelijke salarissen worden gegenereerd rond een stabiele beloningspositie
 ten opzichte van die benchmark; de vijf benchmarkstatussen blijven daarom
 zichtbaar in de data zonder dat ze in Power BI worden geforceerd.
 
+`salary_benchmark.compa_ratio.gender_pay_gap` (`female_starting_offset`,
+`female_review_offset`) trekt de `Streef_Compa_Ratio` van vrouwen bewust een
+klein stukje omlaag, zowel bij instroom als bij elke salarisreview. Dit is
+een bewuste, functie-gecorrigeerde kloof - de generator kijkt verder nergens
+naar geslacht bij beloning, dus zonder deze correctie zou het functie-
+gecorrigeerde verschil in de praktijk richting 0% convergeren, wat voor een
+Nederlands productiebedrijf onrealistisch positief zou zijn. Beide
+offsets zijn zo gekalibreerd (op een kleine, snelle in-memory testrun, niet
+een volledige full run) dat het resulterende, per-rol gecorrigeerde verschil
+uitkomt op ongeveer 4-5% - beter dan het Nederlandse bedrijfsleven-gemiddelde
+(CBS 2024: 6,1% gecorrigeerd in het bedrijfsleven, 1,7% bij de overheid) maar
+niet nul. Herkalibreer deze twee waarden als een langere/grotere run een
+ander resultaat oplevert.
+
 `fact_absence` bevat zowel ziekteverzuim als niet-ziekte-afwezigheid, zoals
 vakantie en ouderschapsverlof. Filter
 `dim_absence_type[Telt_als_verzuim] = TRUE()` voor uitsluitend
@@ -245,7 +295,8 @@ verzuimpercentages de werkdag- of uurkolommen. De velden
 `Tevredenheid_Score_Bij_Aanvang` en `SatisfactionBand_Key` beschrijven de
 tevredenheid bij de start van de episode.
 
-Maak geen directe relatie tussen facts. Facts worden via gedeelde dimensies
+Maak geen directe relatie tussen facts, ongeacht of de data wordt gelezen
+door de webapp of door Power BI. Facts worden via gedeelde dimensies
 gefilterd. In Power BI horen onder andere deze actieve, enkelrichtingsrelaties
 in het model te staan:
 
@@ -261,12 +312,35 @@ dim_engagement_driver  -> fact_workforce_snapshot
 dim_candidate_quality_driver -> fact_recruitment
 dim_hire_source        -> fact_recruitment
 dim_recruitment_status -> fact_recruitment
+dim_incident_type       -> fact_safety_incident
 ```
+
+Een `fact_safety_incident`-rij met werkelijk verzuim
+(`Incidenttype_Naam = "Verzuimongeval"`) heeft geen aparte sleutel naar zijn
+`fact_absence`-episode: er is bewust geen `Absence_Key`-kolom op
+`fact_safety_incident`. De koppeling is op querytijd te reconstrueren via
+`Employee_Key` en datum, omdat `SafetyIncidentSimulator` de episode altijd
+laat starten op `Incident_Date` en een medewerker nooit twee overlappende
+afwezigheidsepisodes geeft:
+
+```sql
+SELECT si.*, fa.*
+FROM fact_safety_incident si
+JOIN fact_absence fa
+  ON fa.Employee_Key = si.Employee_Key
+ AND fa.Startdatum   = si.Incident_Date
+```
+
+In Power BI is de gelijkwaardige aanpak dezelfde als bij
+`fact_vacancy`/`fact_recruitment` hieronder: een DAX-measure die de koppeling
+op basis van die twee velden legt, in plaats van een opgeslagen
+fact-to-fact-relatie in het model.
 
 `fact_vacancy` bevat geen `HireSource_Key`: de bron is die van de uiteindelijk
 aangenomen sollicitatie in `fact_recruitment`. Gebruik voor time-to-fill per
-bron daarom een DAX-measure met de aangenomen `Vacancy_Key` als filtercontext,
-niet een fact-to-fact-relatie.
+bron daarom een join op `Vacancy_Key` op querytijd (in de webapp een gewone
+SQL-join, in Power BI een DAX-measure met die key als filtercontext), niet een
+fact-to-fact-relatie.
 
 ## Vereisten
 
@@ -364,9 +438,19 @@ worden bijgewerkt. De voortgang staat in `simulation_state`.
 - `initial_population`: omvang, burn-in en dienstjarenverdeling.
 - `growth`: groeipad, capaciteit en economische gebeurtenissen.
 - `structure`: afdelingen, rollen, salarisbanden en managementrollen.
+- `gender_ratio`: man/vrouw-verhouding per afdeling, met `role_overrides`
+  voor rollen die van hun afdelingsgemiddelde afwijken (bijv.
+  Productontwikkelaar binnen R&D); `default` geldt voor niet-genoemde
+  afdelingen. `salary_benchmark.compa_ratio.gender_pay_gap` bevat de aparte
+  offsets voor de bewuste beloningskloof.
 - `recruitment`: volume en uitkomstlogica van sollicitaties.
 - `absence`: type-specifieke kansen, duur en eligibility-regels.
 - `career_events`: performance, salarisgroei, promoties en transfers.
+  `career_events.chain_rule` bevat de ketenregeling-parameters
+  (`max_contract_rounds`, `max_temporary_years`, `renewal_duration_years`,
+  `top_performer_percentile`, `top_performer_conversion_kans`);
+  `contract_rules.<afdeling>.keten_conversion_kans` stuurt de kans op omzetting
+  naar vast zodra de wettelijke grens is bereikt.
 - `satisfaction`: de scoreverdeling en effecten van relatieve beloning,
   manager, performance, diensttijd en afdeling.
 - `engagement`: de scoreverdeling en effecten van tevredenheid, relatieve
@@ -379,6 +463,9 @@ worden bijgewerkt. De voortgang staat in `simulation_state`.
   harde bovengrens op 67.
 - `avatar`: publieke Blob Storage-basis-URL, vaste toewijzingsseed en het
   aandeel neutrale avatars voor mannen en vrouwen.
+- `safety`: jaarlijkse incidentkans per afdeling, de vermenigvuldigers voor
+  ploegendienst en nieuwe medewerkers, de gewichten per incidenttype en de
+  bandbreedte voor verloren werkdagen bij een `Verzuimongeval`.
 
 ### `baseline_headcount` versus `initial_population.headcount`
 
@@ -427,6 +514,8 @@ tevredenheidscontext, groeilogica en pensioenuitstroom.
 | `DRIVER keyword syntax error` | Controleer `SQL_CONNECTION_TEMPLATE` en de geinstalleerde ODBC Driver 18. |
 | Endpoint op poort 7071 niet bereikbaar | Controleer of `func start` volledig is opgestart en niet door een eerdere fout is gestopt. |
 | Nieuwe schemawijziging ontbreekt in SQL | Draai een full run, of controleer de incremental schema-initialisatie. |
+| `pyodbc.OperationalError: Login timeout expired (HYT00)` | Voorbijgaande Azure SQL-verbindingsstoring. `acquire_simulation_lock` doet hiervoor automatisch een paar nieuwe pogingen (`CONNECT_ATTEMPTS`/`CONNECT_RETRY_DELAY_SECONDS` in `simulation_lock.py`); houdt de storing langer aan, controleer de DTU/verbindingsbelasting van de database (vooral bij een kleine tier zoals S0) en of de firewallregels nog kloppen. |
+| De wekelijkse timer-run toont "Succeeded" maar er is geen nieuwe data | Controleer de logs op "Weekly HR job failed": `weekly_hr_run` gooit de fout sinds kort opnieuw op na loggen, dus een mislukte run staat voortaan ook als Failed in Azure. |
 
 ## Deployen
 
@@ -442,4 +531,6 @@ Voor een release met simulatielogica- of schemawijzigingen:
 1. Voer `python -m pytest -q` uit vanuit `azure_function/`.
 2. Deploy de Function App en controleer de Application Settings.
 3. Voer eenmaal een handmatige full run uit.
-4. Vernieuw de gewijzigde tabellen in Power BI en controleer nieuwe relaties.
+4. Controleer dat de webapp de gewijzigde tabellen correct oppikt; vernieuw
+   indien er ook een Power BI-dashboard actief is de gewijzigde tabellen daar
+   en controleer nieuwe relaties.

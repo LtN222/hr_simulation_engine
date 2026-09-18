@@ -4,6 +4,11 @@ from faker import Faker
 fakeNL = Faker("nl_NL")
 fakeINT = Faker()
 
+DEFAULT_GENDER_RATIO = {"male": 0.49, "female": 0.49}
+# "Anders"/"Onbekend" stay a flat share regardless of role - only the M/F
+# split within the remainder is informed by the configured ratio.
+OTHER_GENDER_SHARE = 0.02
+
 
 class PersonFactory:
 
@@ -11,9 +16,18 @@ class PersonFactory:
         self.config = config
         self.rng = rng
 
-    def create(self, role_name, today, employment_start_date=None):
+    def create(
+        self,
+        role_name,
+        today,
+        employment_start_date=None,
+        gender=None,
+        department_name=None,
+    ):
 
-        gender, voornaam, achternaam = self._choose_gender_and_name()
+        if gender is None:
+            gender = self.choose_gender(role_name, department_name)
+        voornaam, achternaam = self._choose_name(gender)
 
         _, geboortedatum = self._generate_age(today, employment_start_date)
 
@@ -34,17 +48,42 @@ class PersonFactory:
             "bijzondere_aanstelling": bijzondere_aanstelling
         }
 
+    def choose_gender(self, role_name=None, department_name=None):
+        """Draw a gender using the role/department-informed ratio.
+
+        Exposed separately from `create` so callers that need gender before
+        the rest of a person's details are known (e.g. to apply it to salary
+        determination) can draw it once and pass it back into `create`.
+        """
+        ratio = self._gender_ratio(role_name, department_name)
+        male_share = float(ratio.get("male", DEFAULT_GENDER_RATIO["male"]))
+        female_share = float(ratio.get("female", DEFAULT_GENDER_RATIO["female"]))
+        remainder = max(0.0, 1 - OTHER_GENDER_SHARE)
+
+        return self.rng.choices(
+            ["M", "F", "Anders", "Onbekend"],
+            weights=[
+                male_share * remainder,
+                female_share * remainder,
+                OTHER_GENDER_SHARE / 2,
+                OTHER_GENDER_SHARE / 2,
+            ]
+        )[0]
+
     # -------------------------
     # intern
     # -------------------------
 
-    def _choose_gender_and_name(self):
+    def _gender_ratio(self, role_name, department_name):
+        config = getattr(self.config, "gender_ratio", {})
+        overrides = config.get("role_overrides", {})
+        if role_name in overrides:
+            return overrides[role_name]
+        if department_name in config:
+            return config[department_name]
+        return config.get("default", DEFAULT_GENDER_RATIO)
 
-        gender = self.rng.choices(
-            ["M", "F", "Anders", "Onbekend"],
-            weights=[0.49, 0.49, 0.01, 0.01]
-        )[0]
-
+    def _choose_name(self, gender):
         if gender == "M":
             voornaam = fakeNL.first_name_male()
         elif gender == "F":
@@ -54,7 +93,7 @@ class PersonFactory:
 
         achternaam = fakeNL.last_name()
 
-        return gender, voornaam, achternaam
+        return voornaam, achternaam
 
     def _generate_age(self, today, employment_start_date=None):
         """Generate a date of birth compatible with employment start.

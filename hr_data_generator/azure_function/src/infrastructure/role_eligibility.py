@@ -18,10 +18,10 @@ def _role_requirements(config, role_name):
 
 def _credential_rows(credentials):
     """Normalise external candidate credentials to name/level dictionaries."""
-    if not credentials:
-        return []
     if isinstance(credentials, pd.DataFrame):
         return credentials.to_dict("records")
+    if not credentials:
+        return []
     return list(credentials)
 
 
@@ -124,6 +124,27 @@ def relevant_experience(state, employee_key, target_role, date, config=None):
         total += max(0,(min(end,pd.Timestamp(date))-start).days/365.2425)
     return total
 
+def leadership_experience(state, employee_key, date):
+    """Total time spent in any leidinggevend role, as of `date`.
+
+    Gates a *further* internal leadership promotion (team lead -> manager ->
+    director) with a lower bar than external hiring uses for the same role:
+    the organisation has already directly observed this person's leadership
+    performance, unlike an external candidate's self-reported
+    `Leidinggevende_Ervaring_Jaren`.
+    """
+    history = employment_history_for(state, employee_key)
+    roles = state["dim_role"].set_index("Role_Key")
+    total = 0.0
+    for _, row in history.iterrows():
+        if not bool(roles.loc[row.Role_Key, "Leidinggevend"]):
+            continue
+        end = pd.Timestamp(row.Einddatum) if pd.notna(row.Einddatum) else pd.Timestamp(date)
+        start = pd.Timestamp(row.Startdatum)
+        total += max(0, (min(end, pd.Timestamp(date)) - start).days / 365.2425)
+    return total
+
+
 def eligible_internal(config, state, employee_key, source_role, target_role, date, performance=3.0):
     target_name=target_role["Functie_Naam"]
     kind=movement_type(config, source_role["Functie_Naam"], target_name)
@@ -136,4 +157,13 @@ def eligible_internal(config, state, employee_key, source_role, target_role, dat
     if bool(target_role.Formele_Kwalificatie_Vereist) and required and not has.intersection(required): return False
     # first line-management move has an explicit three-year internal exception
     if bool(target_role.Leidinggevend) and not bool(source_role.Leidinggevend) and exp < 3: return False
+    # a further move between leadership roles gets its own, discounted bar
+    # rather than skipping the check entirely (as it used to)
+    if bool(target_role.Leidinggevend) and bool(source_role.Leidinggevend):
+        discount = float(getattr(config, "career_events", {}).get(
+            "internal_leadership_experience_discount", 0.6
+        ))
+        required_leadership = float(target_role.Min_Leidinggevende_Ervaring_Jr) * discount
+        if leadership_experience(state, employee_key, date) < required_leadership:
+            return False
     return True

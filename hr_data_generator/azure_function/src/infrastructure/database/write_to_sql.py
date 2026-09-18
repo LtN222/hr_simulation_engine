@@ -71,6 +71,11 @@ def get_engine(database_name):
         # pyodbc's parameter arrays into far fewer network round-trips and
         # is usually a large (often 5-20x) win for exactly that pattern.
         fast_executemany=True,
+        # A full run holds a connection checked out for the whole run
+        # (see acquire_simulation_lock); pre-ping catches a connection Azure
+        # SQL's gateway dropped for being idle and transparently reconnects
+        # instead of surfacing a stale-connection error mid-run.
+        pool_pre_ping=True,
     )
 
     return engine

@@ -31,6 +31,143 @@ also creating the matching `fact_absence` episode - type `Bedrijfsongeval` -
 so it feeds the same verzuim reporting rather than living in an isolated
 table) - is intentionally left off this list.
 
+## ✅ Added: ketenregeling (Dutch temporary-contract chain rule)
+
+By Dutch law, an employee may have at most 3 temporary (`Tijdelijk`)
+contracts, or 3 years of consecutive temporary employment, whichever comes
+first - the next contract at that point must be permanent (`Vast`). Despite
+`dim_event_type` already carrying `"Contract omgezet naar vast"`/`"Contract
+verlengd"` and `career_events.contract_change_rate` existing in config since
+the very first commit, nothing anywhere ever read `Contract_einddatum` to
+decide what happens when a temporary contract expires - it was set once at
+hire and simply copied forward unchanged by every later event (promotion,
+transfer, salary review), forever. Live data showed employees on their 7th
+temporary contract round with no conversion ever triggered.
+
+Added `ContractLifecycleSimulator` (`simulation_contracts.py`), which runs
+before `AttritionSimulator` each week and resolves every active `Tijdelijk`
+contract whose `Contract_einddatum` has arrived:
+- **Cap reached** (`Contract_ronde >= max_contract_rounds` (3) OR
+  cumulative temporary tenure >= `max_temporary_years` (3.0), using
+  `Aaneengesloten_Indienst_Datum` - true continuous tenure, not the
+  resettable row `Startdatum` - the same fix already applied to the
+  performance-review bug) - only two outcomes are legally valid:
+  convert to `Vast` (`contract_rules.<afdeling>.keten_conversion_kans`) or
+  let the contract lapse (a real departure, reason `"Contract niet
+  verlengd"` - `dim_departure_reason`'s existing `"tijdelijk"` category,
+  itself unreachable before this change since `AttritionSimulator` never
+  selected it).
+- **Cap not reached**: renew (default), or convert early. Early conversion
+  is now performance-aware rather than flatly random, per the user's
+  request: a live 90th-percentile threshold is computed each week from the
+  active population's `Prestatie_Score`; employees at or above it use
+  `chain_rule.top_performer_conversion_kans` (0.6), everyone else uses the
+  previously-dormant `career_events.contract_change_rate` (0.03) as a small
+  baseline chance. A modest, performance-weighted chance of early
+  non-renewal exists too (poor performers, mirroring the multiplier shape
+  `AttritionSimulator` already uses elsewhere).
+
+New config: `career_events.chain_rule` (`max_contract_rounds`,
+`max_temporary_years`, `renewal_duration_years`, `top_performer_percentile`,
+`top_performer_conversion_kans`) and `contract_rules.<afdeling>.keten_conversion_kans` -
+all first-pass values, not calibrated against a longer run yet.
+
+Renewal/conversion reuse the established "close the row, keep its own
+EventType_Key, append a new self-contained row" pattern; non-renewal reuses
+the departure terminal-row mechanism built for the attrition fix, now
+extracted into a shared `infrastructure/departure_records.py` helper so
+neither simulator duplicates that (non-trivial, `Previous_Employment_Key`-
+sensitive) logic.
+
+**Bug found and fixed while integration-testing this** (not a bug in the new
+simulator - found because nothing had ever checked this before):
+`EmploymentFactory._choose_contract` computed `Contract_ronde =
+tenure_years_at_hire + 1` for the *initial population* with no cap at all -
+an employee backdated 7-8 years at population-generation time was created
+already sitting on contract round 8, in violation of the law from the moment
+they existed. `ContractLifecycleSimulator` was correctly converting these to
+`Vast` the moment their contract came due (proving its own cap logic
+correct), but the already-invalid historical row remained in the data.
+Fixed by capping eligibility for a `Tijdelijk` placement at initial
+generation: if the backdated tenure would already exceed
+`max_contract_rounds`/`max_temporary_years`, the employee is placed as
+`Vast` instead (a real person with that much tenure would already have
+converted, long before "today"). Only affects backdated initial-population
+placements - a genuine new hire always has zero tenure at hire time.
+
+Verified with a focused unit suite (`test_simulation_contracts.py`: renewal,
+conversion, non-renewal via the shared terminal-row mechanism, cap
+enforcement via both the round-count and cumulative-tenure paths, continuous-
+tenure correctness across a mid-contract event, and a statistical check that
+top performers convert early far more often than average performers) plus a
+narrow 3-year/150-headcount integration run through the real weekly
+pipeline confirming `Contract_ronde` never exceeds 3 and all three outcomes
+(renewal, conversion, non-renewal) occur with sane relative frequencies.
+Full test suite green (195 passed).
+
+## Full-run performance (accepted as-is for now)
+
+A real full run (~6.7 simulated years) measured at roughly: burn-in 2.5 min,
+weekly simulation logic ~30 min, SQL write/post-processing ~21 min (of which
+`fact_workforce_snapshot` alone was ~15 min, everything else combined ~6
+min). Two causes were analyzed:
+
+- **Simulation logic (~30 min)**: `.iterrows()` is used 27 times across 17
+  simulator/infrastructure files - a known slow pandas pattern (full
+  per-row `Series` construction) - and `assign_managers` rebuilds the
+  *entire* manager hierarchy from scratch every single week regardless of
+  whether anything actually changed. Not fixed - see below.
+- **`fact_workforce_snapshot` build (~15 min)**: `_performance_as_of`,
+  `_performance_driver_as_of` and `manager_as_of` each re-scanned the
+  *entire* `fact_performance_review`/`fact_manager_assignment` table for
+  every one of the ~15,000-20,000 employee-month rows being built, instead
+  of being pre-indexed by employee once (the same file's own
+  `_absence_metrics_for_month` and `_indexed()` already use that pattern
+  correctly - just not applied to these three lookups).
+
+**Attempted, measured, and reverted**: built a shared `as_of_lookup.py`
+(`group_by_employee`/`latest_as_of`/`active_as_of`) and applied it to
+`workforce_snapshot.py` and the identical anti-pattern in
+`absence_context.py`'s `sync_absence_satisfaction` (which does the same
+three full-table scans per absence episode). Correct (0 mismatches against
+the old logic, full test suite green with 9 new dedicated tests for the
+helper), but a direct timing measurement at the actual table sizes involved
+(~3,000 performance reviews, 20,000 lookups) showed it was **not faster -
+roughly a 0.7x "speedup" (i.e. slightly slower)**. Root cause of the
+mismatch between theory and measurement: at this scale, pandas' fixed
+per-call overhead (constructing a boolean mask, slicing, building a new
+Series/DataFrame) dominates over the cost of scanning more rows - trading a
+scan of the whole table for a dict lookup plus a scan of a smaller table
+doesn't reduce the number of expensive pandas operations, just their size.
+A real fix would need to replace the per-employee-month Python loop with a
+small number of bulk vectorized operations (e.g. `pd.merge_asof` for the
+"most recent row as of a date" joins) - a materially bigger rewrite of
+`build_workforce_snapshots`'s actual loop structure, comparable in scope and
+risk to the simulation-loop vectorization below, not a quick follow-up.
+
+Given the cost/risk of that bigger rewrite versus the benefit (an
+infrequently-run demo-data generator that already completes in about an
+hour), **decided not to pursue this further for now** - reverted cleanly
+(confirmed back to the pre-attempt 195 passing tests). If revisited, profile
+the actual snapshot-building pass first (e.g. `cProfile`) rather than
+optimizing from a theoretical complexity argument again - that argument is
+what led to this reverted attempt in the first place.
+
+**Simulation-loop vectorization (`.iterrows()` -> vectorized,
+`assign_managers` skip-when-unchanged) - deferred, not started.** Given the
+lesson just above, do not implement this from the same kind of theoretical
+"O(N) per call is bad" reasoning without profiling the actual weekly
+simulation loop first to confirm iterrows overhead (rather than something
+else - the recruitment funnel's per-candidate processing, or per-employee
+satisfaction/engagement scoring, are equally plausible dominant costs) is
+really what's driving the ~30 minutes, and by how much. Also carries a
+correctness-adjacent caveat independent of profiling: several of these loops
+draw from `self.rng` per row, so vectorizing changes the *sequence* in which
+random draws are consumed - a given seed will produce a different (still
+valid) dataset than before, not an identical one computed faster. That's a
+real, deliberate discontinuity to call out clearly if this is ever
+attempted, not a side effect to gloss over.
+
 ## Power BI: Profiel page (deferred, not yet implemented)
 
 From a review of the Profiel (single-employee profile) page:
@@ -193,6 +330,133 @@ pages - not needed on either of these two.)
   site/department). The overall version of this KPI already exists on the
   page; this just slices it by department.
 
+## Performance reviews
+
+### ✅ Fixed: reviews permanently frozen for ~36% of tenured employees
+
+A live-data check (an employee with 5 years of history and a single,
+never-changing performance score) found that 67 of 185 active employees with
+more than 2 years' tenure (36%) had not received a performance review in
+over 2 years - some frozen for 8+ years, with `dim_employee.Prestatie_Score`
+stuck at whatever their last review happened to produce.
+
+Root cause: `PerformanceSimulator.run_weekly` computed tenure as
+`today - employment["Startdatum"]`, using the *current* `fact_employment`
+row's start date. A routine annual salary review (or promotion/transfer)
+closes the old row and opens a new one with `Startdatum` reset to that
+event's date - correct for `fact_employment` itself (it is event/effective-
+period based, not a tenure proxy - see the core invariants), but wrong to
+reuse as "years at the company." Since the performance-review week
+(`_review_week`, hashed on `employee_key * 31`) and the salary-review week
+(`_salary_review_week` in `simulation_career_events.py`, hashed on
+`employee_key * 37`) are both fixed per employee, the calendar gap between
+them each year is constant. For a deterministic ~36% of employees that gap
+is under 180 days, so the `tenure_days < 180` guard tripped every single
+year, forever; for the rest the gap was long enough and reviews proceeded
+normally, which is why most employees looked fine.
+
+Fixed by adding `PerformanceSimulator._tenure_days(emp, today)`, which uses
+`dim_employee.Aaneengesloten_Indienst_Datum` (the true continuous hire date,
+already used correctly for this purpose in `simulation_career_events.py`)
+instead of the active employment row's `Startdatum`. This also corrects the
+"tenure-based groei" bonus inside `_calculate_score` for every employee who
+has ever had a salary review, promotion or transfer, not just the frozen
+36% - that bonus was silently capped near its minimum (based on time since
+the last such event) rather than scaling up toward its 0.3 maximum for
+genuinely long-tenured employees.
+
+Regression-tested in `test_simulation_performance.py` (reproduces the exact
+scenario: a long-tenured employee whose active employment row was reset 60
+days ago by a routine event); verified the added test fails without the fix
+and passes with it. Full test suite green (154 passed).
+
+This is a historical-logic fix: it only affects reviews generated by future
+simulated weeks. The already-generated frozen scores in the current dataset
+need a full run to backfill (not run as part of this fix, per instruction).
+
+## Departures
+
+### ✅ Fixed: a departure could silently erase the last raise/promotion/transfer event on that row
+
+Found by inspection: a leaver's final `fact_employment` row would sometimes
+show a higher `Salaris` than the row before it, with no `Salarisaanpassing`
+(or `Promotie`/`Transfer`) event recorded anywhere to explain the increase.
+
+Root cause: `AttritionSimulator.run` closed a departing employee's *current*
+active row **in place** - it set `Dienstverband_status = "Uit dienst"`,
+`Einddatum = today`, and overwrote that row's `EventType_Key` to `"Uit
+dienst"`, regardless of what the row's `EventType_Key` had actually recorded
+about its own `Startdatum` (a hire, promotion, transfer, or routine salary
+review). Every other superseded row in this table records what happened at
+*its own* `Startdatum`; departure is different in kind - it's an instant
+(what happens at `Einddatum`), not a continuing employment period - so
+reusing the same row for both meanings meant the row's *original* event was
+always destroyed the moment that same person later left.
+
+Fixed by giving departure its own terminal row instead of overwriting the
+existing one, matching how promotions/transfers/salary reviews already
+close a superseded row without touching its `EventType_Key`:
+- The employee's active row is closed normally: `Einddatum = today`,
+  `Dienstverband_status = "Inactief"` - its own `EventType_Key` is left
+  alone, so it keeps recording whatever genuinely happened at its own
+  `Startdatum`.
+- A new row is appended: `Startdatum = Einddatum = today` (the departure
+  instant, not a period), `Dienstverband_status = "Uit dienst"`,
+  `EventType_Key` = "Uit dienst", `Previous_Employment_Key` pointing at the
+  row it closes, carrying the same final Role/Location/Shift/SalaryScale/
+  Streef_Compa_Ratio/Salaris/Contract context as a self-contained snapshot
+  (matching the "every event row is self-contained" convention
+  `simulation_career_events.py` already follows), plus the
+  satisfaction/engagement-at-exit fields.
+
+This is a genuinely new row shape for `fact_employment`: a zero-duration row
+(`Startdatum == Einddatum`). Every consumer that picks a "current" or
+"representative" row per employee was audited before implementing this
+(`manager_builder._current_employment_rows`, `employee_status.
+sync_employee_employment_status`/`_continuous_service_start`,
+`workforce_snapshot._active_employment`, `manager_assignment.
+sync_manager_assignments`, `departure_context.sync_departure_satisfaction`) -
+all either already filter to `Dienstverband_status == "Actief"` first (so a
+departed employee's rows, old or new shape, never reach them) or already
+handle a departed employee's "latest row" correctly given the new row
+carries the same context fields as before. `_continuous_service_start`
+specifically needed `Previous_Employment_Key` to be set correctly on the new
+terminal row, or it would have reported `Aaneengesloten_Indienst_Datum` as
+the departure date instead of the true continuous hire date - verified with
+a dedicated regression test that a multi-event chain still resolves the
+original hire date through a same-day terminal row. A second regression test
+confirms `assign_managers` still resolves `Role_Key`/`Department_Key` from
+the new terminal row for a departed employee.
+
+`EventType_Key = "Uit dienst"` continues to be set (on the new row, not the
+old one), since the application reads it there. Full test suite green
+(187 passed, including two new targeted regression tests plus updated
+existing attrition/retirement tests reflecting the two-row shape).
+
+## Gender ratio and pay gap (first-pass numbers, revisit after a longer run)
+
+- `gender_ratio` (department defaults plus `role_overrides`) replaces the
+  previous flat, role-independent 49/49/1/1 gender draw, which used to make
+  it possible (and did happen) for the top earners and the entire Directie
+  to randomly land as all-female. Values are calibrated by real-world
+  reasoning per department/role (e.g. Productie/Techniek mannelijk-leunend,
+  Kwaliteit/HR/Productontwikkelaar vrouw-leunend, Directie 70:30 - a
+  deliberately optimistic rather than strictly realistic number, since this
+  is a fictional "we already do slightly better" company), not against a
+  specific benchmark dataset. Revisit once a longer run shows the realized
+  department-level ratios at scale (small-sample noise is expected on any
+  short/small test run - e.g. a department with ~30 people can plausibly
+  show 0 of the minority gender even when correctly configured).
+- `salary_benchmark.compa_ratio.gender_pay_gap` (`female_starting_offset`
+  -0.036, `female_review_offset` -0.0018) is a deliberate, function-corrected
+  gender pay gap - without it, the corrected gap would trend toward 0% since
+  nothing else in the salary logic looks at gender. Calibrated on a small
+  in-memory run (~250 employees, 2 simulated years, two seeds) to land the
+  role-corrected gap around 4-5%, intentionally better than the CBS 2024
+  bedrijfsleven benchmark (6.1% corrected) but not zero. Revisit against a
+  real full-length run, where a much larger, multi-year population should
+  converge more tightly on the target band than the small calibration run did.
+
 ## Safety incidents (first-pass numbers, revisit after a longer run)
 
 - `safety.annual_incident_rate_by_department`, the shift/new-hire multipliers
@@ -288,9 +552,11 @@ hire. Root-caused to two compounding issues, both fixed:
   capacity, capacity-streak-triggered second site, department relocation on
   open) instead of a flat static distribution. First-pass numbers to revisit
   once a longer run shows how they land: Fabriek Noord capacity 300 (8-week
-  streak), DC at Logistiek headcount 40 (+80 capacity bonus to whichever
-  site currently hosts Logistiek), Hoofdkantoor at combined
-  Finance+HR+Sales+Marketing+Directie+IT headcount 40.
+  streak), Fabriek Zuid capacity 600 (double Noord's, on the reasoning that a
+  second site is typically built larger - see the fix below, not yet
+  validated against a real run), DC at Logistiek headcount 40 (+80 capacity
+  bonus to whichever site currently hosts Logistiek), Hoofdkantoor at
+  combined Finance+HR+Sales+Marketing+Directie+IT headcount 40.
 - The one-time department relocation (Logistiek -> DC, office departments ->
   Hoofdkantoor) moves everyone in one batch the week the location opens,
   not gradually over a "short window" as discussed - simpler, and probably
@@ -300,6 +566,35 @@ hire. Root-caused to two compounding issues, both fixed:
   `new_site_pull_rate`, `new_site_pull_weeks` in `career_events`) has first-
   pass values (0.03 / 0.15 / 12 weeks) with no real-world anchor - revisit
   once observable in a long run.
+
+### ✅ Fixed: crash once Fabriek Zuid opens
+
+Found incidentally while calibrating the gender pay gap on an unrelated small
+in-memory run. `dim_location.Fabriek Zuid` had no `capacity` configured,
+unlike Fabriek Noord (300). `_remaining_headroom` in `location_assignment.py`
+defaults a missing capacity to `float("inf")`. Once both Noord and Zuid were
+open production sites at the same time, `resolve_location`'s
+`rng.choices(open_sites, weights=weights)` received an infinite weight for
+Zuid and crashed with `ValueError: Total of weights must be finite` for
+every `multi_site` role hire/transfer/promotion from that point on - this
+would have happened in any sufficiently long real full run once Fabriek
+Noord's headcount reached 300, not just in an edge-case test.
+
+Fixed by giving `Fabriek Zuid` an explicit `capacity: 600` - deliberately
+double Fabriek Noord's 300, on the reasoning that a production company
+opening a second site (after outgrowing the first) typically builds it
+larger for future growth, not equal or smaller.
+
+The test fixture in `test_location_assignment.py` had the identical gap
+(no capacity on its own `Fabriek Zuid` fixture), which is exactly why no
+existing test had caught this: none of them called `resolve_location` with
+both sites open and no `preferred_location_key` - the one path that actually
+reaches the weighted `rng.choices` call. Fixed the fixture the same way
+(`capacity: 20`, double its `Fabriek Noord`'s 10) and added
+`test_resolve_location_multi_site_chooses_between_multiple_open_sites_without_crashing`,
+which exercises exactly that path. Verified the new test fails with the
+original `ValueError` when the fixture capacity is reverted, and passes with
+it restored. Full test suite green (155 passed).
 
 ## Workforce planning
 
@@ -318,27 +613,36 @@ hire. Root-caused to two compounding issues, both fixed:
   fully converged to that mix yet; and (b) it produces zero event history -
   no promotions, past vacancies/applications, or absence episodes, since
   nothing was ever simulated for anyone.
-- **A statistically-sampled history backfill could plausibly solve (b)
-  without the current simulation's runtime cost.** The idea: don't simulate
-  the lookback window week by week (that's exactly as slow as today's
-  forward simulation, for the same reason - discovering an emergent outcome
-  requires walking the path to it). Instead, since the *ending* population is
-  already known (it's the config target), compute the aggregate shape of
-  history in closed form and sample specific records directly from it:
-  the headcount curve as a formula rather than a stepped simulation; each
-  current employee's career-event *count* over their known tenure as one
-  Poisson/binomial draw rather than 350+ weekly probability checks; past
-  leavers as a directly-sampled batch sized from the integral of
-  headcount x attrition-rate over the window; vacancy/recruitment/absence
-  history as one batch of records per known hire/absence event rather than
-  a simulated funnel. This turns the dominant cost from
-  `O(weeks x headcount)` into roughly `O(employees who ever existed)`, since
-  most weeks are non-events for most people. The real work isn't the
-  sampling itself but resolving each employee's sampled events in the right
-  *dependency order* (a promotion has to respect eligibility as of its own
-  sampled date, which depends on that employee's already-sampled
-  qualification/experience timeline) - a small, per-employee ordering
-  problem, not the large per-week global one driving today's runtime.
+- **Decided against: a statistically-sampled history backfill for (b).**
+  Analyzed in depth and not pursued. The idea was to skip simulating the
+  lookback window week by week and instead sample the aggregate shape of
+  history in closed form (a headcount curve formula, per-employee
+  Poisson/binomial event counts, directly-sampled past leavers/vacancies/
+  absences). Two things changed the calculus: (1) `fact_workforce_snapshot`
+  - the table `Tevredenheid_Score`/`Betrokkenheid_Score`/`Prestatie_Score`
+  trends actually come from - is only ever built from `visible_start_date`
+  onward regardless of burn-in length, so backfilling further history
+  wouldn't have extended the visible trend data anyway, only made the
+  *starting* state at `visible_start_date` more mature; the front-end will
+  instead filter to a recent window, which sidesteps the need entirely. (2)
+  The real difficulty isn't per-employee event sampling (that part is as
+  easy as it sounds) but that nearly everything in this simulator is a
+  *shared* limited resource across employees (single-seat roles, team-lead
+  ceilings, location capacity, the applicant/vacancy pool) - independently
+  sampling each employee's career risks violating those constraints in ways
+  the forward simulator never produces by construction, and reconstructing
+  that bookkeeping in a sampler erodes most of the intended speed gain. A
+  sampled backfill would also become a second, approximate implementation of
+  eligibility/salary/vacancy rules that has to be kept in sync with the real
+  simulators forever. Cheaper lever if more historical depth is ever wanted:
+  raise `burn_in_years` (currently 2; `tenure_years_distribution` allows up
+  to 10-20 years) - same accurate mechanism, purely a runtime-cost trade.
+- Added a one-line log timestamp in `run_simulation.py` marking when burn-in
+  finishes (elapsed minutes + simulated week count), so the next full run
+  gives an actual measured burn-in cost instead of the config-based estimate
+  used to answer "how much of the ~1 hour full run was burn-in" (~10-15%,
+  reasoned from `burn_in_years: 2` at roughly-flat `baseline_headcount: 100`
+  versus ~348 visible-window weeks growing toward `max_capacity: 800`).
 
 ## Recruitment & eligibility
 
@@ -349,37 +653,67 @@ hire. Root-caused to two compounding issues, both fixed:
   it, an employee's credentials never change after hire, which caps how
   realistically internal promotion/transfer eligibility can evolve over a
   long career.
-- **`eligible_internal` has no leadership-experience check beyond the first
-  management move.** `role_eligibility.eligible_internal` only applies a
-  leadership-experience rule to the *first* move from a non-management role
-  into a management role (`exp < 3`). Unlike `eligible_external`, it never
-  checks `Min_Leidinggevende_Ervaring_Jr` for a further internal promotion
-  between management roles (e.g. team lead → manager → director). Consider
-  tracking real leadership tenure for internal candidates and gating further
-  management promotions on it, the way external hiring already does.
-- **Dedicated eligibility tests are still missing** for:
-  - the WO "senior" experience exception in
-    `role_eligibility._required_relevant_experience`;
-  - education-direction / diploma-and-certificate matching in
-    `_matching_credentials`;
-  - `relevant_experience()`'s role-history logic, i.e. that experience in a
-    source role counts toward a target role only when that source is the
-    target itself or reachable via a configured `logische_doorgroei` /
-    `laterale_transfers` path.
-  (The tests added for the new external-recruitment scoring cover the new
-  profile-driven scores, not these pre-existing `role_eligibility` rules.)
+- ✅ **Fixed: `eligible_internal` had no leadership-experience check beyond
+  the first management move.** `role_eligibility.eligible_internal` used to
+  apply a leadership-experience rule only to the *first* move from a
+  non-management role into a management role (`exp < 3`, a
+  general-relevant-experience proxy, since a first-time internal candidate
+  has no leadership tenure to measure yet); unlike `eligible_external`, it
+  never checked `Min_Leidinggevende_Ervaring_Jr` for a *further* internal
+  promotion between management roles (e.g. team lead → manager → director).
+  Fixed by adding `leadership_experience(state, employee_key, date)` next to
+  `relevant_experience()` (sums time in any role where `Leidinggevend ==
+  True` from the employee's own `fact_employment` history - the internal
+  equivalent of the `Leidinggevende_Ervaring_Jaren` external candidate
+  profiles already carry), and gating a further leadership move (both
+  `source_role.Leidinggevend` and `target_role.Leidinggevend` true - the
+  first move is handled separately and unaffected) on
+  `leadership_experience(...) >= target_role.Min_Leidinggevende_Ervaring_Jr * discount`.
+  `discount` is the new `career_events.internal_leadership_experience_discount`
+  (first-pass value 0.6) - deliberately lower than the external bar, since
+  an internal candidate's leadership track record is already directly
+  observed by the organization rather than self-reported. Tested in
+  `test_role_eligibility.py`: rejects a further leadership move below the
+  discounted bar, accepts one above it, and confirms the original
+  first-move rule is unaffected.
+- ✅ **Dedicated eligibility tests added** in `test_role_eligibility.py` for
+  the WO "senior" experience exception in `_required_relevant_experience`,
+  education-direction / diploma-and-certificate matching in
+  `_matching_credentials`, and `relevant_experience()`'s role-history logic
+  (a source role counts only when it is the target itself or reachable via a
+  configured `logische_doorgroei`/`laterale_transfers` path, and only up to
+  the as-of date).
+- ✅ **Fixed: `_matching_credentials` could never accept a DataFrame of
+  credentials.** `_credential_rows`'s `if not credentials:` guard ran before
+  its own `isinstance(credentials, pd.DataFrame)` branch; pandas raises
+  `ValueError: The truth value of a DataFrame is ambiguous` on that check for
+  *any* DataFrame (empty or not), so the DataFrame-handling branch was dead
+  code. Harmless in practice (every real caller, `simulation_recruitment.py`,
+  always passes a plain list), but the function's own docstring and
+  `isinstance` branch already declared DataFrame support as part of its
+  contract, so fixed rather than removed: check `isinstance` first, then the
+  falsiness check for `None`/an empty list. Tested with both a populated and
+  an empty DataFrame. Full test suite green (187 passed).
 
 ## Configuration validation
 
-- **No automated validation exists for the 55-role configuration.** Add a
-  config-loading check (or a dedicated test) that verifies, for every role in
-  `role_career_paths` / `structure`: `Role_Key` values are unique and stable,
-  `Department_Key`/department references resolve, every
-  `logische_doorgroei` and `laterale_transfers` target names an existing
-  role, a lateral transfer target shares the source role's
-  `SalaryScale_Key`, role weights are sane (no role with a non-zero target
-  weight left unreachable), and every `relevante_opleidingen` entry resolves
-  to a real `dim_education` row.
+- ✅ **Automated validation added for the 55-role configuration.**
+  `src/infrastructure/config_validation.py` (`validate_role_configuration`)
+  checks, for every role in `role_career_paths`/`structure`: `role_key`
+  values are unique, every role within a department agrees on that
+  department's `department_key` and no two departments share one, every
+  `logische_doorgroei`/`laterale_transfers` target names an existing role, a
+  lateral transfer target shares the source role's `salary_scale_code`, no
+  role with a non-zero `target_weight`/`fte_ratio` has an
+  `active_from_headcount` beyond `growth.max_capacity` (i.e. is
+  structurally unreachable), and every `relevante_opleidingen` entry
+  resolves to a real `dim_education` row. `test_config_validation.py` unit-
+  tests each rule against small broken fixtures and also runs the validator
+  against the real `maakindustrie.json` via `ConfigLoader` - it currently
+  passes with zero problems. Not yet wired into `ConfigLoader.load()` itself
+  (that would make a config error fail loudly at startup instead of only
+  when this test runs) - worth doing once there's appetite for that being a
+  hard startup failure rather than a test-suite check.
 
 ## Simulation validation
 

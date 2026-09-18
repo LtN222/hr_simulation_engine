@@ -181,4 +181,8 @@ def weekly_hr_run(timer: func.TimerRequest):
         logging.info("Weekly HR run skipped because another run is in progress")
 
     except Exception:
+        # Re-raise after logging: a caught-and-swallowed exception here still
+        # returns normally, so Azure Functions has no way to know the run
+        # failed and marks the invocation Succeeded regardless.
         logging.exception("Weekly HR job failed")
+        raise

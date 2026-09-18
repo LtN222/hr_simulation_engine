@@ -215,6 +215,7 @@ def _simulate_salary_reviews(
         role = roles.loc[row["Role_Key"]]
         service_start = employees.loc[employee_key, "Aaneengesloten_Indienst_Datum"]
         performance = employees.loc[employee_key, "Prestatie_Score"]
+        gender = employees.loc[employee_key, "Geslacht"]
         target_ratio = _target_ratio_for_row(
             row,
             salary_policy,
@@ -229,7 +230,8 @@ def _simulate_salary_reviews(
             today,
             int(row["Salaris"]),
             target_ratio,
-            performance
+            performance,
+            gender=gender
         )
         if new_salary <= int(row["Salaris"]):
             continue

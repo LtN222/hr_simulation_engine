@@ -25,6 +25,7 @@ def _config(**overrides):
                 "weight": 1.0,
                 "is_production_site": True,
                 "opens_after_location_at_capacity": "Fabriek Noord",
+                "capacity": 20,
             },
             "DC": {
                 "weight": 0.3,
@@ -138,6 +139,25 @@ def test_resolve_location_multi_site_falls_back_when_current_site_not_open():
     )
 
     assert result == 1  # only Fabriek Noord is open
+
+
+def test_resolve_location_multi_site_chooses_between_multiple_open_sites_without_crashing():
+    """Regression test: Fabriek Zuid previously had no configured capacity,
+    so once both production sites were open, _remaining_headroom returned
+    float("inf") for Zuid and rng.choices raised ValueError('Total of
+    weights must be finite') for every fresh multi_site hire from then on."""
+    config = _config()
+    state = {
+        "dim_location": _dim_location(),
+        "fact_employment": pd.DataFrame([_active_row(1, 1, 1)]),  # 1 at Noord
+        "_location_open": {"Fabriek Noord": True, "Fabriek Zuid": True},
+    }
+
+    result = resolve_location(
+        state, config, random.Random(1), "Productie", "Operator",
+    )
+
+    assert result in (1, 2)
 
 
 def test_resolve_location_centralized_role_gets_one_fixed_home():

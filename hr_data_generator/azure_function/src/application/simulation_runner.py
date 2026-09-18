@@ -3,6 +3,7 @@ from datetime import datetime
 from src.simulation.simulation_absence import AbsenceSimulator
 from src.simulation.simulation_attrition import AttritionSimulator
 from src.simulation.simulation_career_events import simulate_career_events
+from src.simulation.simulation_contracts import ContractLifecycleSimulator
 from src.simulation.simulation_growth import calculate_growth_target
 from src.simulation.simulation_hiring import HiringSimulator
 from src.simulation.simulation_location_transfer import simulate_location_transfers
@@ -79,8 +80,20 @@ class WeeklySimulationRunner:
 
         state = open_locations(state, self.config, self.schema, today, event_type_map)
 
+        # Runs before AttritionSimulator so a Tijdelijk contract that lapses
+        # this week is already resolved as a departure before attrition's own
+        # independent weekly roll would otherwise separately consider it.
+        state = ContractLifecycleSimulator(
+            self.config,
+            self.schema,
+            self.rng,
+            event_type_map,
+            departure_reason_map
+        ).run(state, today)
+
         state = AttritionSimulator(
             self.config,
+            self.schema,
             self.rng,
             event_type_map,
             departure_reason_map

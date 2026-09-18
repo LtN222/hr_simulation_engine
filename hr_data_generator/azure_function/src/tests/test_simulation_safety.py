@@ -145,12 +145,14 @@ def test_run_creates_a_linked_absence_episode_for_a_lost_time_incident():
     assert len(incidents) == 1
     incident = incidents.iloc[0]
     assert incident["Verloren_Werkdagen"] > 0
-    assert pd.notna(incident["Absence_Key"])
 
     absence = state["fact_absence"]
     assert len(absence) == 1
     linked = absence.iloc[0]
-    assert linked["Absence_Key"] == incident["Absence_Key"]
+    # fact_safety_incident and fact_absence are not linked by a stored key;
+    # the pairing is recovered at query time via Employee_Key + date.
+    assert linked["Employee_Key"] == incident["Employee_Key"]
+    assert linked["Startdatum"] == incident["Incident_Date"]
     assert linked["AbsenceType_Key"] == 1
     assert linked["Verzuim_Werkdagen"] > 0
 
@@ -172,7 +174,6 @@ def test_run_does_not_touch_fact_absence_for_a_non_lost_time_incident():
     incidents = state["fact_safety_incident"]
     assert len(incidents) == 1
     assert incidents.iloc[0]["Verloren_Werkdagen"] == 0
-    assert pd.isna(incidents.iloc[0]["Absence_Key"])
     assert state["fact_absence"].empty
 
 
@@ -235,7 +236,9 @@ def test_full_run_with_real_config_produces_incidents_over_many_weeks():
     assert not incidents.empty
     lost_time = incidents[incidents["Verloren_Werkdagen"] > 0]
     if not lost_time.empty:
-        linked_absences = state["fact_absence"]
-        assert set(lost_time["Absence_Key"].dropna()).issubset(
-            set(linked_absences["Absence_Key"])
-        )
+        # fact_safety_incident and fact_absence are not linked by a stored
+        # key; every lost-time incident must be recoverable at query time by
+        # matching Employee_Key + date against the fact_absence episode it caused.
+        absences = state["fact_absence"]
+        pairs = set(zip(absences["Employee_Key"], absences["Startdatum"]))
+        assert set(zip(lost_time["Employee_Key"], lost_time["Incident_Date"])).issubset(pairs)

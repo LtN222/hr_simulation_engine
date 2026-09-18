@@ -10,6 +10,7 @@ class Config:
 
         self.contract_rules = data["contract_rules"]
         self.special_arrangements = data.get("special_arrangements", {})
+        self.gender_ratio = data.get("gender_ratio", {})
         self.ploegendienst_assignment = data.get("ploegendienst_assignment", {})
 
         self.dim_location = data["dim_location"]

@@ -1,5 +1,6 @@
 import logging
 import random
+import time
 from datetime import datetime
 
 from src.application.population import WorkforceGenerator
@@ -73,8 +74,16 @@ def run_simulation(engine, sector, seed):
     year_current = config.start_year_simulation - burn_in_years
     week_current = 1
     simulation_end_date = datetime.today()
+    burn_in_started_at = time.time()
 
     while datetime.fromisocalendar(year_current, week_current, 1) <= simulation_end_date:
+        if burn_in_years > 0 and year_current == config.start_year_simulation and week_current == 1:
+            logging.info(
+                "Burn-in finished after %.1f minutes (%d simulated weeks)",
+                (time.time() - burn_in_started_at) / 60,
+                burn_in_years * 52,
+            )
+
         state = simulate_week(
             state,
             config,

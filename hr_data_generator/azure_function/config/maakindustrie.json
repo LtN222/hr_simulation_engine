@@ -103,7 +103,8 @@
     "Fabriek Zuid": {
       "weight": 1.0,
       "is_production_site": true,
-      "opens_after_location_at_capacity": "Fabriek Noord"
+      "opens_after_location_at_capacity": "Fabriek Noord",
+      "capacity": 600
     },
     "DC": {
       "weight": 0.3,
@@ -130,6 +131,7 @@
     "promotion_rate": 0.08,
     "internal_transfer_rate": 0.05,
     "relevant_experience_transfer_ratio": 0.45,
+    "internal_leadership_experience_discount": 0.6,
     "salary_increase_rate": 1.0,
     "salary_growth": {
       "inflation_min": 0.018,
@@ -150,7 +152,14 @@
     "contract_change_rate": 0.03,
     "location_transfer_rate": 0.03,
     "new_site_pull_rate": 0.15,
-    "new_site_pull_weeks": 12
+    "new_site_pull_weeks": 12,
+    "chain_rule": {
+      "max_contract_rounds": 3,
+      "max_temporary_years": 3.0,
+      "renewal_duration_years": 1.0,
+      "top_performer_percentile": 0.90,
+      "top_performer_conversion_kans": 0.6
+    }
   },
   "dim_hire_source": [
     {
@@ -1090,6 +1099,10 @@
         "IT": 0.02,
         "Sales": 0.01,
         "Directie": 0.04
+      },
+      "gender_pay_gap": {
+        "female_starting_offset": -0.036,
+        "female_review_offset": -0.0018
       }
     },
     "market_median_by_role": {
@@ -2793,6 +2806,27 @@
       ]
     }
   },
+  "gender_ratio": {
+    "default": {"male": 0.49, "female": 0.49},
+    "Productie": {"male": 0.80, "female": 0.20},
+    "Techniek": {"male": 0.88, "female": 0.12},
+    "Kwaliteit": {"male": 0.35, "female": 0.65},
+    "Logistiek": {"male": 0.70, "female": 0.30},
+    "R&D": {"male": 0.55, "female": 0.45},
+    "IT": {"male": 0.75, "female": 0.25},
+    "Sales": {"male": 0.50, "female": 0.50},
+    "Marketing": {"male": 0.50, "female": 0.50},
+    "HR": {"male": 0.25, "female": 0.75},
+    "Finance": {"male": 0.55, "female": 0.45},
+    "QHSE": {"male": 0.50, "female": 0.50},
+    "Directie": {"male": 0.70, "female": 0.30},
+    "role_overrides": {
+      "Productontwikkelaar": {"male": 0.35, "female": 0.65},
+      "Senior Productontwikkelaar": {"male": 0.35, "female": 0.65},
+      "Procestechnoloog": {"male": 0.60, "female": 0.40},
+      "Verpakkingstechnoloog": {"male": 0.60, "female": 0.40}
+    }
+  },
   "structure": {
     "Productie": {
       "Productiemedewerker": {
@@ -3674,12 +3708,14 @@
     "Productie": {
       "vast_kans": 0.7,
       "tijdelijk_kans": 0.25,
-      "zomer_kans": 0.05
+      "zomer_kans": 0.05,
+      "keten_conversion_kans": 0.55
     },
     "default": {
       "vast_kans": 0.85,
       "tijdelijk_kans": 0.15,
-      "zomer_kans": 0.0
+      "zomer_kans": 0.0,
+      "keten_conversion_kans": 0.65
     }
   },
   "attrition": {

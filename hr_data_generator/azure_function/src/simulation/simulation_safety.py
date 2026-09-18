@@ -72,7 +72,6 @@ class SafetyIncidentSimulator:
 
             incident_type = self._choose_incident_type(incident_types)
             incident_date = today + pd.Timedelta(days=self.rng.randint(0, 6))
-            absence_key = None
             lost_workdays = 0
 
             if incident_type["Incidenttype_Naam"] == LOST_TIME_INCIDENT_TYPE:
@@ -81,13 +80,12 @@ class SafetyIncidentSimulator:
                 )
                 if absence_record is not None:
                     absence_records.append(absence_record)
-                    absence_key = next_absence_key
                     next_absence_key += 1
                     occupied_employees.add(employee_key)
 
             incident_records.append(self._build_incident_record(
                 next_incident_key, employee_key, incident_type,
-                employment, state, incident_date, lost_workdays, absence_key,
+                employment, state, incident_date, lost_workdays,
             ))
             next_incident_key += 1
 
@@ -162,7 +160,7 @@ class SafetyIncidentSimulator:
 
     def _build_incident_record(
         self, incident_key, employee_key, incident_type, employment, state,
-        incident_date, lost_workdays, absence_key,
+        incident_date, lost_workdays,
     ):
         role_key = employment.get("Role_Key")
         return build_record(
@@ -178,7 +176,6 @@ class SafetyIncidentSimulator:
                 "Shift_Key": employment.get("Shift_Key"),
                 "Incident_Date": incident_date,
                 "Verloren_Werkdagen": lost_workdays,
-                "Absence_Key": absence_key,
             }
         )
 

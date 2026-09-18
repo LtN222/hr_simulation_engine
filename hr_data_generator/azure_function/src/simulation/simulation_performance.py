@@ -115,7 +115,7 @@ class PerformanceSimulator:
             emp = employee_lookup.loc[employee_key]
             role = role_lookup.loc[employment["Role_Key"]]
             education = edu_lookup.loc[emp["Education_Key"]]["Opleidingsniveau"]
-            tenure_days = (today - employment["Startdatum"]).days
+            tenure_days = self._tenure_days(emp, today)
 
             if tenure_days < 180:
                 continue
@@ -336,6 +336,20 @@ class PerformanceSimulator:
             0.08,
         ))
         return (float(engagement) - 6.7) * coefficient
+
+    def _tenure_days(self, emp, today):
+        """Days since the employee's true, continuous hire date.
+
+        Deliberately not `employment["Startdatum"]`: that column is the
+        current fact_employment *event's* start date, which a promotion,
+        transfer or routine salary review resets every time it fires - using
+        it here would make an employee look newly hired right after any such
+        event, permanently blocking their annual review if that event's
+        fixed week happens to fall within 180 days of their fixed review
+        week (it did for roughly a third of employees before this fix).
+        """
+        hire_date = pd.to_datetime(emp["Aaneengesloten_Indienst_Datum"], errors="coerce")
+        return (pd.Timestamp(today) - hire_date).days
 
     def _review_week(self, employee_key):
         return ((int(employee_key) * 31) % 52) + 1

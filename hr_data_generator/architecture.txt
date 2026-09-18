@@ -2,9 +2,13 @@ HR DATA GENERATOR - ARCHITECTURE OVERVIEW
 
 Purpose
 -------
-This project generates a realistic, configuration-driven HR data set for an
-Azure SQL database and a Power BI semantic model. It supports a full historical
-simulation and weekly incremental updates.
+This project generates a realistic, configuration-driven HR data set in an
+Azure SQL database. It supports a full historical simulation and weekly
+incremental updates. The primary consumer is a web app (chosen over a
+Power BI-first design for easier AI/LLM integration); the schema must remain
+usable as a Power BI semantic model too, in case a Power BI dashboard is
+still wanted alongside it. Both consumers read the same tables, so the data
+model must not assume either one.
 
 Repository structure
 --------------------
@@ -44,7 +48,9 @@ WeeklySimulationRunner
         +-- performance reviews and career events
         +-- growth demand, vacancies and recruitment
         +-- hiring and manager assignment
-        `-- sickness absence and leave episodes
+        +-- sickness absence and leave episodes
+        +-- workplace safety incidents (may add a matching absence episode)
+        `-- lateral location transfers for multi-site roles
         |
         v
 Reporting enrichment
@@ -59,7 +65,11 @@ Reporting enrichment
 Schema-driven Azure SQL writer
         |
         v
-Azure SQL -> Power BI semantic model
+      Azure SQL
+       /      \
+      v        v
+   web app   Power BI semantic model
+ (LLM feature)   (optional)
 
 Simulation state
 ----------------
@@ -77,6 +87,7 @@ Dimensions include:
   dim_engagement_band
 - dim_satisfaction_driver, dim_performance_driver and dim_engagement_driver
 - dim_salary_band, dim_salary_scale, dim_event_type and dim_reden_vertrek
+- dim_incident_type
 
 Facts include:
 
@@ -97,10 +108,20 @@ Facts include:
   monthly workforce context.
 - fact_performance_review: annual performance-review events with one dominant
   performance driver.
+- fact_safety_incident: one row per workplace safety incident, with the role,
+  department, location and shift at incident time. Incidents that cause real
+  lost time also create the matching fact_absence episode (Bedrijfsongeval).
+  There is no stored key between the two facts (see modeling principles).
 
 Modeling principles
 -------------------
-- Facts are not directly related to one another in Power BI.
+- Facts are not directly related to one another, in the web app's queries or
+  in Power BI. Shared dimensions filter facts instead. Where a specific pair
+  of fact rows needs to be recovered (for example, the fact_absence episode a
+  fact_safety_incident row produced), match on the columns both facts already
+  carry (Employee_Key + date) at query time rather than storing a fact-to-fact
+  foreign key. In Power BI this is the same DAX-measure pattern used for
+  fact_vacancy/fact_recruitment below, not a modeled relationship.
 - Shared dimensions filter facts with single-direction relationships.
 - fact_workforce_snapshot is employee-month grain and includes zero absence
   employees. Use it for denominators and employee trend measures.
@@ -121,8 +142,10 @@ Modeling principles
 - `role_career_paths` is the configuration-owned source for relevant education
   and promotion targets. `dim_role` exposes both lists; promotions use only
   configured targets, while transfers remain separate lateral moves.
-- Time to fill is defined for closed vacancies. For hire-source analysis, use
-  the accepted recruitment record's Vacancy_Key in a DAX TREATAS measure.
+- Time to fill is defined for closed vacancies. For hire-source analysis, join
+  on the accepted recruitment record's Vacancy_Key at query time (a SQL join
+  in the web app, a DAX TREATAS measure in Power BI) rather than a stored
+  fact-to-fact relationship.
 
 Operational notes
 -----------------
@@ -133,5 +156,12 @@ Operational notes
 - Local Azure Functions timer support requires Azurite through
   AzureWebJobsStorage=UseDevelopmentStorage=true.
 - A full run is required after historical-logic or reporting-schema changes.
+- acquire_simulation_lock retries its initial SQL connection a few times
+  (simulation_lock.CONNECT_ATTEMPTS/CONNECT_RETRY_DELAY_SECONDS) to ride out
+  a transient Azure SQL connection failure (e.g. an HYT00 login timeout)
+  instead of failing the whole run on one blip.
+- weekly_hr_run re-raises after logging a failed run, so Azure marks that
+  invocation Failed; before this it was swallowed and every timer run showed
+  Succeeded even when the pipeline had not written anything.
 - The SQL writer manages table creation, additive columns, retired tables,
   primary keys, foreign keys, indexes and retention.

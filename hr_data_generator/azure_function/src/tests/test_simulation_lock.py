@@ -1,4 +1,5 @@
-from sqlalchemy.exc import DBAPIError
+import pytest
+from sqlalchemy.exc import DBAPIError, OperationalError
 
 from src.infrastructure.database.simulation_lock import acquire_simulation_lock
 
@@ -39,6 +40,41 @@ class _FakeEngine:
 
     def connect(self):
         return self._connection
+
+
+class _FlakyEngine:
+    """connect() fails like a dropped login for the first N calls, then succeeds."""
+
+    def __init__(self, failures_before_success, connection):
+        self._failures_remaining = failures_before_success
+        self._connection = connection
+        self.connect_attempts = 0
+
+    def connect(self):
+        self.connect_attempts += 1
+        if self._failures_remaining > 0:
+            self._failures_remaining -= 1
+            raise OperationalError("connect", {}, Exception("Login timeout expired"))
+        return self._connection
+
+
+def test_a_transient_connection_failure_is_retried_until_it_succeeds():
+    engine = _FlakyEngine(failures_before_success=2, connection=_FakeConnection())
+
+    with acquire_simulation_lock(engine, connect_attempts=3, connect_retry_delay_seconds=0):
+        pass
+
+    assert engine.connect_attempts == 3
+
+
+def test_connection_failures_beyond_the_retry_budget_still_raise():
+    engine = _FlakyEngine(failures_before_success=5, connection=_FakeConnection())
+
+    with pytest.raises(OperationalError):
+        with acquire_simulation_lock(engine, connect_attempts=3, connect_retry_delay_seconds=0):
+            pass
+
+    assert engine.connect_attempts == 3
 
 
 def test_a_dropped_connection_during_release_does_not_fail_a_completed_run():
