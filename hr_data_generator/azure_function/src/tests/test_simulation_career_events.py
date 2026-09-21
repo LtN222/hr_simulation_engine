@@ -1,6 +1,10 @@
 import pandas as pd
 
-from src.simulation.simulation_career_events import _new_employment_record, _under_capacity
+from src.simulation.simulation_career_events import (
+    _is_active_role,
+    _new_employment_record,
+    _under_capacity,
+)
 
 
 class _StubSalaryPolicy:
@@ -61,6 +65,65 @@ def test_under_capacity_allows_a_promotion_into_an_uncapped_role():
 
     assert _under_capacity(
         state, config, _department_lookup(), role_counts, _target_role()
+    ) is True
+
+
+def _dim_role_for_gate():
+    return pd.DataFrame({
+        "Role_Key": [1, 2],
+        "Functie_Naam": ["Teamleider", "IT Manager"],
+        "Afdeling_Naam": ["Directie", "IT"],
+        "Department_Key": [1, 2],
+    })
+
+
+def test_is_active_role_blocks_an_internal_move_before_the_company_reaches_the_threshold():
+    """Regression guard: a full production run found `Senior
+    Applicatiebeheerder` (active_from_headcount 280) filled via an internal
+    Promotie at company headcount ~165 - the growth-vacancy path already
+    checks `role_is_active`, but nothing equivalent gated internal
+    promotions/transfers, so a gated role could be reached ~2 years early."""
+    config = type("Config", (), {
+        "structure": {"IT": {"IT Manager": {"active_from_headcount": 280}}},
+    })()
+    target_role = pd.Series({
+        "Role_Key": 2, "Functie_Naam": "IT Manager", "Department_Key": 2,
+        "Afdeling_Naam": "IT",
+    })
+
+    assert _is_active_role(
+        config, _dim_role_for_gate(), target_role,
+        company_headcount=165, role_counts={1: 165},
+    ) is False
+
+
+def test_is_active_role_allows_an_internal_move_once_the_threshold_is_reached():
+    config = type("Config", (), {
+        "structure": {"IT": {"IT Manager": {"active_from_headcount": 280}}},
+    })()
+    target_role = pd.Series({
+        "Role_Key": 2, "Functie_Naam": "IT Manager", "Department_Key": 2,
+        "Afdeling_Naam": "IT",
+    })
+
+    assert _is_active_role(
+        config, _dim_role_for_gate(), target_role,
+        company_headcount=280, role_counts={1: 280},
+    ) is True
+
+
+def test_is_active_role_allows_a_role_with_no_configured_threshold():
+    config = type("Config", (), {
+        "structure": {"IT": {"IT Manager": {}}},
+    })()
+    target_role = pd.Series({
+        "Role_Key": 2, "Functie_Naam": "IT Manager", "Department_Key": 2,
+        "Afdeling_Naam": "IT",
+    })
+
+    assert _is_active_role(
+        config, _dim_role_for_gate(), target_role,
+        company_headcount=1, role_counts={},
     ) is True
 
 

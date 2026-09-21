@@ -56,7 +56,7 @@ def run_incremental_simulation(engine, sector, seed):
     _ensure_missing_static_dimensions(state, config, schema)
     state = sync_recruitment_status_keys(state)
     state.setdefault("vacancies", 0)
-    _normalize_date_columns(state)
+    _normalize_date_columns(state, schema)
     state = sync_employee_employment_status(state)
     state = ensure_employee_avatars(state, config)
 
@@ -118,13 +118,29 @@ def run_incremental_simulation(engine, sector, seed):
     return state
 
 
-def _normalize_date_columns(state):
-    for df in state.values():
+def _normalize_date_columns(state, schema):
+    """Coerce genuinely date/datetime-typed columns to pandas datetime dtype.
+
+    Which columns count as dates is decided from the schema's own declared
+    SQL types (matching the "DATE"-prefix convention `map_sql_types` already
+    uses), not from a name heuristic - a column name merely *containing*
+    "date" is not reliable: `dim_candidate_quality_driver.CandidateQualityDriver_Key`
+    (an INT primary key) contains "date" inside "Candi-date", which the
+    previous `"date" in col.lower()` check matched. `pd.to_datetime` then
+    reinterpreted its small integer values (1-6) as nanoseconds since the
+    Unix epoch, corrupting the column into a handful of indistinguishable
+    1970-01-01 timestamps once truncated to `datetime.datetime` - which
+    Azure SQL then rejected on write with an INT/datetime2 type clash,
+    crashing every incremental run that needed to insert into that table.
+    """
+    for table_name, df in state.items():
         if not hasattr(df, "columns"):
             continue
 
+        column_types = schema.get(table_name, {}).get("types", {})
         for col in df.columns:
-            if "date" not in col.lower() and "datum" not in col.lower():
+            sql_type = column_types.get(col)
+            if not sql_type or not sql_type.startswith("DATE"):
                 continue
 
             df[col] = pd.to_datetime(df[col], errors="coerce")

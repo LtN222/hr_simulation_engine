@@ -1,6 +1,7 @@
 import pandas as pd
 
 from src.application.allocation import (
+    department_headcounts_by_name,
     minimum_count_for_role,
     role_is_active,
     role_target_ratio,
@@ -227,20 +228,7 @@ class VacancySimulator:
         return self.rng.choices(weighted_roles, weights=weights)[0]
 
     def _department_headcounts_by_name(self, dim_role, role_counts):
-        """Sum current headcount per Department_Name.
-
-        Named (not keyed by Department_Key) so it can also answer
-        `department_group` scope questions, which reference departments by
-        name across a role's `active_from_departments` list.
-        """
-        totals = {}
-        for _, role in dim_role.iterrows():
-            department_name = role["Afdeling_Naam"]
-            totals[department_name] = (
-                totals.get(department_name, 0)
-                + role_counts.get(role["Role_Key"], 0)
-            )
-        return totals
+        return department_headcounts_by_name(dim_role, role_counts)
 
     def _minimum_for_role(self, state, role_row, role_counts):
         department_name = self._department_name(

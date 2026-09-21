@@ -111,6 +111,7 @@ def _prime_lookups(simulator, state):
     )
     simulator._decline_reason_keys = {}
     simulator._rejection_reason_keys = {NOT_SELECTED_REASON: 5, BELOW_MINIMUM_QUALITY_REASON: 4}
+    simulator._internal_hire_source_keys = simulator._internal_hire_source_key_set(state)
 
 
 def test_sample_decline_reason_favours_the_high_quality_bonus_reason():
@@ -140,6 +141,127 @@ def test_sample_decline_reason_returns_none_when_unconfigured():
     simulator = RecruitmentSimulator(_config(decline_reasons=[]), schema=None, rng=random.Random(1))
 
     assert simulator._sample_decline_reason(candidate_quality=4.5) is None
+
+
+def test_sample_application_count_is_not_biased_below_the_configured_average():
+    """A full production run showed low-average departments (~1.0/week)
+    realizing only 60-70% of their configured weekly application volume.
+    Root cause: the draw used `int()`, which truncates a normal sample
+    toward zero - equivalent to `floor` for a non-negative value - so the
+    realized mean sits systematically below `average`, worse as `average`
+    shrinks toward 1. `round()` is unbiased."""
+    simulator = RecruitmentSimulator(_config(), schema=None, rng=random.Random(7))
+
+    counts = [simulator._sample_application_count(1.0) for _ in range(5000)]
+    mean_count = sum(counts) / len(counts)
+
+    # int()-truncation of N(1.0, 1.0) would average roughly 0.5; round()
+    # should land close to the configured 1.0.
+    assert 0.85 < mean_count < 1.15
+
+
+def test_finalize_corrects_stage_key_to_screening_when_rejected_right_after_screening():
+    """Regression guard: `_resolve_screening`'s reject branch sets
+    `Screening_Date` but historically never advanced `Stage_Key` off its
+    initial `Sollicitatie` value, so a screened-and-rejected candidate was
+    mislabeled as never having been screened at all - and `Stage_Key=2`
+    (Screening) never appeared anywhere in the data as a result."""
+    simulator = RecruitmentSimulator(_config(), schema=None, rng=random.Random(1))
+    state = _state_with_pipeline([_pipeline_row(Stage_Key=1)])
+    _prime_lookups(simulator, state)
+
+    simulator._finalize(
+        state, 0, RecruitmentSimulator.REJECTED_STATUS, pd.Timestamp("2024-02-01"),
+        rejection_reason=BELOW_MINIMUM_QUALITY_REASON, date_columns=["Screening_Date"],
+    )
+
+    row = state["fact_recruitment"].loc[0]
+    assert row["Stage_Key"] == simulator._stage_keys["Screening"]
+    assert pd.notna(row["Screening_Date"])
+
+
+def test_finalize_corrects_stage_key_to_screening_when_swept_out_of_gesprek_before_an_interview():
+    """Regression guard: a candidate who passed screening (Screening_Date
+    set, Stage_Key advanced to Gesprek) but was swept out before ever being
+    interviewed - vacancy filled elsewhere, expired, or a patience
+    withdrawal - kept `Stage_Key=Gesprek` despite `Interview_Date` staying
+    null, since those close-out paths call `_finalize` with no
+    `date_columns` at all. A funnel built on `Stage_Key` would then
+    overcount "reached Gesprek" by counting candidates who were only ever
+    queued for it, never actually interviewed."""
+    simulator = RecruitmentSimulator(_config(), schema=None, rng=random.Random(1))
+    state = _state_with_pipeline([_pipeline_row(
+        Stage_Key=3, Screening_Date=pd.Timestamp("2024-01-15"),
+    )])
+    _prime_lookups(simulator, state)
+
+    simulator._finalize(
+        state, 0, RecruitmentSimulator.REJECTED_STATUS, pd.Timestamp("2024-02-01"),
+        rejection_reason=NOT_SELECTED_REASON,
+    )
+
+    row = state["fact_recruitment"].loc[0]
+    assert row["Stage_Key"] == simulator._stage_keys["Screening"]
+    assert pd.isna(row["Interview_Date"])
+
+
+def test_finalize_keeps_stage_key_at_gesprek_when_an_interview_actually_happened():
+    """A candidate who *was* interviewed (Interview_Date set) and then
+    rejected on the quality gate, or withdrew while waiting for an offer
+    slot, genuinely reached Gesprek - `_finalize` should not roll them back
+    to Screening just because they never reached Aanbod."""
+    simulator = RecruitmentSimulator(_config(), schema=None, rng=random.Random(1))
+    state = _state_with_pipeline([_pipeline_row(
+        Stage_Key=3,
+        Screening_Date=pd.Timestamp("2024-01-15"),
+        Interview_Date=pd.Timestamp("2024-01-22"),
+    )])
+    _prime_lookups(simulator, state)
+
+    simulator._finalize(
+        state, 0, RecruitmentSimulator.DECLINED_STATUS, pd.Timestamp("2024-02-01"),
+        decline_reason="Kandidaat heeft zich teruggetrokken",
+    )
+
+    assert state["fact_recruitment"].loc[0, "Stage_Key"] == simulator._stage_keys["Gesprek"]
+
+
+def test_finalize_floors_an_internal_mobility_candidate_at_gesprek_not_sollicitatie():
+    """Internal-mobility candidates skip Sollicitatie/Screening entirely by
+    design (`eligible_internal` already screened them) and start straight at
+    Gesprek with no Screening_Date. If swept out before an interview, the
+    date-derived stage must not fall through to Sollicitatie - these
+    candidates never went through it."""
+    simulator = RecruitmentSimulator(_config(), schema=None, rng=random.Random(1))
+    state = _state_with_pipeline([_pipeline_row(Stage_Key=3, HireSource_Key=2)])
+    _prime_lookups(simulator, state)
+
+    simulator._finalize(
+        state, 0, RecruitmentSimulator.REJECTED_STATUS, pd.Timestamp("2024-02-01"),
+        rejection_reason=NOT_SELECTED_REASON,
+    )
+
+    assert state["fact_recruitment"].loc[0, "Stage_Key"] == simulator._stage_keys["Gesprek"]
+
+
+def test_finalize_keeps_stage_key_at_aanbod_for_an_accepted_or_declined_offer():
+    """The one stage transition that was already correct - Offer_Date is
+    always set together with the advance to Aanbod - must stay unaffected
+    by the fix."""
+    simulator = RecruitmentSimulator(_config(), schema=None, rng=random.Random(1))
+    state = _state_with_pipeline([_pipeline_row(
+        Stage_Key=4,
+        Screening_Date=pd.Timestamp("2024-01-15"),
+        Interview_Date=pd.Timestamp("2024-01-22"),
+        Offer_Date=pd.Timestamp("2024-01-29"),
+    )])
+    _prime_lookups(simulator, state)
+
+    simulator._finalize(
+        state, 0, RecruitmentSimulator.ACCEPTED_STATUS, pd.Timestamp("2024-02-05"),
+    )
+
+    assert state["fact_recruitment"].loc[0, "Stage_Key"] == simulator._stage_keys["Aanbod"]
 
 
 def test_new_pipeline_application_routes_internal_candidates_straight_to_gesprek():

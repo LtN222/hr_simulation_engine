@@ -1,5 +1,10 @@
 import pandas as pd
 
+from src.application.allocation import (
+    department_headcounts_by_name,
+    role_is_active,
+    scope_headcount,
+)
 from src.infrastructure.salary_policy import SalaryPolicy
 from src.infrastructure.shift_assignment import assign_ploegendienst_key
 from src.infrastructure.relevant_experience import carried_experience
@@ -57,6 +62,10 @@ def simulate_career_events(
     # capped role (e.g. two Teamleiders promoted to the same Manager seat
     # in one week) is correctly refused, not just the first.
     role_counts = active["Role_Key"].value_counts().to_dict()
+    # Internal moves don't change total headcount, only its distribution
+    # across roles/departments, so this stays fixed for the whole pass -
+    # only the department breakdown needs recomputing as role_counts changes.
+    company_headcount = sum(role_counts.values())
 
     for idx, row in active.iterrows():
         employee_key = int(row["Employee_Key"])
@@ -82,6 +91,12 @@ def simulate_career_events(
                 role["Functie_Naam"], {}
             ).get("logische_doorgroei", [])
             candidates = dim_role[dim_role["Functie_Naam"].isin(target_names)]
+            candidates = candidates[candidates.apply(
+                lambda target: _is_active_role(
+                    config, dim_role, target, company_headcount, role_counts
+                ),
+                axis=1
+            )]
             candidates = candidates[candidates.apply(lambda target: eligible_internal(config, state, employee_key, role, target, today, performance), axis=1)]
             candidates = candidates[candidates.apply(
                 lambda target: _under_capacity(
@@ -129,6 +144,12 @@ def simulate_career_events(
         if rng.random() >= transfer_rate / 52 or not target_names:
             continue
         candidates = dim_role[dim_role["Functie_Naam"].isin(target_names)]
+        candidates = candidates[candidates.apply(
+            lambda target: _is_active_role(
+                config, dim_role, target, company_headcount, role_counts
+            ),
+            axis=1
+        )]
         candidates = candidates[candidates.apply(lambda target: eligible_internal(config, state, employee_key, role, target, today, performance), axis=1)]
         candidates = candidates[candidates.apply(
             lambda target: _under_capacity(
@@ -311,6 +332,25 @@ def _new_employment_record(
         "Tevredenheid_Score_Bij_Uitdienst": None,
         "SatisfactionBand_Key_Bij_Uitdienst": None,
     }
+
+
+def _is_active_role(config, dim_role, target_role, company_headcount, role_counts):
+    """Whether `target_role` has actually unlocked yet at this headcount.
+
+    Without this, an internal promotion/transfer could move someone into a
+    role gated by `active_from_headcount`/`active_from_scope` before the
+    company has actually reached that threshold - the growth-vacancy path
+    already enforces this (`VacancySimulator._is_active_role`), but nothing
+    equivalent existed for internal moves.
+    """
+    department_name = target_role["Afdeling_Naam"]
+    role_config = config.structure[department_name][target_role["Functie_Naam"]]
+    department_headcounts = department_headcounts_by_name(dim_role, role_counts)
+    return role_is_active(
+        role_config,
+        company_headcount,
+        scope_headcount(role_config, department_name, department_headcounts),
+    )
 
 
 def _under_capacity(state, config, department_lookup, role_counts, target_role):

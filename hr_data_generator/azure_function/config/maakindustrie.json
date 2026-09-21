@@ -29,7 +29,7 @@
     "blob_prefix": "images/",
     "reassign_existing_avatars": true
   },
-  "baseline_headcount": 100,
+  "baseline_headcount": 200,
   "staffing": {
     "minimum_count_for_manager_role": 1,
     "max_team_size": 10,
@@ -59,7 +59,7 @@
     }
   },
   "initial_population": {
-    "burn_in_years": 2,
+    "burn_in_years": 4,
     "minimum_hire_age": 18,
     "tenure_years_distribution": {
       "0-1": 0.32,
@@ -3892,9 +3892,9 @@
   ],
   "safety": {
     "annual_incident_rate_by_department": {
-      "Productie": 0.35,
-      "Techniek": 0.3,
-      "Logistiek": 0.25,
+      "Productie": 0.24,
+      "Techniek": 0.25,
+      "Logistiek": 0.21,
       "Kwaliteit": 0.1,
       "QHSE": 0.12,
       "R&D": 0.05,

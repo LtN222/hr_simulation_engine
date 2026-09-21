@@ -181,6 +181,22 @@ def role_is_active(role_config, company_headcount, department_headcount=0):
     return headcount >= int(threshold)
 
 
+def department_headcounts_by_name(dim_role, role_counts):
+    """Sum current headcount per department name (`Afdeling_Naam`).
+
+    Named rather than keyed by `Department_Key` so it can also answer
+    `department_group` scope questions, which reference departments by name
+    across a role's `active_from_departments` list.
+    """
+    totals = {}
+    for _, role in dim_role.iterrows():
+        department_name = role["Afdeling_Naam"]
+        totals[department_name] = (
+            totals.get(department_name, 0) + role_counts.get(role["Role_Key"], 0)
+        )
+    return totals
+
+
 def scope_headcount(role_config, department_name, department_headcounts):
     """Resolve the headcount `role_is_active` should compare against.
 

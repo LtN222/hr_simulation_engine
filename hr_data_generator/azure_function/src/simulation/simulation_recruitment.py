@@ -72,6 +72,7 @@ class RecruitmentSimulator:
         self._decline_reason_keys = {}
         self._rejection_reason_keys = {}
         self._hire_source_names = {}
+        self._internal_hire_source_keys = set()
 
     def run(self, state, today):
         self._status_keys = self._build_reason_lookup(
@@ -89,6 +90,7 @@ class RecruitmentSimulator:
         self._hire_source_names = self._build_reason_lookup(
             state, "dim_hire_source", "HireSource_Key", "Bron_Naam"
         )
+        self._internal_hire_source_keys = self._internal_hire_source_key_set(state)
 
         if "fact_recruitment" not in state:
             state["fact_recruitment"] = pd.DataFrame()
@@ -142,6 +144,17 @@ class RecruitmentSimulator:
         in_progress = fact_recruitment[fact_recruitment["Status"] == self.IN_PROGRESS_STATUS]
         return set(int(key) for key in in_progress["Employee_Key"].dropna())
 
+    def _sample_application_count(self, average):
+        """Draw this week's application count for one vacancy.
+
+        Uses ``round()`` rather than ``int()`` - truncating a normal draw
+        toward zero (equivalent to `floor` for a non-negative value) biases
+        the realized mean below `average`, worse the smaller `average` is
+        (confirmed against a full production run: departments configured
+        around 1.0/week realized only 60-70% of that).
+        """
+        return max(0, round(self.rng.normalvariate(average, max(0.1, average ** 0.5))))
+
     def _pipeline(self, state, vacancy_key):
         fact_recruitment = state["fact_recruitment"]
         if fact_recruitment.empty:
@@ -170,7 +183,7 @@ class RecruitmentSimulator:
             self.recruitment_cfg.get("weekly_applications_by_department", {})
             .get(department_name, 1.0)
         )
-        count = max(0, int(self.rng.normalvariate(average, max(0.1, average ** 0.5))))
+        count = self._sample_application_count(average)
         new_records = []
 
         for _ in range(count):
@@ -460,11 +473,53 @@ class RecruitmentSimulator:
         for column in date_columns:
             fact_recruitment.loc[idx, column] = today
 
+    def _terminal_stage_key(self, row):
+        """The furthest stage an application actually reached, derived from
+        its own milestone dates rather than whichever queue it happened to
+        be sitting in when it terminated.
+
+        `Stage_Key` is otherwise only ever advanced by `_advance_to_stage`,
+        which only runs on a *successful* transition - so without this, a
+        candidate rejected/withdrawn/swept out before a stage's own date got
+        set stays mislabeled at whichever stage they last successfully
+        entered. Concretely, this fixes two real inconsistencies found
+        against live data: a candidate rejected at screening kept
+        `Stage_Key = Sollicitatie` (despite `Screening_Date` being set) since
+        the reject path in `_resolve_screening` never advances the stage;
+        and a candidate queued for `Gesprek` but swept out before ever being
+        interviewed (vacancy filled elsewhere, expired, or a patience
+        withdrawal - `_close_out_remaining_pipeline`,
+        `_expire_stale_vacancy`, `_withdraw_stale_candidates` all finalize
+        without touching `Interview_Date`) kept `Stage_Key = Gesprek` despite
+        never having had an interview. This only runs at finalize time - an
+        `"In behandeling"` row keeps its live process-stage value (e.g.
+        "queued for Gesprek, not yet evaluated"), which is what a
+        current-pipeline view needs; only the terminal record gets corrected
+        to reflect what actually happened.
+
+        Internal-mobility applications skip Sollicitatie/Screening by design
+        (`eligible_internal` already screened them), so their floor is
+        Gesprek, not Sollicitatie, when no later milestone date was reached.
+        """
+        if pd.notna(row.get("Offer_Date")):
+            return self._stage_keys.get(self.STAGE_AANBOD)
+        if pd.notna(row.get("Interview_Date")):
+            return self._stage_keys.get(self.STAGE_GESPREK)
+        if pd.notna(row.get("Screening_Date")):
+            return self._stage_keys.get(self.STAGE_SCREENING)
+        hire_source_key = row.get("HireSource_Key")
+        if pd.notna(hire_source_key) and int(hire_source_key) in self._internal_hire_source_keys:
+            return self._stage_keys.get(self.STAGE_GESPREK)
+        return self._stage_keys.get(self.STAGE_SOLLICITATIE)
+
     def _finalize(self, state, idx, status, today, decline_reason=None, rejection_reason=None, date_columns=()):
         fact_recruitment = state["fact_recruitment"]
         for column in date_columns:
             fact_recruitment.loc[idx, column] = today
         fact_recruitment.loc[idx, "Decision_Date"] = today
+        fact_recruitment.loc[idx, "Stage_Key"] = self._terminal_stage_key(
+            fact_recruitment.loc[idx]
+        )
         fact_recruitment.loc[idx, "Status"] = status
         fact_recruitment.loc[idx, "RecruitmentStatus_Key"] = self._status_keys.get(status)
         fact_recruitment.loc[idx, "DeclineReason_Key"] = self._decline_reason_keys.get(decline_reason)
@@ -618,6 +673,15 @@ class RecruitmentSimulator:
         if rows.empty or not {name_column, key_column}.issubset(rows.columns):
             return {}
         return dict(zip(rows[name_column], rows[key_column]))
+
+    def _internal_hire_source_key_set(self, state):
+        dim_hire_source = state.get("dim_hire_source", pd.DataFrame())
+        if dim_hire_source.empty or "HireSource_Key" not in dim_hire_source.columns:
+            return set()
+        internal = dim_hire_source[
+            dim_hire_source.apply(self._is_internal_source, axis=1)
+        ]
+        return set(int(key) for key in internal["HireSource_Key"])
 
     def _profile_from_quality(self, internal_quality, source):
         """Generate a transparent role-neutral quality profile."""
