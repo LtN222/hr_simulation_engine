@@ -166,4 +166,6 @@ Operational notes
   invocation Failed; before this it was swallowed and every timer run showed
   Succeeded even when the pipeline had not written anything.
 - The SQL writer manages table creation, additive columns, retired tables,
-  primary keys, foreign keys, indexes and retention.
+  primary keys, foreign keys and indexes. There is no retention/deletion
+  policy: the demo keeps its full simulated history indefinitely (an earlier
+  5-year retention step was removed - see BACKLOG.md AR-01).

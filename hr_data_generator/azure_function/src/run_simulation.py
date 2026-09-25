@@ -6,6 +6,7 @@ from datetime import datetime
 from src.application.population import WorkforceGenerator
 from src.application.simulation_runner import simulate_week
 from src.core.config_loader import ConfigLoader
+from src.core.iso_week import next_iso_week
 from src.infrastructure.database.schema_loader import load_schema
 from src.infrastructure.absence_context import sync_absence_satisfaction
 from src.infrastructure.avatar import ensure_employee_avatars
@@ -76,6 +77,11 @@ def run_simulation(engine, sector, seed):
     simulation_end_date = datetime.today()
     burn_in_started_at = time.time()
 
+    # Falls back to the starting state if the loop runs zero iterations, so
+    # the state is written back unchanged instead of raising on an unset
+    # variable.
+    last_year, last_week = year_current, week_current
+
     while datetime.fromisocalendar(year_current, week_current, 1) <= simulation_end_date:
         if burn_in_years > 0 and year_current == config.start_year_simulation and week_current == 1:
             logging.info(
@@ -100,17 +106,8 @@ def run_simulation(engine, sector, seed):
             simulation_start_date=burn_in_start_date
         )
 
-        week_current += 1
-        if week_current > 52:
-            week_current = 1
-            year_current += 1
-
-    last_week = week_current - 1
-    last_year = year_current
-
-    if last_week == 0:
-        last_week = 52
-        last_year -= 1
+        last_year, last_week = year_current, week_current
+        year_current, week_current = next_iso_week(year_current, week_current)
 
     update_simulation_state(engine, last_year, last_week)
     state = sync_employee_employment_status(state)

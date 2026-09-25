@@ -261,7 +261,8 @@
       "In_Dienst": "BIT"
     },
     "deprecated_columns": [
-      "Leeftijd"
+      "Leeftijd",
+      "EducationLevel_Key"
     ],
     "foreign_keys": [
       [
@@ -364,6 +365,11 @@
       "Betrokkenheid_Score_Bij_Uitdienst": "DECIMAL(4,2)",
       "EngagementBand_Key_Bij_Uitdienst": "INT"
     },
+    "deprecated_columns": [
+      "Target_Compa_Ratio",
+      "RedenVertrek_Key",
+      "Ploegendienst_Key"
+    ],
     "foreign_keys": [
       [
         "Employee_Key",
@@ -434,7 +440,8 @@
     "df": "fact_absence",
     "primary_key": "Absence_Key",
     "deprecated_columns": [
-      "AbsenceDuration_Key"
+      "AbsenceDuration_Key",
+      "Ploegendienst_Key"
     ],
     "types": {
       "Absence_Key": "INT",
@@ -529,6 +536,10 @@
       "Incident_Date": "DATE",
       "Verloren_Werkdagen": "INT"
     },
+    "deprecated_columns": [
+      "Absence_Key",
+      "Ploegendienst_Key"
+    ],
     "foreign_keys": [
       [
         "Employee_Key",
@@ -744,6 +755,12 @@
       "Benchmark_Verschil": "INT",
       "Benchmark_Status": "NVARCHAR(30)"
     },
+    "deprecated_columns": [
+      "Performance_Score",
+      "SalaryStep",
+      "EducationLevel_Key",
+      "Ploegendienst_Key"
+    ],
     "foreign_keys": [
       [
         "Employee_Key",

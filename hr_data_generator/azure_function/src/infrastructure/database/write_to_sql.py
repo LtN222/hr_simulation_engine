@@ -719,122 +719,7 @@ def apply_constraints(engine, schema_config):
 
 
 # =====================================================
-# 5️⃣ Retention policy (FIXED)
-# =====================================================
-
-def apply_retention(engine):
-
-    with engine.begin() as conn:
-
-        # -------------------------------------------------
-        # Chains bepalen
-        # -------------------------------------------------
-
-        # -------------------------------------------------
-        # 1️⃣ Eerst attributes verwijderen (FK SAFE)
-        # -------------------------------------------------
-
-        # Delete fact tables that depend on fact_employment before deleting
-        # old employment chains. This must stay in sync with schema FKs.
-        conn.execute(text("""
-        IF OBJECT_ID('fact_workforce_snapshot', 'U') IS NOT NULL
-        BEGIN
-            ;WITH Chains AS (
-                SELECT
-                    Employment_Key,
-                    Previous_Employment_Key,
-                    Einddatum,
-                    Employment_Key AS Root_Key
-                FROM fact_employment
-                WHERE Previous_Employment_Key IS NULL
-
-                UNION ALL
-
-                SELECT
-                    fe.Employment_Key,
-                    fe.Previous_Employment_Key,
-                    fe.Einddatum,
-                    c.Root_Key
-                FROM fact_employment fe
-                JOIN Chains c
-                    ON fe.Previous_Employment_Key = c.Employment_Key
-            ),
-
-            OldChains AS (
-                SELECT Root_Key
-                FROM Chains
-                GROUP BY Root_Key
-                HAVING MAX(Einddatum) < DATEADD(year, -5, GETDATE())
-            )
-
-            DELETE fws
-            FROM fact_workforce_snapshot fws
-            JOIN Chains c
-                ON fws.Employment_Key = c.Employment_Key
-            JOIN OldChains oc
-                ON c.Root_Key = oc.Root_Key
-        END
-        """))
-
-        # -------------------------------------------------
-        # 2️⃣ Daarna employment verwijderen
-        # -------------------------------------------------
-
-        conn.execute(text("""
-        WITH Chains AS (
-
-            SELECT
-                Employment_Key,
-                Previous_Employment_Key,
-                Einddatum,
-                Employment_Key AS Root_Key
-            FROM fact_employment
-            WHERE Previous_Employment_Key IS NULL
-
-            UNION ALL
-
-            SELECT
-                fe.Employment_Key,
-                fe.Previous_Employment_Key,
-                fe.Einddatum,
-                c.Root_Key
-            FROM fact_employment fe
-            JOIN Chains c
-                ON fe.Previous_Employment_Key = c.Employment_Key
-        ),
-
-        OldChains AS (
-
-            SELECT Root_Key
-            FROM Chains
-            GROUP BY Root_Key
-            HAVING MAX(Einddatum) < DATEADD(year, -5, GETDATE())
-
-        )
-
-        DELETE fe
-        FROM fact_employment fe
-        JOIN Chains c
-            ON fe.Employment_Key = c.Employment_Key
-        JOIN OldChains oc
-            ON c.Root_Key = oc.Root_Key
-        """))
-
-        # -------------------------------------------------
-        # 3️⃣ Orphan cleanup (extra safety)
-        # -------------------------------------------------
-
-        conn.execute(text("""
-            IF OBJECT_ID('fact_workforce_snapshot', 'U') IS NOT NULL
-            DELETE FROM fact_workforce_snapshot
-            WHERE Employment_Key NOT IN (
-                SELECT Employment_Key FROM fact_employment
-            )
-        """))
-
-
-# =====================================================
-# 6️⃣ Dataset write orchestrator
+# 5️⃣ Dataset write orchestrator
 # =====================================================
 
 def write_dataset(engine, state, schema_config, reset=False):
@@ -860,8 +745,6 @@ def write_dataset(engine, state, schema_config, reset=False):
     logging.info(f"Tables written: {list(dataframes.keys())}")
 
     apply_constraints(engine, schema_config)
-
-    apply_retention(engine)
 
     logging.info("Dataset write pipeline completed")
     return summary

@@ -55,19 +55,19 @@ that 2020-2021 headcount undercounts.
 
 ### Priority 1 - incremental-run correctness (fix before relying on weekly runs)
 
-**AR-01 ✔ verified - Retention deletes visible history on every write (high; full run: yes)**
+**✅ AR-01 fixed (2026-09-25) - Retention deletes visible history on every write (was: high; full run: yes)**
 `apply_retention` (`write_to_sql.py:725-833`, called unconditionally at the
-end of `write_dataset`, ~line 864) deletes whole employment chains and their
+end of `write_dataset`, ~line 864) deleted whole employment chains and their
 snapshots when `MAX(Einddatum) < now - 5 years`. SQL `MAX` ignores the NULL
-`Einddatum` of an active row, so an active employee whose last closed row is
-older than five years is deleted too. Leavers from the visible period (which
-starts 2020) disappear as time passes. Live evidence: `dim_employee` has 242
-leavers with `Datum_uitdienst < 2021-09-25`, while the earliest `Uit dienst`
-row left in `fact_employment` is dated 2021-10-04. Incremental runs re-insert
-the deleted rows and retention deletes them again.
-Direction: remove retention (the demo needs full history). If it is kept,
-treat any NULL `Einddatum` in a chain as "keep", make the window configurable
-and keep it outside the visible period.
+`Einddatum` of an active row, so an active employee whose last closed row was
+older than five years got deleted too. Leavers from the visible period (which
+starts 2020) disappeared as time passed. Live evidence at the time: `dim_employee`
+had 242 leavers with `Datum_uitdienst < 2021-09-25`, while the earliest
+`Uit dienst` row left in `fact_employment` was dated 2021-10-04. Incremental
+runs re-inserted the deleted rows and retention deleted them again.
+**Fix:** removed `apply_retention` and its call in `write_dataset` entirely -
+the demo needs full history, so there is no retention window at all now.
+Needs a full run to restore the history already lost in the live database.
 
 **AR-02 ✔ verified - Changes made in place to rows already in SQL are never saved (high; full run: yes)**
 Only `MUTABLE_FACTS = {"fact_absence", "fact_employment", "fact_recruitment"}`
@@ -90,15 +90,25 @@ Direction: declare the write mode per table in the schema (e.g.
 `"write_mode": "static|upsert|append"`) instead of the hard-coded sets. Mark
 vacancy, manager assignment and static dimensions as upsert.
 
-**AR-03 ✔ verified - Incremental runs repeat the last week, and ISO week 53 never runs (high; full run: yes)**
-Both loops store the last week they simulated (`run_simulation.py:108-115`,
-`run_simulation_incremental.py:95-102`), and the incremental run starts from
-that same stored week, so each week is simulated twice across two runs. Both
-loops also wrap after week 52 (`run_simulation.py:104`,
-`run_simulation_incremental.py:91`), so 2020-W53 was skipped and 2026-W53
-(starting 28 Dec 2026) will be too.
-Direction: store the *next* week to simulate, advance with `date + 7 days` and
-`isocalendar()`, and add a resume test.
+**AR-03 - Incremental runs repeat the last week, and ISO week 53 never runs (high; full run: yes)**
+
+*Part fixed 2026-09-25 (ISO week 53):* both loops wrapped after a hard-coded
+week 52 (`run_simulation.py:104`, `run_simulation_incremental.py:91`), so
+2020-W53 was skipped and 2026-W53 (starting 28 Dec 2026) would have been too.
+**Fix:** added `src/core/iso_week.py` (`next_iso_week`/`has_iso_week_53`,
+tested in `test_iso_week.py`) and use it in both loops instead of the
+`week > 52` wrap. Needs a full run to backfill the previously-skipped weeks.
+
+*Still open (repeated last week):* both loops store the last week they
+simulated (`run_simulation.py:108-115` before the fix,
+`run_simulation_incremental.py:95-102` before the fix), and the incremental
+run starts again from that same stored week, so each week is simulated twice
+across two runs. This is deliberately left for the incremental/full pipeline
+merge (AR-20), where "next week to simulate" becomes the natural resume point
+and can be tested against "a full run to week N equals a full run to week
+N-1 plus one incremental week".
+Direction: store the *next* week to simulate instead of the last one
+simulated, and add a resume test.
 
 **AR-04 - State that exists only in memory is lost between incremental runs (high; full run: no, but the next incremental runs are wrong)**
 - Location state (`_location_open`, `_location_opened_on`,
@@ -138,19 +148,23 @@ Direction: update `simulation_state` last, in the final transaction. For full
 runs, write to staging tables and swap them in. Fail loudly on SQL read
 errors except "table does not exist".
 
-**AR-07 ✔ verified - 11 renamed/removed columns still exist physically in SQL (medium; full run: no, a full run does not remove them)**
+**✅ AR-07 fixed (2026-09-25) - 11 renamed/removed columns still exist physically in SQL (was: medium; full run: no, a full run does not remove them)**
 A full reset only deletes rows; `_ensure_table_columns` only adds columns, and
-`deprecated_columns` lists only `dim_employee.Leeftijd` and
-`fact_absence.AbsenceDuration_Key`. Present in SQL but not in the schema (the
-ones checked are all NULL):
+`deprecated_columns` listed only `dim_employee.Leeftijd` and
+`fact_absence.AbsenceDuration_Key`. Present in SQL but not in the schema (all
+confirmed NULL at the time):
 - `fact_workforce_snapshot`: `Performance_Score`, `SalaryStep`, `EducationLevel_Key`, `Ploegendienst_Key`
 - `fact_employment`: `Target_Compa_Ratio`, `RedenVertrek_Key`, `Ploegendienst_Key`
-- `fact_safety_incident`: `Absence_Key` (still carries the removed
+- `fact_safety_incident`: `Absence_Key` (still carried the removed
   fact-to-fact foreign key to `fact_absence`), `Ploegendienst_Key`
 - `fact_absence.Ploegendienst_Key`, `dim_employee.EducationLevel_Key`
 
-Direction: add them to `deprecated_columns` (or drop any column not in the
-schema during a full run), and add a schema-vs-SQL check.
+**Fix:** all 11 added to their table's `deprecated_columns` in
+`hr_maakindustrie_schema.json`, so the existing `_drop_deprecated_columns`
+step (which already handles dropping the dependent foreign key first) removes
+them on the next write - no full run needed for this one, an incremental
+write is enough. `test_schema_deprecated_columns.py` pins the list and
+guards against a column being both live and deprecated at once.
 
 ### Priority 2 - simulation correctness (affects full runs too)
 
@@ -454,12 +468,39 @@ The header says "Outstanding work only", but about 35 sections are completed
 
 ### Suggested order
 
-1. AR-01 to AR-07, then a full run when the user chooses (the fixes to AR-01,
-   AR-02 and AR-03 already change history).
-2. AR-08 to AR-15. If they are done before step 1's full run, one full run
-   covers both.
-3. AR-16 to AR-19 (speed); this should make full runs much shorter.
-4. AR-20 to AR-27 (structure), then AR-28 to AR-31.
+Reprioritized 2026-09-25 at the user's request: full-run speed comes before
+the remaining incremental-only correctness items, and the incremental/full
+merge (AR-20) is the point at which incremental resume is rebuilt properly
+rather than patched item by item. Rationale: every history-changing fix ends
+in the same 2+ hour full run, so making that run faster first speeds up every
+later step too; and most of the remaining incremental bugs (AR-02, AR-04 to
+AR-06) share one root cause - incremental is a separate code path that
+doesn't restore everything a full run holds in memory - so they are better
+solved together as "incremental = full run resumed from a checkpoint" than
+patched individually.
+
+1. ✅ Done: AR-01, the ISO week 53 half of AR-03, and AR-07 (see below) -
+   these were cheap, and AR-01 in particular would otherwise have damaged
+   the very next full run.
+2. Speed (AR-16 to AR-19). Benchmark first (time per simulated week at real
+   headcount, not the reviewer's 200-employee profile - AR-18-style O(n^2)
+   effects may dominate at 1,000-1,500 employees). Do pure refactors that
+   don't change the number of random draws first (e.g. AR-17's per-week
+   lookup context) and check them for byte-for-byte identical output on a
+   short in-memory run; only then do the draw-order changes (e.g. AR-16),
+   checked against distributions instead of exact equality.
+3. Merge the two pipelines so incremental resumes from a checkpoint (AR-20,
+   absorbing AR-02, AR-04, AR-05, AR-06 and the "repeated last week" half of
+   AR-03), with a test that a full run to week N equals a full run to week
+   N-1 plus one incremental week.
+4. Simulation correctness (AR-08 to AR-15) - these change history, so do them
+   last, right before the one full run that covers everything above.
+5. AR-21 to AR-27 (remaining structure), then AR-28 to AR-31 (tests/docs/hygiene).
+
+The weekly timer keeps degrading the live data (re-recruiting filled
+vacancies, resetting location state, etc.) until step 3 lands. A full run
+repairs it, but if that gap matters before then, pausing the timer in Azure
+is a cheap option and is the user's call.
 
 ### Done on 2026-09-25 (awaiting the next full run)
 
@@ -478,6 +519,15 @@ The header says "Outstanding work only", but about 35 sections are completed
   Leavers keep their last manager and don't use capacity. Leaders are ranked
   on continuous service. Before this, 70% of closed `fact_manager_assignment`
   intervals lasted less than 2 weeks.
+- **AR-01 fixed: retention removed.** `apply_retention` and its call are gone;
+  a full run no longer deletes any employment history.
+- **AR-03 half-fixed: ISO week 53 no longer skipped.** New
+  `src/core/iso_week.py` replaces the hard-coded `week > 52` wrap in both
+  loops. The "incremental repeats the last week" half of AR-03 is still open,
+  deferred to the AR-20 pipeline merge (see "Suggested order").
+- **AR-07 fixed: 11 leftover columns marked deprecated.** They will be
+  dropped from SQL on the next write (full or incremental - no full run
+  needed for this one specifically).
 
 ## ✅ Added: ketenregeling (Dutch temporary-contract chain rule)
 
