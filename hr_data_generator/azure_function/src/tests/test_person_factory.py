@@ -1,6 +1,8 @@
 import random
 
-from src.generator.person_factory import PersonFactory
+from faker import Faker
+
+from src.generator.person_factory import PersonFactory, seed_person_names
 
 
 def _config(gender_ratio):
@@ -71,3 +73,44 @@ def test_create_uses_a_pre_chosen_gender_without_redrawing_it():
     )
 
     assert person["gender"] == "F"
+
+
+def test_seed_person_names_makes_drawn_names_reproducible():
+    """Regression test for AR-32 (see BACKLOG.md "Architecture review"):
+    names were drawn from faker's own unseeded generator, so two runs with
+    the same simulation_seed produced different names every time even though
+    every other simulated value (role, salary, tenure, every weekly event)
+    already was reproducible via random.Random(seed)."""
+    config = _config({"default": {"male": 0.49, "female": 0.49}})
+
+    def draw_names():
+        seed_person_names(99)
+        factory = PersonFactory(config, random.Random(1))
+        return [
+            factory.create(
+                "Productiemedewerker",
+                today="2024-01-01",
+                gender="M",
+                department_name="Productie",
+            )["first_name"]
+            for _ in range(20)
+        ]
+
+    assert draw_names() == draw_names()
+
+
+def test_seed_person_names_reseeds_the_shared_generator_used_by_every_locale():
+    """`fakeNL` and `fakeINT` (used for the Expat special-arrangement branch)
+    both draw from faker's single shared global generator, not independent
+    per-instance state - one `seed_person_names` call must make both
+    reproducible, not just the default-locale instance."""
+    seed_person_names(7)
+    first_nl = Faker("nl_NL").first_name()
+    first_international = Faker().first_name()
+
+    seed_person_names(7)
+    second_nl = Faker("nl_NL").first_name()
+    second_international = Faker().first_name()
+
+    assert first_nl == second_nl
+    assert first_international == second_international

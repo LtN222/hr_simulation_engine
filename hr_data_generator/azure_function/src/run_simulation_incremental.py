@@ -30,12 +30,19 @@ from src.infrastructure.state.simulation_state import (
     get_simulation_state,
     update_simulation_state
 )
+from src.generator.person_factory import seed_person_names
 
 
 def run_incremental_simulation(engine, sector, seed):
     logging.info("Starting incremental HR simulation")
 
     rng = random.Random(seed)
+    # Reseeds identically on every incremental run, same as `rng` above - see
+    # BACKLOG.md AR-05 for that limitation (each incremental run restarts
+    # from the same seed rather than resuming a continuous stream). Not
+    # fixed here; this only makes new-hire names as reproducible as every
+    # other simulated value already is, not more so.
+    seed_person_names(seed)
     config = ConfigLoader().load()
     schema = load_schema(config.schema)
 

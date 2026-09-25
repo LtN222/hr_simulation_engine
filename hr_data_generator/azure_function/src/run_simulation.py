@@ -20,12 +20,14 @@ from src.infrastructure.manager_builder import build_dim_manager
 from src.infrastructure.manager_assignment import sync_manager_assignments
 from src.infrastructure.workforce_snapshot import build_workforce_snapshots
 from src.infrastructure.state.simulation_state import update_simulation_state
+from src.generator.person_factory import seed_person_names
 
 
 def run_simulation(engine, sector, seed):
     logging.info("Starting full HR simulation")
 
     rng = random.Random(seed)
+    seed_person_names(seed)
     config = ConfigLoader().load()
     schema = load_schema(config.schema)
 

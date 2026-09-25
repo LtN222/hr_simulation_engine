@@ -10,6 +10,28 @@ DEFAULT_GENDER_RATIO = {"male": 0.49, "female": 0.49}
 OTHER_GENDER_SHARE = 0.02
 
 
+def seed_person_names(seed):
+    """Seed the shared Faker generator used to draw employee names.
+
+    `fakeNL`/`fakeINT` are process-wide singletons that both draw from
+    `faker`'s single global random generator, not their own independent
+    state - `Faker.seed()` reseeds that shared generator, so one call here
+    covers every locale's `Faker()` instance in this process, not just
+    `fakeNL`. Every other simulated value (role, salary, tenure, every
+    weekly event) already comes from the `random.Random(seed)` instance
+    threaded through the pipeline and was already reproducible; only names
+    drawn through this module were not, since nothing seeded `faker`'s own
+    generator from `simulation_seed`.
+
+    Call this exactly once per run, near wherever `random.Random(seed)` is
+    constructed (`run_simulation.py`/`run_simulation_incremental.py`) -
+    before any name is drawn, not per employee or per week. Calling it more
+    than once per employee/week would make every subsequent name repeat the
+    same short sequence instead of continuing it.
+    """
+    Faker.seed(seed)
+
+
 class PersonFactory:
 
     def __init__(self, config, rng):
