@@ -31,6 +31,454 @@ also creating the matching `fact_absence` episode - type `Bedrijfsongeval` -
 so it feeds the same verzuim reporting rather than living in an isolated
 table) - is intentionally left off this list.
 
+## Architecture review (2026-09-25) - prioritized open items
+
+A read-only architecture review of the whole repo, done on 2026-09-25 against
+commit `1d3a1db` plus that day's uncommitted changes (performance model and
+sticky manager assignment, see "Done on 2026-09-25" at the end of this
+section). Items are numbered `AR-xx` so they can be referenced from commits
+and later chats. None of them has been fixed yet unless marked otherwise.
+
+- **✔ verified** means the finding was confirmed directly in the code and/or
+  the live demo database (`db_hr_demo`) on 2026-09-25. Items without that mark
+  were reported by a reviewer with `path:line` evidence but not independently
+  re-checked. Re-verify them before fixing.
+- **Full run:** whether fixing the item changes historical output and so needs
+  a full run afterwards. Per CLAUDE.md, never start a full run on your own
+  initiative; flag it and let the user decide.
+- Line numbers drift; search for the named function if a reference is off.
+
+**Important before any full run:** AR-01 (retention) also runs at the end of a
+full run, so a fresh full run immediately loses every employee whose
+employment chain ended more than five years ago. Fix AR-01 first, or accept
+that 2020-2021 headcount undercounts.
+
+### Priority 1 - incremental-run correctness (fix before relying on weekly runs)
+
+**AR-01 ✔ verified - Retention deletes visible history on every write (high; full run: yes)**
+`apply_retention` (`write_to_sql.py:725-833`, called unconditionally at the
+end of `write_dataset`, ~line 864) deletes whole employment chains and their
+snapshots when `MAX(Einddatum) < now - 5 years`. SQL `MAX` ignores the NULL
+`Einddatum` of an active row, so an active employee whose last closed row is
+older than five years is deleted too. Leavers from the visible period (which
+starts 2020) disappear as time passes. Live evidence: `dim_employee` has 242
+leavers with `Datum_uitdienst < 2021-09-25`, while the earliest `Uit dienst`
+row left in `fact_employment` is dated 2021-10-04. Incremental runs re-insert
+the deleted rows and retention deletes them again.
+Direction: remove retention (the demo needs full history). If it is kept,
+treat any NULL `Einddatum` in a chain as "keep", make the window configurable
+and keep it outside the visible period.
+
+**AR-02 ✔ verified - Changes made in place to rows already in SQL are never saved (high; full run: yes)**
+Only `MUTABLE_FACTS = {"fact_absence", "fact_employment", "fact_recruitment"}`
+(`write_to_sql.py:48`) are upserted. Every other fact only gets new primary
+keys inserted (`write_to_sql.py:~607-641`). Rows changed in memory are
+therefore never written:
+- `fact_vacancy`: Status, `Closed_Date` and `Filled_Employee_Key` are set when
+  a vacancy is filled (`simulation_hiring.py:~423-450`,
+  `simulation_recruitment.py:~425`). Live evidence: 4 vacancies are `Open` in
+  SQL although a hired (`Aangenomen`) recruitment row exists for them. The
+  next run reloads them as open and keeps recruiting.
+- `fact_manager_assignment`: `Einddatum` is closed in place
+  (`manager_assignment.py:48,76`), so SQL keeps overlapping open intervals.
+- `fact_workforce_snapshot`: the current month's row is written on the first
+  run of that month and never updated (see AR-18).
+- Static dimensions: the incremental run refreshes descriptive columns in
+  memory (`run_simulation_incremental.py:~176-189`) but only new keys reach SQL.
+
+Direction: declare the write mode per table in the schema (e.g.
+`"write_mode": "static|upsert|append"`) instead of the hard-coded sets. Mark
+vacancy, manager assignment and static dimensions as upsert.
+
+**AR-03 ✔ verified - Incremental runs repeat the last week, and ISO week 53 never runs (high; full run: yes)**
+Both loops store the last week they simulated (`run_simulation.py:108-115`,
+`run_simulation_incremental.py:95-102`), and the incremental run starts from
+that same stored week, so each week is simulated twice across two runs. Both
+loops also wrap after week 52 (`run_simulation.py:104`,
+`run_simulation_incremental.py:91`), so 2020-W53 was skipped and 2026-W53
+(starting 28 Dec 2026) will be too.
+Direction: store the *next* week to simulate, advance with `date + 7 days` and
+`isocalendar()`, and add a resume test.
+
+**AR-04 - State that exists only in memory is lost between incremental runs (high; full run: no, but the next incremental runs are wrong)**
+- Location state (`_location_open`, `_location_opened_on`,
+  `_location_capacity_streak`, `_location_capacity_bonus`, `_home_location`;
+  `location_assignment.py:~41-50`) is rebuilt from config each run. Fabriek
+  Zuid needs `capacity_streak_weeks: 8` of full capacity within one process,
+  which a one-week run can never reach, so it reverts to closed.
+  Headcount-triggered openings are re-opened and re-relocated every run.
+- `_recruitment_pipeline_profiles` (`simulation_recruitment.py:~97,181,380`) is
+  never saved. After a reload, external candidates still in the pipeline are
+  screened with `{}` (0 years of experience), and accepted hires lose their
+  screened education/experience.
+
+Direction: keep an explicit list of state keys, each marked "saved" or
+"rebuildable". Save the rest (e.g. a JSON column on `simulation_state`, or a
+small table), or derive it from SQL (`fact_employment.Location_Key` history,
+the recruitment row's candidate columns).
+
+**AR-05 - Each incremental run restarts the random generator from the same seed (medium; full run: no)**
+`run_simulation_incremental.py:37` creates `random.Random(seed)` every run, and
+each weekly run covers one or two weeks, so every incremental week consumes
+nearly the same random stream (e.g. the attrition shock draw at
+`simulation_attrition.py:~66-70`).
+Direction: seed per simulated week from `(seed, year, week)` in both paths;
+optionally one sub-stream per simulator (see AR-15 on data-dependent draws).
+
+**AR-06 - Writes are not atomic; the week counter advances before the data is written (medium-high; full run: no)**
+`update_simulation_state` commits (`run_simulation.py:115`,
+`run_simulation_incremental.py:102`) before `write_dataset` runs
+(`function_app.py:89`). `reset_tables` and each table write commit separately.
+A run that dies mid-write leaves half-written tables while `simulation_state`
+says those weeks are done. During a full write, the web app and Power BI see
+empty or partial tables. `load_current_state` (`load_state.py:18-22`) and
+`_get_existing_primary_keys` (`write_to_sql.py:221-223`) swallow all
+exceptions, so a transient read error becomes an empty table.
+Direction: update `simulation_state` last, in the final transaction. For full
+runs, write to staging tables and swap them in. Fail loudly on SQL read
+errors except "table does not exist".
+
+**AR-07 ✔ verified - 11 renamed/removed columns still exist physically in SQL (medium; full run: no, a full run does not remove them)**
+A full reset only deletes rows; `_ensure_table_columns` only adds columns, and
+`deprecated_columns` lists only `dim_employee.Leeftijd` and
+`fact_absence.AbsenceDuration_Key`. Present in SQL but not in the schema (the
+ones checked are all NULL):
+- `fact_workforce_snapshot`: `Performance_Score`, `SalaryStep`, `EducationLevel_Key`, `Ploegendienst_Key`
+- `fact_employment`: `Target_Compa_Ratio`, `RedenVertrek_Key`, `Ploegendienst_Key`
+- `fact_safety_incident`: `Absence_Key` (still carries the removed
+  fact-to-fact foreign key to `fact_absence`), `Ploegendienst_Key`
+- `fact_absence.Ploegendienst_Key`, `dim_employee.EducationLevel_Key`
+
+Direction: add them to `deprecated_columns` (or drop any column not in the
+schema during a full run), and add a schema-vs-SQL check.
+
+### Priority 2 - simulation correctness (affects full runs too)
+
+**AR-08 ✔ verified - Contract renewals and location transfers reset relevant experience (high; full run: yes)**
+`ContractLifecycleSimulator._carried_context`
+(`simulation_contracts.py:~301-317`) and the location-transfer record
+(`simulation_location_transfer.py:~83`, `**row.to_dict()`) copy
+`Relevante_Ervaring_Jaren_Bij_Start` unchanged but set `Startdatum = today`.
+`experience_as_of` (`relevant_experience.py:16-27`) is starting value + time
+since `Startdatum`, so the experience built up on the previous row is lost
+(about a year per yearly renewal). Live evidence: 253 employees have 370
+month-to-month decreases in `fact_workforce_snapshot.Relevante_Ervaring_Jaren`,
+1.25 years on average (a share is legitimate cross-domain transfer).
+This feeds snapshots and performance scores.
+Direction: use `carried_experience(previous_row, today, same_department=True, config)`
+in both places, as career events and hiring already do.
+
+**AR-09 - Two different definitions of relevant experience (medium-high; full run: yes)**
+`role_eligibility.relevant_experience` (`role_eligibility.py:~112-125`) counts
+only internal time in the target role or its feeder roles. It ignores
+`Relevante_Ervaring_Jaren_Bij_Start` and the cross-domain transfer ratio,
+while snapshots and performance use `experience_as_of`/`carried_experience`.
+An internal candidate can therefore fail a requirement they would pass as an
+external candidate. This breaks the CLAUDE.md consistency contract.
+`eligible_internal` also hard-codes its thresholds (`performance < 2.7`,
+3 years of first leadership; lines ~151 and ~160).
+Direction: one shared experience function; move the thresholds to config.
+
+**AR-10 ✔ verified - Salary reviews are skipped after any event earlier in the same year (medium; full run: yes)**
+`simulation_career_events.py:~231` skips an employee when the current row's
+`Startdatum.year == today.year`. Renewals, location transfers and promotions
+reset that date, so those employees silently miss their annual salary review.
+`PerformanceSimulator._tenure_days` already fixed the same bug for
+performance reviews.
+Direction: base the check on the last `Salarisverhoging` event date or on
+`Aaneengesloten_Indienst_Datum`, not the current row's `Startdatum`.
+
+**AR-11 - Snapshots use today's values in historical rows (medium-high; full run: yes)**
+- Performance before the first review falls back to the *current*
+  `dim_employee.Prestatie_Score` (`workforce_snapshot.py:~73`,
+  `absence_context.py:~74`). A new hire's first 6+ months of snapshots show a
+  later review score. `Aanvangs_Prestatie_Score` exists but is unused here.
+- The snapshot's `SalaryScale_Key` (`workforce_snapshot.py:~140`) is
+  overwritten by `**benchmark_fields` (`~174`), which holds the role's current
+  scale (`salary_policy.py:~139-145`), not the effective employment row's scale.
+
+**AR-12 - Satisfaction/engagement is calculated inconsistently (medium; full run: yes)**
+- The pay input differs: snapshots use actual salary ÷ benchmark
+  (`workforce_snapshot.py:~83-87`); simulators and `absence_context` use
+  `Streef_Compa_Ratio` (`satisfaction.py:~278`).
+- Absence episodes are scored at simulation time
+  (`simulation_absence.py:~602`), then `sync_absence_satisfaction` re-scores
+  every episode on every run (`absence_context.py:~59-91`), rewriting history.
+- Departure context copies the last month-end snapshot
+  (`departure_context.py:~115-133`), up to about 30 days before exit, instead
+  of the value attrition actually used.
+- "Stagnation" is measured from the first-ever start date, not the last move
+  (`satisfaction.py:~389`, `engagement.py:~294-296`), and the career-momentum
+  logic is duplicated between the two modules.
+- The momentum cache is keyed on employee + date + performance
+  (`satisfaction.py:~334`, `engagement.py:~245`) and ignores same-day career
+  events, so absence/safety scoring after a promotion sees pre-promotion momentum.
+
+Direction: a single "employee context as of date" resolver used by every consumer.
+
+**AR-13 - Gaps in the internal-mobility hand-off (medium; full run: yes)**
+- An internal applicant is reserved only against other recruitment rows
+  (`simulation_recruitment.py:~141-145`). If they leave before the offer
+  resolves, `simulation_hiring.py:~81-92` just `continue`s: the vacancy stays
+  Open without `Filled_Employee_Key`, the recruitment row stays `Aangenomen`,
+  and all other candidates were already closed. The capacity backstop
+  (`~69-77`) has the same effect. Hire counts from recruitment are overstated.
+- Eligibility is checked against the role at application time; the move is
+  applied from whatever role the candidate holds at hire.
+- `_move_internal_employee` decides promotion vs transfer inline
+  (`simulation_hiring.py:~322-324`) instead of calling
+  `role_eligibility.movement_type`. It uses a +0.02 compa bump, while career
+  events uses +0.015 plus a performance term.
+
+Direction: withdraw or finalize the application in the failure paths,
+re-check eligibility at hire, and route through `movement_type` plus one
+shared move builder.
+
+**AR-14 - Absence episodes are not cut off at departure (medium; full run: yes)**
+Episodes are capped only at creation (`simulation_absence.py:~587-619`).
+Attrition and lapsed contracts never shorten open episodes, so
+`Verzuim_Werkdagen`/hours are counted after someone has left.
+Direction: a shared departure step that closes open episodes.
+
+**AR-15 - Same-day events stack; employment-row logic duplicated (medium; full run: yes)**
+The close-then-open pattern exists separately in attrition, contracts, career
+events, hiring and location transfer, with five different record builders
+(e.g. `_new_employment_record`, `simulation_career_events.py:~304-334`, does not
+use `build_record`). Several events on the same day create zero-length rows
+(`Startdatum == Einddatum`). New keys come from `max()+1` in about ten places.
+Random draws also depend on the data (e.g. `_internal_candidate` draws even
+when the internal source is not chosen), so one extra eligible employee shifts
+every later random draw.
+Direction: one employment-ledger helper (close/open/depart plus a key
+allocator kept in state).
+
+### Priority 3 - run time (a full run currently takes more than 2 hours)
+
+A cProfile of 5 simulated weeks (200 employees, in memory, no SQL) took about
+15 s per week. Roughly 85% of that came from AR-16 and AR-17.
+
+**AR-16 - Internal-candidate search runs once per application (high; about 35% of week time; full run: yes, the results change)**
+`_choose_source` calls `_internal_candidate` for every application
+(`simulation_recruitment.py:~573-576`). That call re-filters active rows and
+runs `eligible_internal` row by row over every active employee (`~619-636`).
+Each `eligible_internal` call repeats `dim_role.set_index` and qualification
+lookups (`role_eligibility.py:~105-137`). The cost scales with applications ×
+headcount.
+Direction: compute the eligible internal set once per vacancy (or target role)
+per week; pick the source first and only draw an internal candidate when the
+internal source is chosen; build credential/role dictionaries once per week.
+
+**AR-17 - Per-employee context is rebuilt every week (high; about 55% of week time; full run: yes)**
+Attrition scores satisfaction and engagement for every active employee every
+week (`simulation_attrition.py:~75-131`). The model itself is cheap; the cost
+is the context lookups:
+- `satisfaction._department_name`: about 2.8 ms per call, from boolean filters
+  on small dimension tables;
+- `_compute_career_momentum`: copies history, re-parses dates and rebuilds
+  lookups on every call;
+- band lookups.
+
+The same pattern appears in absence (`~306-337`) and safety (`~112-130`, `~315-326`).
+Direction: one per-week lookup context (active rows indexed by `Employee_Key`,
+role → department and shift dictionaries, last move date per employee via one
+groupby, band thresholds for `np.searchsorted`).
+
+**AR-18 - Cost grows with accumulated history (medium)**
+Growing tables are appended with `pd.concat` and scanned, copied and
+date-converted in full every week. Absence loops over all `dim_employee` rows,
+leavers included. `sync_manager_assignments` is O(active × open) per week. So
+total cost is roughly O(weeks²). Each incremental run rebuilds every monthly
+snapshot back to 2020 (`run_simulation_incremental.py:~108-114`, row by row
+per month), then throws almost all of it away. Snapshot keys only allow
+`Employee_Key < 10000` (`workforce_snapshot.py:~393`).
+Direction: keep in-memory indexes updated incrementally, collect new rows in
+lists, and snapshot only month-ends after the last stored one, re-writing the
+open month (together with AR-02).
+
+**AR-19 - SQL write performance (medium)**
+Mutable tables are upserted one row at a time (UPDATE, then INSERT), for the
+whole table on every incremental run. Every cell goes through a Python
+conversion function. `method="multi"` bypasses pyodbc's batched mode, so
+`fast_executemany` probably has no effect. `apply_constraints` re-runs
+`ALTER COLUMN` on every key column every run.
+Direction: bulk-load into a temp table and `MERGE` only changed rows; use
+`method=None` with `fast_executemany`; convert whole columns with pandas;
+apply constraints only after a reset or schema change.
+
+### Priority 4 - structure and maintainability
+
+**AR-20 - Merge the full and incremental pipelines (medium)**
+`run_simulation.py` and `run_simulation_incremental.py` are about 70% the same
+code and have already drifted apart:
+- `sync_recruitment_status_keys` runs after the simulation in the full path
+  but before it in the incremental path;
+- date normalization and static-dimension repair exist only in the
+  incremental path;
+- growth defaults are duplicated;
+- config and schema are loaded three times per full run;
+- the `sector` argument is ignored.
+
+Direction: one pipeline, `prepare_state -> run_weeks -> post_process -> write`,
+with pluggable load and write steps.
+
+**AR-21 - Re-layer `src/infrastructure/` (medium)**
+It mixes:
+- business rules (satisfaction, engagement, salary policy, role eligibility,
+  relevant experience);
+- steps that act like simulators (`open_locations`/`relocate_department_group`
+  emit events weekly; `assign_managers`);
+- reporting steps (snapshot, the `*_context` modules, employee status, dimensions);
+- real plumbing (database, state, record builder, blob I/O).
+
+`location_assignment.py:26` imports from `application.allocation` (the layers
+are inverted). `domain/` holds only four plain data classes. Duplicate and
+dead code:
+- the `dim_employee`/`fact_employment` record mapping exists in both
+  `employee_generation.py:~76-139` and `simulation_hiring.py:~168-230`;
+- unused copies of `SalaryPolicy` methods in `salary_benchmark.py:~115-166`;
+- `src/validation/data_checks.py` is never used;
+- nothing imports `src/generator/obsolete/`.
+
+Direction: `domain/` (models and rules), `simulation/` (plus locations and
+manager assignment), a new `reporting/` (snapshot, contexts, dimensions) and
+`infrastructure/` (database, state, blob, caches).
+
+**AR-22 - Make the weekly state contract explicit (medium-low)**
+- `state["vacancies"]` and `_latest_hires` are written but never read.
+- Backfill requests from hiring are created after `VacancySimulator` already
+  ran, so they are handled a week late without that being stated.
+- `assign_managers` runs twice per week: in hiring, without `today`, falling
+  back to the wall clock; and in the runner.
+
+Direction: document the required keys (see AR-04), drop the dead ones, and
+make the runner the single owner of manager assignment.
+
+**AR-23 - Move hard-coded business thresholds to config (medium-low; full run: only if values change)**
+- Attrition: performance/tenure/salary multipliers
+  (`simulation_attrition.py:~216-256`), satisfaction cut-offs
+  4.5/6.0/7.5/8.5, the seasonal factor and shock, and exit-reason weights.
+- Contracts: the leave-at-end-of-contract weight.
+- Career events: `_performance_factor`.
+- Vacancies: the 14-56 day target.
+- Recruitment: candidate-experience offsets, education-fit scores, internal
+  selection weights (2.3/2.7).
+- Hiring: the 0.7/0.3 quality blend.
+- Eligibility: the 2.7 and 3-year thresholds.
+- Performance: the driver constants.
+
+**AR-24 - Dimension keys depend on config order (medium)**
+Bands, drivers, `dim_salary_band`, `dim_event_type`, `dim_location`,
+`dim_absence_type` and `dim_departure_reason` get their keys from their
+position in config (`dimension_factory.py:~28-47`). Inserting or reordering an
+entry silently relabels history on incremental runs. `fact_salary_benchmark`
+keys are sequential too (`salary_benchmark.py:~46-76`): adding a role or step
+shifts them.
+Direction: explicit keys in config, validated; deterministic benchmark keys
+(e.g. yyyymm + role + step).
+
+**AR-25 - Typed and validated config (low-medium)**
+`Config` exposes raw dicts with defaults scattered at the call sites.
+- `simulation_weeks` is unused.
+- `database` can be None (it becomes the database name "None").
+- Any mode other than `full` silently runs incremental (`function_app.py:76`).
+- `validate_role_configuration` only runs in tests.
+
+Direction: dataclasses or pydantic per section, validation at load time, and
+reject unknown modes.
+
+**AR-26 - Fact-to-fact foreign keys: decision needed (user decision)**
+The schema still declares `fact_workforce_snapshot.Employment_Key ->
+fact_employment` and `fact_recruitment.Vacancy_Key -> fact_vacancy`, and
+`get_table_write_order` treats fact-to-fact references as expected. This
+conflicts with the CLAUDE.md rule that facts relate only through shared
+dimensions. Decide: keep them as plain columns without SQL foreign keys, or
+document them as accepted exceptions. `fact_employment.Previous_Employment_Key`
+(a self-reference) is a separate case.
+
+**AR-27 - Lock and hosting details (low)**
+The lock connection sits idle for the whole run; if Azure SQL drops it, the
+lock is released silently and a deployed timer run could overlap with a local
+full run's write. `host.json` sets `functionTimeout: -1`, which the
+Consumption plan ignores (its maximum is 10 minutes).
+Direction: re-check the lock or a heartbeat row before writing; set an
+explicit timeout. Keep full runs local (a deliberate decision, not a defect).
+
+### Priority 5 - tests, docs and hygiene
+
+**AR-28 - Test architecture (medium)**
+There is no `conftest.py`; about 15 private `_config`/`_base_state` helpers
+are copied across files. `test_employee_generation.py` is about 2,500 lines
+covering about 15 unrelated modules. One contracts test takes about 27 s.
+`debug_population.py` is an uncollected print script.
+Missing tests:
+- `movement_type`;
+- `eligible_internal` beyond the leadership branches;
+- incremental resume (AR-03);
+- snapshot as-of rules (AR-11);
+- satisfaction consistency across consumers (AR-12);
+- end-to-end seed reproducibility;
+- negative tests: performance ignores absence, engagement-driver exclusions;
+- schema invariants: no fact-to-fact foreign keys, the naming convention,
+  renamed columns marked deprecated (AR-07).
+
+Direction: `tests/unit/<layer>/`, `tests/integration/` (marked slow),
+`tests/schema/`, and shared builders in `conftest.py`.
+
+**AR-29 - Documentation contradictions (low)**
+- `README.md`:
+  - still describes `fact_safety_incident.Absence_Key` as the incident-absence
+    link (~lines 160-164), although elsewhere it says no such key exists;
+  - mentions `Status_Verbose` (schema: `Status_Omschrijving`),
+    `Candidate_Quality` (`Kandidaat_Kwaliteit`), `SalaryStep`
+    (`Salaris_Trede`), `Ploegendienst_Key` (`Shift_Key`) and
+    `dim_ploegendienst` (`dim_shift`);
+  - does not say that obsolete columns survive a full run.
+- `architecture.txt` and `handleiding code.md` still name `dim_ploegendienst`
+  and `dim_reden_vertrek`.
+- `CLAUDE.md` says `eligible_internal` has no tests; `test_role_eligibility.py`
+  has three (leadership branches only).
+- `AGENTS.md` lacks CLAUDE.md's "Calibrating a new numeric parameter" and
+  "Recruitment, promotion and transfer model" sections.
+
+**AR-30 - Split this backlog into open work and a changelog (low)**
+The header says "Outstanding work only", but about 35 sections are completed
+(✅) items, and the "Documentation" item is stale. Move completed items to a
+`CHANGELOG.md` or decisions file so this file lists open work only.
+
+**AR-31 - Repo hygiene (low)**
+- `../~/.claude/mcp-sqlserver` in the `Demo_Dashboards` git root is an
+  untracked nested git repo created by a mis-expanded `~`, and `../.gitignore`
+  is untracked; a `git add -A` from the parent folder would embed that repo.
+- `azure_function/src/database/__pycache__` is left over from an old layout.
+- Azurite state exists in both the project root and `azure_function/`.
+
+### Suggested order
+
+1. AR-01 to AR-07, then a full run when the user chooses (the fixes to AR-01,
+   AR-02 and AR-03 already change history).
+2. AR-08 to AR-15. If they are done before step 1's full run, one full run
+   covers both.
+3. AR-16 to AR-19 (speed); this should make full runs much shorter.
+4. AR-20 to AR-27 (structure), then AR-28 to AR-31.
+
+### Done on 2026-09-25 (awaiting the next full run)
+
+- **Performance score rebuilt.** The old model carried over 75% of the
+  previous score and re-added every bonus each year, so the long-run score
+  drifted to baseline + 4 × bonuses. About 16-32% of reviews per year sat at
+  exactly 5.00, and 93% stayed there. Now the score is a stable personal
+  level plus a partly persistent yearly deviation, tenure and relevant
+  experience are merged into one capped effect, and the new `performance`
+  config section is calibrated to: mean about 3.36, about 7.5% at 4.0 or
+  higher, about 0.5% at 4.5 or higher, and 5.00 practically never. Backfilled
+  reviews now cover the most recent anniversaries. New hires' lower bound is
+  1, not 0. `salary_benchmark...performance_midpoint` changed from 3.5 to 3.35.
+- **Manager assignments are sticky.** Only employees without a valid manager,
+  new hires, department movers and over-capacity overflow are reassigned.
+  Leavers keep their last manager and don't use capacity. Leaders are ranked
+  on continuous service. Before this, 70% of closed `fact_manager_assignment`
+  intervals lasted less than 2 weeks.
+
 ## ✅ Added: ketenregeling (Dutch temporary-contract chain rule)
 
 By Dutch law, an employee may have at most 3 temporary (`Tijdelijk`)

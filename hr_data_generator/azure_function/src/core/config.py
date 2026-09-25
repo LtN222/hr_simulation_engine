@@ -63,6 +63,7 @@ class Config:
         self.career_events = data.get("career_events", {})
         self.satisfaction = data.get("satisfaction", {})
         self.engagement = data.get("engagement", {})
+        self.performance = data.get("performance", {})
         self.workforce = data.get("workforce", {})
         self.salary_benchmark = data.get("salary_benchmark", {})
         self.recruitment = data.get("recruitment", {})

@@ -1030,6 +1030,25 @@
     "maximum_score": 10.0,
     "performance_review_effect": 0.08
   },
+  "performance": {
+    "baseline": 3.2,
+    "trait_weights": {
+      "execution": 0.3,
+      "collaboration": 0.19,
+      "initiative": 0.19,
+      "coaching": 0.15,
+      "coaching_manager": 0.26
+    },
+    "manager_effect": 0.1,
+    "experience_effect_max": 0.2,
+    "experience_ramp_years": 6,
+    "year_to_year_persistence": 0.35,
+    "yearly_variation_sd": 0.33,
+    "max_carried_deviation": 1.0,
+    "engagement_effect_cap": 0.12,
+    "initial_score_mean": 3.35,
+    "initial_score_sd": 0.45
+  },
   "salary_benchmark": {
     "base_date": "2020-01-01",
     "annual_market_growth_rate": 0.025,
@@ -1044,7 +1063,7 @@
     "compa_ratio": {
       "minimum_ratio": 0.75,
       "maximum_ratio": 1.3,
-      "performance_midpoint": 3.5,
+      "performance_midpoint": 3.35,
       "annual_performance_ratio_movement": 0.004,
       "minimum_annual_raise": 0.005,
       "initial_population_distribution": [

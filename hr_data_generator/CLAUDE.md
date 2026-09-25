@@ -15,6 +15,7 @@ Treat historical behavior, table grain, effective-dated context and HR metric se
 - `azure_function/config/maakindustrie.json` — sector and simulation behavior.
 - `azure_function/config/schemas/` — managed SQL schema, keys and indexes.
 - `azure_function/src/` — executable behavior.
+- `BACKLOG.md` — open work. Its "Architecture review (2026-09-25)" section is the prioritized list of known architectural defects (`AR-xx` items); check it before starting related work.
 
 When documentation and implementation appear inconsistent, inspect the relevant code/config/schema before changing either.
 
@@ -56,9 +57,9 @@ Do not deploy or write to an unintended Azure SQL target merely as generic valid
 
 A **full run** rebuilds the initial population, re-simulates history and resets managed SQL tables. In this project that reset is expected and acceptable during development: this is a demo dataset, and full regeneration is often the simplest and most correct way to validate changes that affect historical output.
 
-Use a full run when it is useful or required for the task, including after historical-logic, snapshot-semantic, schema, driver, recruitment, engagement, performance, relevant-experience or similar changes that incremental processing cannot realistically backfill.
+A full run is required after historical-logic, snapshot-semantic, schema, driver, recruitment, engagement, performance, relevant-experience or similar changes that incremental processing cannot realistically backfill. Do not avoid recommending one merely to preserve the current generated demo data.
 
-Do not avoid a full run merely to preserve the current generated demo data. If full regeneration is the appropriate validation step, perform it when feasible and report the result.
+**Never start a full run on your own initiative.** With the current sector config a full run takes more than two hours and occupies the demo database, and the user wants to decide when it runs (typically at the end of the work day, once no more changes are expected) and with which config settings. Start one only when the user explicitly asks you to (e.g. "do a full run for me"); a remark such as "I don't mind a full run after this" is not such a request. When a full run is required but you were not asked to start it, finish the code, tests and documentation, then say that a full run is required and why, and let the user decide: they may ask you to start it, run it themselves (point them to README "Full run"), or postpone it. This does not restrict read-only SQL queries or in-memory narrow harnesses.
 
 ### Calibrating a new numeric parameter
 
@@ -134,5 +135,5 @@ For code changes, as applicable:
 6. Check both full and incremental behavior when simulation/schema logic changes.
 7. Update canonical documentation when behavior or semantics changed.
 8. Review the final diff for generated files, local settings, secrets and unrelated edits.
-9. When changed behavior requires historical regeneration, run a full simulation when feasible rather than leaving it as an unnecessary manual follow-up.
+9. When changed behavior requires historical regeneration, say explicitly that a full run is required and why; start it only if the user explicitly asks you to (see "Commands and operational safety").
 10. Report validation that could not be performed and any remaining required follow-up.

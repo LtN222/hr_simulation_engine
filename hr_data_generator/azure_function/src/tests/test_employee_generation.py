@@ -859,6 +859,127 @@ def test_assign_managers_resolves_role_from_a_same_day_departure_row():
     ].iloc[0] == 10
 
 
+def _parallel_team_lead_org(staff_keys, status=None):
+    employee_keys = [1, 2] + list(staff_keys)
+    return (
+        pd.DataFrame({
+            "Employee_Key": employee_keys,
+            "Manager_Key": [None] * len(employee_keys),
+        }),
+        pd.DataFrame({
+            "Employment_Key": employee_keys,
+            "Employee_Key": employee_keys,
+            "Role_Key": [1, 1] + [2] * len(staff_keys),
+            "Startdatum": pd.to_datetime(["2020-01-01"] * len(employee_keys)),
+            "Dienstverband_status": status or ["Actief"] * len(employee_keys),
+        }),
+        pd.DataFrame({
+            "Role_Key": [1, 2],
+            "Department_Key": [10, 10],
+            "Functie_Naam": ["Teamleider", "Medewerker"],
+            "Leidinggevend": [True, False],
+            "Salaris_min": [50000, 32000],
+            "Salaris_max": [65000, 42000],
+        }),
+    )
+
+
+def test_assign_managers_keeps_existing_assignments_when_the_team_changes():
+    """Regression test: the hierarchy used to be rebuilt from scratch every
+    week, so one hire or leaver reshuffled most employees to another manager
+    (70% of fact_manager_assignment intervals lasted under two weeks)."""
+    dim_employee_df, fact_employment_df, dim_role = _parallel_team_lead_org(
+        range(3, 27)
+    )
+    first = assign_managers(
+        dim_employee_df, fact_employment_df, dim_role, random.Random(42),
+        today=pd.Timestamp("2024-01-01")
+    )
+    first_managers = dict(zip(first["Employee_Key"], first["Manager_Key"]))
+
+    # Employee 3 leaves and employee 27 is hired.
+    _, next_employment, _ = _parallel_team_lead_org(
+        range(3, 28),
+        status=["Actief", "Actief", "Uit dienst"] + ["Actief"] * 24,
+    )
+    next_employees = pd.concat([
+        first,
+        pd.DataFrame({"Employee_Key": [27], "Manager_Key": [None]}),
+    ], ignore_index=True)
+
+    second = assign_managers(
+        next_employees, next_employment, dim_role, random.Random(42),
+        today=pd.Timestamp("2024-01-08")
+    )
+    second_managers = dict(zip(second["Employee_Key"], second["Manager_Key"]))
+
+    for employee_key in range(3, 27):
+        assert second_managers[employee_key] == first_managers[employee_key]
+    assert second_managers[27] in {1, 2}
+
+
+def test_assign_managers_moves_only_the_overflow_of_an_over_capacity_team():
+    dim_employee_df, fact_employment_df, dim_role = _parallel_team_lead_org(
+        range(3, 27)
+    )
+    dim_employee_df["Manager_Key"] = [None, None] + [1] * 24
+
+    assigned = assign_managers(
+        dim_employee_df, fact_employment_df, dim_role, random.Random(42),
+        today=pd.Timestamp("2024-01-01"),
+        staffing_rules={"max_team_size": 20},
+    )
+
+    # Manager 1 also leads peer team lead 2, so 19 of the 24 staff can stay.
+    report_counts = assigned["Manager_Key"].dropna().value_counts()
+    assert report_counts[1] == 20
+    assert report_counts[2] == 5
+    staff = assigned[assigned["Employee_Key"] >= 3]
+    assert (staff["Manager_Key"] == 1).sum() == 19
+
+
+def test_assign_managers_ranks_leaders_on_continuous_service():
+    """A salary review resets the current fact_employment row's Startdatum.
+    That must not make a long-serving department head look newer than a
+    peer and hand the department (and its teams) to someone else."""
+    dim_employee_df = pd.DataFrame({
+        "Employee_Key": [1, 2, 3, 4],
+        "Manager_Key": [None] * 4,
+        "Aaneengesloten_Indienst_Datum": pd.to_datetime([
+            "2005-01-01", "2015-01-01", "2018-01-01", "2019-01-01"
+        ]),
+    })
+    fact_employment_df = pd.DataFrame({
+        "Employment_Key": [1, 2, 3, 4],
+        "Employee_Key": [1, 2, 3, 4],
+        "Role_Key": [1, 1, 2, 3],
+        "Startdatum": pd.to_datetime([
+            "2023-12-01", "2015-01-01", "2018-01-01", "2019-01-01"
+        ]),
+        "Dienstverband_status": ["Actief"] * 4,
+    })
+    dim_role = pd.DataFrame({
+        "Role_Key": [1, 2, 3],
+        "Department_Key": [10, 10, 10],
+        "Functie_Naam": ["Afdelingshoofd", "Teamleider", "Medewerker"],
+        "Leidinggevend": [True, True, False],
+        "Salaris_min": [70000, 50000, 32000],
+        "Salaris_max": [90000, 65000, 42000],
+    })
+
+    assigned = assign_managers(
+        dim_employee_df, fact_employment_df, dim_role, random.Random(42),
+        today=pd.Timestamp("2024-01-01")
+    )
+    managers = dict(zip(assigned["Employee_Key"], assigned["Manager_Key"]))
+
+    # Employee 1 serves longest and is the top leader; employee 2 is the
+    # department head, and the team lead reports to them.
+    assert pd.isna(managers[1])
+    assert managers[2] == 1
+    assert managers[3] == 2
+
+
 def test_salary_policy_places_initial_salary_near_its_benchmark():
     config = ConfigLoader().load()
     role = pd.Series({

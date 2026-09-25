@@ -58,7 +58,19 @@ def assign_managers(
     max_team_size = int(
         staffing_rules.get("max_team_size", MAX_TEAM_SIZE)
     )
-    assignments = _build_manager_assignments(emp_roles, max_team_size)
+    previous_assignments = {
+        int(employee_key): int(manager_key)
+        for employee_key, manager_key in zip(
+            dim_employee_df["Employee_Key"],
+            pd.to_numeric(dim_employee_df["Manager_Key"], errors="coerce")
+        )
+        if pd.notna(employee_key) and pd.notna(manager_key)
+    }
+    assignments = _build_manager_assignments(
+        emp_roles,
+        max_team_size,
+        previous_assignments
+    )
 
     dim_employee_df["Manager_Key"] = dim_employee_df["Employee_Key"].map(
         assignments
@@ -110,17 +122,32 @@ def _build_employee_role_context(
         how="left"
     )
 
+    employee_columns = [
+        column
+        for column in ["Employee_Key", "Aaneengesloten_Indienst_Datum"]
+        if column in dim_employee_df.columns
+    ]
     context = context.merge(
-        dim_employee_df[["Employee_Key"]],
+        dim_employee_df[employee_columns],
         on="Employee_Key",
         how="inner"
     )
 
-    context["Tenure_Years"] = (
-        (today - pd.to_datetime(context["Startdatum"])).dt.days / 365.0
+    # Rank leaders on continuous service, not the current fact_employment
+    # row's Startdatum: a routine salary review resets that date, which used
+    # to flip department heads (and so whole teams) between peers.
+    service_start = (
+        pd.to_datetime(context["Startdatum"], errors="coerce")
         if "Startdatum" in context.columns
-        else 0.0
+        else pd.Series(pd.NaT, index=context.index)
     )
+    if "Aaneengesloten_Indienst_Datum" in context.columns:
+        service_start = pd.to_datetime(
+            context["Aaneengesloten_Indienst_Datum"], errors="coerce"
+        ).fillna(service_start)
+    context["Tenure_Years"] = (
+        (today - service_start).dt.days / 365.0
+    ).fillna(0.0)
     context["Is_Active"] = (
         context["Dienstverband_status"].eq("Actief")
         if "Dienstverband_status" in context.columns
@@ -158,8 +185,29 @@ def _current_employment_rows(fact_employment_df: pd.DataFrame) -> pd.DataFrame:
     return combined.drop_duplicates(subset=["Employee_Key"], keep="last")
 
 
-def _build_manager_assignments(emp_roles, max_team_size=MAX_TEAM_SIZE):
+def _build_manager_assignments(
+    emp_roles,
+    max_team_size=MAX_TEAM_SIZE,
+    previous_assignments=None
+):
+    """Build the hierarchy, keeping last week's staff assignments stable.
+
+    The leadership structure (CEO, department heads, team leads) is derived
+    deterministically. Staff keep their previous manager while that manager
+    is still a valid manager for their department and has capacity; only
+    orphans, new hires, movers and over-capacity overflow are (re)assigned.
+    """
+    previous_assignments = previous_assignments or {}
     assignments = {}
+
+    # Departed employees keep the last manager they had, so dim_employee stays
+    # connected to the hierarchy, but they no longer take up a team slot.
+    for employee_key in emp_roles.loc[~emp_roles["Is_Active"], "Employee_Key"]:
+        manager_key = previous_assignments.get(employee_key)
+        if manager_key is not None and manager_key != employee_key:
+            assignments[employee_key] = manager_key
+    emp_roles = emp_roles[~emp_roles["Employee_Key"].isin(list(assignments))]
+
     leaders = emp_roles[emp_roles["Leidinggevend"]].copy()
 
     if leaders.empty:
@@ -211,7 +259,8 @@ def _build_manager_assignments(emp_roles, max_team_size=MAX_TEAM_SIZE):
                 report_counts,
                 dept_non_leaders["Employee_Key"].tolist(),
                 peer_manager_keys,
-                max_team_size
+                max_team_size,
+                previous_assignments
             )
             continue
 
@@ -244,7 +293,8 @@ def _build_manager_assignments(emp_roles, max_team_size=MAX_TEAM_SIZE):
             report_counts,
             staff_keys,
             staff_manager_pool,
-            max_team_size
+            max_team_size,
+            previous_assignments
         )
 
     return _remove_cycles(assignments)
@@ -285,15 +335,34 @@ def _assign_balanced(
     report_counts,
     employee_keys,
     manager_pool,
-    max_team_size=MAX_TEAM_SIZE
+    max_team_size=MAX_TEAM_SIZE,
+    previous_assignments=None
 ):
     if not employee_keys or not manager_pool:
         return
 
+    previous_assignments = previous_assignments or {}
+    valid_managers = set(manager_pool)
+    unassigned = []
+
+    # Keep an existing assignment while that manager still leads this pool
+    # and has room; anything else falls through to balanced assignment.
+    for employee_key in employee_keys:
+        manager_key = previous_assignments.get(employee_key)
+        if (
+            manager_key in valid_managers
+            and manager_key != employee_key
+            and report_counts.get(manager_key, 0) < max_team_size
+        ):
+            assignments[employee_key] = manager_key
+            report_counts[manager_key] = report_counts.get(manager_key, 0) + 1
+        else:
+            unassigned.append(employee_key)
+
     required_managers = max(1, math.ceil(len(employee_keys) / TARGET_TEAM_SIZE))
     active_pool = manager_pool[:required_managers] or manager_pool
 
-    for employee_key in employee_keys:
+    for employee_key in unassigned:
         candidates = [
             manager_key
             for manager_key in active_pool

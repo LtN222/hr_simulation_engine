@@ -29,10 +29,8 @@ class PerformanceSimulator:
         dim_employee = state["dim_employee"]
         fact_employment = state["fact_employment"]
         dim_role = state["dim_role"]
-        dim_education = state["dim_education"]
 
         role_lookup = dim_role.set_index("Role_Key")
-        edu_lookup = dim_education.set_index("Education_Key")
 
         records = []
         review_key = 1
@@ -47,17 +45,12 @@ class PerformanceSimulator:
 
             role = role_lookup.loc[employment_row["Role_Key"]]
 
-            education = edu_lookup.loc[
-                emp["Education_Key"]
-            ]["Opleidingsniveau"]
-
             startdatum = employment_row["Startdatum"]
 
             reviews = self._generate_reviews(
                 employee_key,
                 startdatum,
                 role,
-                education,
                 today,
                 review_key,
                 employment_row,
@@ -79,7 +72,6 @@ class PerformanceSimulator:
         dim_employee = state["dim_employee"]
         fact_employment = state["fact_employment"]
         dim_role = state["dim_role"]
-        dim_education = state["dim_education"]
 
         active = fact_employment[
             fact_employment["Dienstverband_status"] == "Actief"
@@ -92,7 +84,6 @@ class PerformanceSimulator:
         active = active.drop_duplicates(subset=["Employee_Key"], keep="last")
 
         role_lookup = dim_role.set_index("Role_Key")
-        edu_lookup = dim_education.set_index("Education_Key")
         employee_lookup = dim_employee.set_index("Employee_Key")
         satisfaction_model = SatisfactionModel(self.config)
         engagement_model = EngagementModel(self.config)
@@ -114,7 +105,6 @@ class PerformanceSimulator:
 
             emp = employee_lookup.loc[employee_key]
             role = role_lookup.loc[employment["Role_Key"]]
-            education = edu_lookup.loc[emp["Education_Key"]]["Opleidingsniveau"]
             tenure_days = self._tenure_days(emp, today)
 
             if tenure_days < 180:
@@ -139,8 +129,6 @@ class PerformanceSimulator:
                 performance_score=previous_score,
             )
             score = self._calculate_score(
-                tenure_days / 365,
-                education,
                 role["Leidinggevend"],
                 previous_score=previous_score,
                 engagement_effect=self._engagement_review_effect(engagement),
@@ -187,7 +175,6 @@ class PerformanceSimulator:
         employee_key,
         startdatum,
         role,
-        education,
         today,
         review_key_start,
         employment,
@@ -207,11 +194,15 @@ class PerformanceSimulator:
 
         tenure_years = tenure_days // 365
         review_count = min(tenure_years, 5)
+        # Backfill the most recent anniversaries, not the first ones, so a
+        # long-tenured employee's history ends just before the start date.
+        first_anniversary = tenure_years - review_count + 1
+        previous_score = None
 
         for i in range(review_count):
 
             review_date = startdatum + pd.DateOffset(
-                years=i + 1,
+                years=first_anniversary + i,
                 days=self.rng.randint(-30, 30)
             )
 
@@ -223,12 +214,12 @@ class PerformanceSimulator:
                 continue
 
             score = self._calculate_score(
-                (review_date - pd.Timestamp(startdatum)).days / 365.2425,
-                education,
                 role["Leidinggevend"],
+                previous_score=previous_score,
                 relevant_experience=experience_as_of(employment, review_date),
                 employee_key=employee_key,
             )
+            previous_score = score
 
             records.append(
                 build_record(
@@ -260,49 +251,82 @@ class PerformanceSimulator:
     
     def _calculate_score(
         self,
-        tenure_years,
-        education,
         is_manager,
         previous_score=None,
         engagement_effect=0.0,
         relevant_experience=0.0,
         employee_key=None,
     ):
+        """Score = stable personal level + a partly persistent yearly deviation.
 
-        latent_score = previous_score if previous_score is not None else 3.4
-        score = 0.75 * latent_score + 0.25 * self.rng.normalvariate(3.4, 0.6)
+        Only the *deviation* from the personal level carries over between
+        reviews. Carrying over the whole previous score (as an earlier version
+        did) re-adds every bonus each year, so the long-run score drifted to
+        baseline + 4x the bonuses and most long-tenured employees ended up
+        pinned at the 5.0 cap. The configured values are calibrated so the
+        population lands on a realistic Dutch distribution (mean ~3.35, ~7%
+        at 4.0 or higher, well under 1% at 4.5 or higher).
+        """
+        settings = self._settings
+        expected = self._expected_score(is_manager, relevant_experience, employee_key)
 
-        # Relevant vakmanschap grows from prior and in-role experience.
-        score += min(0.30, max(0.0, float(relevant_experience)) * 0.04)
-        if tenure_years < 0.5 and relevant_experience < 1:
-            score -= 0.15
+        persistence = float(settings.get("year_to_year_persistence", 0.35))
+        variation = float(settings.get("yearly_variation_sd", 0.33))
+        previous = pd.to_numeric(previous_score, errors="coerce")
+        if pd.isna(previous):
+            # No earlier review: draw from the stationary deviation spread.
+            deviation = self.rng.normalvariate(
+                0, variation / (1 - persistence ** 2) ** 0.5
+            )
+        else:
+            max_carry = float(settings.get("max_carried_deviation", 1.0))
+            carried = max(-max_carry, min(max_carry, float(previous) - expected))
+            deviation = persistence * carried + self.rng.normalvariate(0, variation)
+
+        # Keep engagement's forward effect small to avoid a feedback loop.
+        cap = float(settings.get("engagement_effect_cap", 0.12))
+        score = expected + deviation + max(-cap, min(cap, float(engagement_effect)))
+
+        return round(max(1, min(5, score)), 2)
+
+    def _expected_score(self, is_manager, relevant_experience, employee_key):
+        settings = self._settings
+        weights = settings.get("trait_weights", {})
+        score = float(settings.get("baseline", 3.2))
 
         # These are bounded role-normalised behavioural signals; they do not
         # reward overtime, availability, absence, or a raw effort proxy.
         if employee_key is not None:
             stable = EngagementModel(None)._stable_value
-            score += stable(employee_key, "execution") * 0.16
-            score += stable(employee_key, "collaboration") * 0.10
-            score += stable(employee_key, "initiative") * 0.10
-            score += stable(employee_key, "coaching") * (
-                0.14 if is_manager else 0.08
+            score += stable(employee_key, "execution") * float(
+                weights.get("execution", 0.30)
+            )
+            score += stable(employee_key, "collaboration") * float(
+                weights.get("collaboration", 0.19)
+            )
+            score += stable(employee_key, "initiative") * float(
+                weights.get("initiative", 0.19)
+            )
+            score += stable(employee_key, "coaching") * float(
+                weights.get("coaching_manager", 0.26) if is_manager
+                else weights.get("coaching", 0.15)
             )
 
-        # Leidinggevenden iets hoger
         if is_manager:
-            score += 0.15
+            score += float(settings.get("manager_effect", 0.10))
 
-        # 🔥 NIEUW: tenure-based groei (max +0.3)
-        score += min(0.3, tenure_years * 0.05)
+        # Relevant vakmanschap (prior plus in-role experience) is the single
+        # experience signal; plain tenure is not counted separately on top.
+        ramp = float(settings.get("experience_ramp_years", 6))
+        experience = max(0.0, float(relevant_experience or 0.0))
+        score += float(settings.get("experience_effect_max", 0.20)) * min(
+            1.0, experience / ramp if ramp > 0 else 1.0
+        )
+        return score
 
-        # 🔥 NIEUW: kleine jaarlijkse fluctuatie
-        score += self.rng.normalvariate(0, 0.1)
-
-        # Keep engagement's forward effect small to avoid a feedback loop.
-        score += max(-0.12, min(0.12, float(engagement_effect)))
-
-        # Clamp tussen 1 en 5
-        return round(max(1, min(5, score)), 2)
+    @property
+    def _settings(self):
+        return getattr(self.config, "performance", None) or {}
 
     def _performance_driver_key(
         self, state, employee_key, review_date, is_manager,

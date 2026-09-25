@@ -112,7 +112,13 @@ class EmploymentFactory:
         return pd.Timestamp(today) - pd.Timedelta(days=round(tenure_years * 365.2425))
 
     def _choose_performance(self):
-        score = round(self.rng.normalvariate(3.5, 0.5), 2)
+        # Pre-review starting score, drawn from the same calibrated
+        # distribution the annual reviews target (see config "performance").
+        settings = getattr(self.config, "performance", None) or {}
+        score = round(self.rng.normalvariate(
+            float(settings.get("initial_score_mean", 3.35)),
+            float(settings.get("initial_score_sd", 0.45)),
+        ), 2)
         return max(1, min(5, score))
 
     def _choose_contract(self, start_date, today, contract_rules):

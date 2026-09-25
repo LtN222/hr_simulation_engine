@@ -398,7 +398,7 @@ class HiringSimulator:
         quality = pd.to_numeric(candidate_quality, errors="coerce")
         if pd.isna(quality):
             return factory_score
-        return round(max(0, min(5, 0.7 * float(factory_score) + 0.3 * quality)), 2)
+        return round(max(1, min(5, 0.7 * float(factory_score) + 0.3 * quality)), 2)
 
     def _mark_recruitment_as_hired(self, state, recruitment_employee_updates):
         recruitment = state.get("fact_recruitment", pd.DataFrame())

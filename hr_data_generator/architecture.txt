@@ -105,9 +105,11 @@ Facts include:
   The accepted application determines the hire source of a filled vacancy.
 - fact_salary_benchmark: monthly role, scale and salary-step benchmarks.
 - fact_manager_assignment: effective-dated manager history used to build the
-  monthly workforce context.
+  monthly workforce context. Assignments are sticky week to week; only
+  orphans, new hires, department movers and over-capacity overflow move.
 - fact_performance_review: annual performance-review events with one dominant
-  performance driver.
+  performance driver. Score = stable personal level + partly persistent
+  yearly deviation, calibrated via the config "performance" section.
 - fact_safety_incident: one row per workplace safety incident, with the role,
   department, location and shift at incident time. Incidents that cause real
   lost time also create the matching fact_absence episode (Bedrijfsongeval).

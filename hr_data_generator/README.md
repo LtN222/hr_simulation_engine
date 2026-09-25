@@ -143,10 +143,18 @@ Belangrijke facts zijn:
 - `fact_workforce_snapshot`: maandelijkse workforce-stand per actieve
   medewerker; dit is de centrale analysetabel voor medewerkerstrends.
 - `fact_manager_assignment`: technische, effectieve-datumhistorie van de
-  managerrelatie.
+  managerrelatie. Wordt bij de initiële populatie, elke gesimuleerde week en
+  aan het eind van zowel een volledige als een incrementele run bijgewerkt.
+  Toewijzingen zijn stabiel: een medewerker houdt zijn manager zolang die
+  manager nog leidinggeeft in dezelfde afdeling en ruimte heeft. Alleen
+  medewerkers zonder geldige manager, nieuwe instroom, afdelingswisselaars en
+  de overloop van een te groot team worden opnieuw toegewezen. Uit dienst
+  getreden medewerkers houden hun laatste manager in `dim_employee` en tellen
+  niet mee voor de teamgrootte.
 - `fact_salary_benchmark`: maandelijkse marktbenchmark per rol, schaal en
   salaristrede.
-- `fact_performance_review`.
+- `fact_performance_review`: jaarlijkse beoordeling per medewerker (zie
+  hieronder voor de scoresemantiek).
 - `fact_safety_incident`: één regel per veiligheidsincident, inclusief het
   incidenttype, de rol/afdeling/locatie/ploegendienst op het moment van het
   incident en de verloren werkdagen. Een incident met werkelijk verzuim
@@ -245,6 +253,18 @@ buiten werktijd zijn geen performancefactoren. De driver
 `Relevante startkwalificatie` blijft inactief totdat een opleidingsrichting en
 een aantoonbare relatie met rol of domein zijn gemodelleerd; alleen
 `EducationLevel_Key` is daarvoor onvoldoende.
+
+`Prestatie_Score` is een continue score op een schaal van 1-5. Hij bestaat uit
+een stabiel persoonlijk niveau (vaste gedragskenmerken, een klein
+leidinggevende-effect en relevante ervaring, die na een aantal jaren afvlakt)
+plus een jaarlijkse afwijking. Alleen die afwijking werkt gedeeltelijk door
+naar het volgende jaar, zodat bonussen zich niet jaar na jaar opstapelen. De
+parameters in de `performance`-sectie van de sectorconfiguratie zijn
+gekalibreerd op een realistische Nederlandse verdeling: gemiddeld circa 3,35,
+ongeveer 7% op 4,0 of hoger, minder dan 1% op 4,5 of hoger en een 5,0 vrijwel
+nooit. De teruggevulde historie van de initiële populatie beslaat de meest
+recente (maximaal vijf) jubilea vóór de startdatum. Na een wijziging in dit
+model is een volledige run nodig.
 
 `EngagementDriver_Key` legt één dominante vorm van vrijwillige, constructieve
 extra rol- of organisatiebijdrage vast, zoals initiatief, kennisdeling,
