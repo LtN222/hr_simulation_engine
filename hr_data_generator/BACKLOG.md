@@ -395,7 +395,7 @@ vectorized attrition). Revisit after AR-16 and before declaring AR-17 fully
 done; benchmark actual full-run time impact at real headcount before/after
 both are in (see "Suggested order").
 
-**AR-18 - Cost grows with accumulated history (medium)**
+**AR-18 - Cost grows with accumulated history (medium; ✔ confirmed 2026-09-25, not yet fixed)**
 Growing tables are appended with `pd.concat` and scanned, copied and
 date-converted in full every week. Absence loops over all `dim_employee` rows,
 leavers included. `sync_manager_assignments` is O(active × open) per week. So
@@ -403,6 +403,31 @@ total cost is roughly O(weeks²). Each incremental run rebuilds every monthly
 snapshot back to 2020 (`run_simulation_incremental.py:~108-114`, row by row
 per month), then throws almost all of it away. Snapshot keys only allow
 `Employee_Key < 10000` (`workforce_snapshot.py:~393`).
+
+**Confirmed with a partial benchmark (2026-09-25, after AR-16/AR-17):**
+in-memory run (no SQL - a benchmark, not a full run), `initial_population.headcount`
+overridden to 50, `burn_in_years` to 2, `baseline_headcount` left at its
+config default of 200 (this was itself a mix-up - "base headcount of 50" was
+read as only the *initial* population, not also lowering the growth target,
+so the run kept growing toward 200+ for its whole ~8.7 simulated years
+instead of staying small; stopped partway through, at week 280 of ~452,
+once that was noticed). Even so, the partial data is clear evidence for
+AR-18 on its own: per-week time rose from 0.61s (week 20, active=58,
+`fact_employment`=85 rows) to 14.25s (week 280, active=390,
+`fact_employment`=1886 rows) - a 23x increase in per-week cost against only
+a 6.7x increase in active headcount over the same stretch. If cost scaled
+with headcount alone, growth should track closer to 6-7x, not 23x; the gap
+points at accumulated table size, not concurrent headcount, as the
+super-linear driver - consistent with the `pd.concat`/full-rescan pattern
+above. Full timing table and interpretation are in this session's transcript
+(2026-09-26); not reproduced here since the run itself was misconfigured and
+should be redone properly before relying on the exact multiplier.
+Redo direction for next time: set *both* `initial_population.headcount` and
+`baseline_headcount` to the same small value (e.g. 50) so the benchmark
+stays a small, stable company instead of also growing toward the real
+config's target - isolates the O(weeks) history effect from headcount
+growth, and should finish fast enough to run to completion.
+
 Direction: keep in-memory indexes updated incrementally, collect new rows in
 lists, and snapshot only month-ends after the last stored one, re-writing the
 open month (together with AR-02).
