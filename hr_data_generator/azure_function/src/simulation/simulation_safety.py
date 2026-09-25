@@ -6,6 +6,10 @@ from src.infrastructure.satisfaction import (
     SatisfactionModel,
     score_employee_satisfaction,
 )
+from src.infrastructure.dimension_lookup import (
+    department_name_for_role,
+    shift_name_for_key,
+)
 
 LOST_TIME_INCIDENT_TYPE = "Verzuimongeval"
 LOST_TIME_ABSENCE_TYPE = "Bedrijfsongeval"
@@ -110,7 +114,7 @@ class SafetyIncidentSimulator:
     # ------------------------------------------------------------------
 
     def _annual_rate(self, employment, state, today):
-        department_name = self._department_name(state, employment.get("Role_Key"))
+        department_name = department_name_for_role(state, employment.get("Role_Key"))
         base_rate = self.safety_cfg.get("annual_incident_rate_by_department", {}).get(
             department_name, 0.0
         )
@@ -120,14 +124,10 @@ class SafetyIncidentSimulator:
 
     def _ploegendienst_factor(self, employment, state):
         multipliers = self.safety_cfg.get("ploegendienst_multipliers", {})
-        shifts = state.get("dim_shift", pd.DataFrame())
-        shift_key = employment.get("Shift_Key")
-        if not multipliers or shifts.empty or pd.isna(shift_key):
+        if not multipliers:
             return 1.0
-        match = shifts.loc[
-            shifts["Shift_Key"] == shift_key, "Ploegendienst_Naam"
-        ]
-        return float(multipliers.get(match.iloc[0], 1.0)) if not match.empty else 1.0
+        shift_name = shift_name_for_key(state, employment.get("Shift_Key"))
+        return float(multipliers.get(shift_name, 1.0))
 
     def _new_hire_factor(self, employment, today):
         rule = self.safety_cfg.get("new_hire_multiplier", {})
@@ -311,19 +311,6 @@ class SafetyIncidentSimulator:
             return None
         role = roles.loc[roles["Role_Key"] == role_key, "Department_Key"]
         return role.iloc[0] if not role.empty else None
-
-    def _department_name(self, state, role_key):
-        roles = state.get("dim_role", pd.DataFrame())
-        departments = state.get("dim_department", pd.DataFrame())
-        if roles.empty or departments.empty or pd.isna(role_key):
-            return None
-        role = roles.loc[roles["Role_Key"] == role_key]
-        if role.empty or "Department_Key" not in role.columns:
-            return None
-        department = departments.loc[
-            departments["Department_Key"] == role.iloc[0]["Department_Key"]
-        ]
-        return department.iloc[0]["Afdeling_Naam"] if not department.empty else None
 
     @staticmethod
     def _next_key(dataframe, key_column):

@@ -4,9 +4,13 @@ import hashlib
 
 import pandas as pd
 
-from src.infrastructure.satisfaction import _cache_scalar, _department_name, _interpolate
+from src.infrastructure.satisfaction import _cache_scalar, _interpolate
 from src.infrastructure.employment_history import employment_history_for
 from src.infrastructure.driver_selection import driver_key_for
+from src.infrastructure.dimension_lookup import (
+    department_name_for_role,
+    event_gebeurtenis_lookup,
+)
 
 
 class EngagementModel:
@@ -175,7 +179,7 @@ def score_employee_engagement(
         compa_ratio = employment.get("Streef_Compa_Ratio")
     if manager_key is None:
         manager_key = employee.get("Manager_Key")
-    department_name = _department_name(state, employment.get("Role_Key"))
+    department_name = department_name_for_role(state, employment.get("Role_Key"))
 
     cache = state.setdefault("_engagement_cache", {})
     cache_key = (
@@ -269,11 +273,7 @@ def _compute_career_momentum(
     if history.empty:
         return 0.0
 
-    event_types = state.get("dim_event_type", pd.DataFrame())
-    event_lookup = (
-        event_types.set_index("EventType_Key")["Gebeurtenis"].to_dict()
-        if not event_types.empty else {}
-    )
+    event_lookup = event_gebeurtenis_lookup(state)
     event_keys = history.get(
         "EventType_Key",
         pd.Series(index=history.index, dtype="object"),

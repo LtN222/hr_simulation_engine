@@ -8,6 +8,10 @@ from src.infrastructure.satisfaction import (
     SatisfactionModel,
     score_employee_satisfaction,
 )
+from src.infrastructure.dimension_lookup import (
+    department_name_for_role,
+    shift_name_for_key,
+)
 
 
 class AbsenceSimulator:
@@ -305,36 +309,17 @@ class AbsenceSimulator:
 
     def _ploegendienst_factor(self, employment, state):
         multipliers = self.absence_cfg.get("ploegendienst_multipliers", {})
-        shifts = state.get("dim_shift", pd.DataFrame())
-        shift_key = employment.get("Shift_Key")
-        if not multipliers or shifts.empty or pd.isna(shift_key):
+        if not multipliers:
             return 1.0
-        match = shifts.loc[
-            shifts["Shift_Key"] == shift_key,
-            "Ploegendienst_Naam"
-        ]
-        return float(multipliers.get(match.iloc[0], 1.0)) if not match.empty else 1.0
+        shift_name = shift_name_for_key(state, employment.get("Shift_Key"))
+        return float(multipliers.get(shift_name, 1.0))
 
     def _department_factor(self, employment, state):
         multipliers = self.absence_cfg.get("department_multipliers", {})
-        roles = state.get("dim_role", pd.DataFrame())
-        departments = state.get("dim_department", pd.DataFrame())
-        role_key = employment.get("Role_Key")
-        if not multipliers or roles.empty or departments.empty or pd.isna(role_key):
+        if not multipliers:
             return 1.0
-
-        role = roles.loc[roles["Role_Key"] == role_key]
-        if role.empty or "Department_Key" not in role.columns:
-            return 1.0
-        department = departments.loc[
-            departments["Department_Key"] == role.iloc[0]["Department_Key"]
-        ]
-        if department.empty:
-            return 1.0
-        return float(multipliers.get(
-            department.iloc[0].get("Afdeling_Naam"),
-            1.0
-        ))
+        department_name = department_name_for_role(state, employment.get("Role_Key"))
+        return float(multipliers.get(department_name, 1.0))
 
     def _available_absence_types(self, dim_absence_type):
         if dim_absence_type.empty:

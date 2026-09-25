@@ -282,20 +282,60 @@ Direction: compute the eligible internal set once per vacancy (or target role)
 per week; pick the source first and only draw an internal candidate when the
 internal source is chosen; build credential/role dictionaries once per week.
 
-**AR-17 - Per-employee context is rebuilt every week (high; about 55% of week time; full run: yes)**
+**🟡 AR-17 partially fixed (2026-09-25) - Per-employee context is rebuilt every week (was: high; about 55% of week time; full run: no for the part fixed - it is output-preserving, see below)**
 Attrition scores satisfaction and engagement for every active employee every
 week (`simulation_attrition.py:~75-131`). The model itself is cheap; the cost
-is the context lookups:
-- `satisfaction._department_name`: about 2.8 ms per call, from boolean filters
-  on small dimension tables;
-- `_compute_career_momentum`: copies history, re-parses dates and rebuilds
-  lookups on every call;
-- band lookups.
+was the context lookups:
+- `satisfaction._department_name`: about 2.8 ms per call, from two boolean
+  filters (role -> department) on small dimension tables, repeated
+  independently in `satisfaction.py` (shared by `engagement.py`),
+  `simulation_safety.py` and `simulation_absence.py`'s own private copies of
+  the same helper;
+- `_compute_career_momentum`: rebuilt the whole `EventType_Key -> Gebeurtenis`
+  dict from scratch on every call, duplicated near-identically in
+  `satisfaction.py` and `engagement.py`, even though `dim_event_type` never
+  changes within a run;
+- `_ploegendienst_factor` (absence and safety): the same per-call boolean
+  filter on `dim_shift`.
 
-The same pattern appears in absence (`~306-337`) and safety (`~112-130`, `~315-326`).
-Direction: one per-week lookup context (active rows indexed by `Employee_Key`,
-role → department and shift dictionaries, last move date per employee via one
-groupby, band thresholds for `np.searchsorted`).
+**Fixed:** added `src/infrastructure/dimension_lookup.py`
+(`department_name_for_role`, `shift_name_for_key`, `event_gebeurtenis_lookup`),
+each memoized in `state`, keyed by the source dimension DataFrames' object
+identity - safe because `dim_role`/`dim_department`/`dim_shift`/`dim_event_type`
+are assigned to `state` exactly once, during initial population generation,
+and never reassigned during the weekly loop (verified: no
+`state["dim_role"] = ...`/`state["dim_department"] = ...`/
+`state["dim_event_type"] = ...` anywhere outside population generation).
+Wired into `satisfaction.py`, `engagement.py`, `simulation_safety.py` and
+`simulation_absence.py`, replacing 4 of the duplicated per-call filters (the
+5 remaining `_department_name(department_key, state)` copies in
+`simulation_contracts.py`/`simulation_hiring.py`/`simulation_recruitment.py`/
+`simulation_vacancy.py` take a `Department_Key` directly rather than a
+`Role_Key`, are cheaper single-table filters, and are not in this per-employee
+hot path - left as a smaller, separate cleanup under AR-21).
+
+**Verified output-preserving**, not just tested: a 50-employee, 60-week,
+fully in-memory scenario (no SQL) was run once on the pre-fix code and once
+on the fixed code, same `simulation_seed`, and all 32 resulting tables
+(`dim_employee`, `fact_employment`, `fact_absence`, `fact_safety_incident`,
+`fact_performance_review`, etc.) came out byte-for-byte identical
+(`pd.testing.assert_frame_equal` on every column of every table). This
+required also pinning `faker`'s own seed for the comparison - see AR-32,
+a new, separate finding surfaced by this check. `test_dimension_lookup.py`
+adds unit coverage (including that the cache is invalidated by object
+identity, not by value, and that a role whose department is missing returns
+`None` rather than pandas `NaN` - the satisfaction model hashes
+`department_name` into its team-fit signal, so `None` vs `NaN` is not
+cosmetic there). Full suite: 227 passed.
+
+**Still open:** AR-16 (recruitment's internal-candidate search, a different,
+larger cost that *does* change the number of random draws once fixed - not
+attempted here) and the "one per-week lookup context for active rows +
+band-threshold arrays" part of the original direction, which goes further
+than memoizing static dimension joins (e.g. `np.searchsorted` band lookups,
+vectorized attrition). Revisit after AR-16 and before declaring AR-17 fully
+done; benchmark actual full-run time impact at real headcount before/after
+both are in (see "Suggested order").
 
 **AR-18 - Cost grows with accumulated history (medium)**
 Growing tables are appended with `pd.concat` and scanned, copied and
@@ -466,6 +506,32 @@ The header says "Outstanding work only", but about 35 sections are completed
 - `azure_function/src/database/__pycache__` is left over from an old layout.
 - Azurite state exists in both the project root and `azure_function/`.
 
+**AR-32 ✔ verified (found 2026-09-25) - Employee names are not reproducible from the configured seed (low)**
+`src/generator/person_factory.py._choose_name` draws first/last names from
+module-level `faker.Faker` instances (`fakeNL`, `fakeINT`), which have their
+own internal random state seeded from OS entropy at import time, not from
+`simulation_seed`. Every other simulated value (role, department, salary,
+gender, tenure, all subsequent weekly events) is drawn from the
+`random.Random(seed)` instance threaded through the whole pipeline and *is*
+reproducible; only `Voornaam`/`Achternaam` (and the Expat branch's
+international name/country in `_choose_special_arrangement`) are not.
+Found while validating AR-17: two runs of an identical 50-employee/60-week
+scenario with the same `simulation_seed` produced 31 of 32 tables
+byte-for-byte identical and only `dim_employee`'s name columns differing
+100%, in a full-permutation pattern consistent with each run drawing names in
+a different, unrelated order - confirmed by calling `Faker.seed(seed)`
+alongside `random.Random(seed)`, after which all 32 tables matched exactly.
+This is nothing to do with AR-17 or its fix.
+Impact: low on its own (a person's first/last name has no downstream
+consequence for any metric or business rule; nothing reads them for
+non-display purposes). But it silently breaks the "reproducible from the
+configured seed" invariant CLAUDE.md asks for, and would confuse any future
+"does the full run reproduce exactly" verification (like AR-17's) that
+doesn't already know to special-case name columns.
+Direction: call `Faker.seed(simulation_seed)` (and the same for `fakeINT`)
+once per run, near where `random.Random(seed)` is constructed in
+`run_simulation.py`/`run_simulation_incremental.py`/`population.py`.
+
 ### Suggested order
 
 Reprioritized 2026-09-25 at the user's request: full-run speed comes before
@@ -528,6 +594,17 @@ is a cheap option and is the user's call.
 - **AR-07 fixed: 11 leftover columns marked deprecated.** They will be
   dropped from SQL on the next write (full or incremental - no full run
   needed for this one specifically).
+- **AR-17 partially fixed: static-dimension lookups cached.**
+  `src/infrastructure/dimension_lookup.py` memoizes role→department name,
+  shift name and the event-type Gebeurtenis dict, replacing 4 duplicated
+  per-employee, per-week `.loc[]` filters in `satisfaction.py`,
+  `engagement.py`, `simulation_safety.py` and `simulation_absence.py`.
+  Verified output-preserving with a before/after byte-for-byte comparison of
+  all 32 tables from an identical seeded scenario - no full run needed for
+  this part; AR-16 and the rest of AR-17's original scope are still open.
+- **AR-32 found (not fixed): employee names aren't seeded.** Surfaced while
+  validating AR-17 above - `faker`'s own RNG, not `simulation_seed`, drives
+  `Voornaam`/`Achternaam`. Left open; low impact (display-only).
 
 ## ✅ Added: ketenregeling (Dutch temporary-contract chain rule)
 

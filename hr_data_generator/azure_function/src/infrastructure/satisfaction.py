@@ -6,6 +6,10 @@ from dataclasses import dataclass
 import pandas as pd
 
 from src.infrastructure.employment_history import employment_history_for
+from src.infrastructure.dimension_lookup import (
+    department_name_for_role,
+    event_gebeurtenis_lookup,
+)
 
 
 @dataclass(frozen=True)
@@ -278,7 +282,7 @@ def explain_employee_satisfaction(
         compa_ratio = employment.get("Streef_Compa_Ratio")
     if manager_key is None:
         manager_key = employee.get("Manager_Key")
-    department_name = _department_name(state, employment.get("Role_Key"))
+    department_name = department_name_for_role(state, employment.get("Role_Key"))
 
     cache = state.setdefault("_satisfaction_cache", {})
     cache_key = (
@@ -356,11 +360,7 @@ def _compute_career_momentum(state, employee_key, as_of_date, performance_score,
     if history.empty:
         return 0.0
 
-    event_types = state.get("dim_event_type", pd.DataFrame())
-    event_lookup = (
-        event_types.set_index("EventType_Key")["Gebeurtenis"].to_dict()
-        if not event_types.empty else {}
-    )
+    event_lookup = event_gebeurtenis_lookup(state)
     history["Gebeurtenis"] = history.get(
         "EventType_Key", pd.Series(index=history.index, dtype="object")
     ).map(event_lookup)
@@ -384,21 +384,6 @@ def _compute_career_momentum(state, employee_key, as_of_date, performance_score,
     if pd.notna(performance) and performance >= 4.0 and years >= threshold:
         return float(momentum.get("high_performer_stagnation_effect", -0.18))
     return 0.0
-
-
-def _department_name(state, role_key):
-    roles = state.get("dim_role", pd.DataFrame())
-    departments = state.get("dim_department", pd.DataFrame())
-    if roles.empty or departments.empty or pd.isna(role_key):
-        return None
-
-    role = roles.loc[roles["Role_Key"] == role_key]
-    if role.empty or "Department_Key" not in role.columns:
-        return None
-    department = departments.loc[
-        departments["Department_Key"] == role.iloc[0]["Department_Key"]
-    ]
-    return None if department.empty else department.iloc[0].get("Afdeling_Naam")
 
 
 def _interpolate(value, left_x, right_x, left_y, right_y):
