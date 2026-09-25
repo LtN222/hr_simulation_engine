@@ -526,3 +526,224 @@ def test_full_funnel_hires_someone_over_several_simulated_weeks():
     terminal = fact[fact["Status"] != RecruitmentSimulator.IN_PROGRESS_STATUS]
     assert terminal["Decision_Date"].notna().all()
     assert fact.loc[fact["Status"] == "Afgewezen", "RejectionReason_Key"].notna().all()
+
+
+# ----------------------------------------------------------------------
+# AR-16: source selection no longer scans internal-mobility eligibility
+# unconditionally - only when that source is actually drawn, redrawing
+# among the remaining sources if it turns out ineligible.
+# ----------------------------------------------------------------------
+
+def _ar16_config(internal_weight=1.0, external_weight=1.0):
+    return type("Config", (), {
+        "role_career_paths": {
+            "Operator": {"logische_doorgroei": ["Teamleider"]},
+            "Teamleider": {},
+        },
+        "career_events": {},
+        "recruitment": {
+            "source_profiles": {
+                "Vacaturebank": {"application_volume_weight": external_weight},
+                "Interne mobiliteit": {"application_volume_weight": internal_weight},
+            },
+            "candidate_quality_weights": {},
+            "external_candidate_match_probability": 0.0,
+        },
+    })()
+
+
+def _ar16_dim_role():
+    return pd.DataFrame({
+        "Role_Key": [1, 2],
+        "Functie_Naam": ["Operator", "Teamleider"],
+        "Department_Key": [1, 1],
+        "Leidinggevend": [False, False],
+        "Min_Relevante_Ervaring_Jr": [0.0, 0.0],
+        "Min_Leidinggevende_Ervaring_Jr": [0.0, 0.0],
+        "Formele_Kwalificatie_Vereist": [False, False],
+        "SalaryScale_Key": ["A", "B"],
+    })
+
+
+def _ar16_dim_hire_source():
+    return pd.DataFrame({
+        "HireSource_Key": [1, 2],
+        "Bron_Naam": ["Vacaturebank", "Interne mobiliteit"],
+        "Is_Internal": [False, True],
+    })
+
+
+def _ar16_state(active_employees, internal_weight=1.0, external_weight=1.0):
+    """`active_employees`: list of (Employee_Key, Prestatie_Score), each an
+    active Operator - eligible for the Teamleider vacancy below whenever
+    Prestatie_Score >= 2.7 (eligible_internal's own performance floor)."""
+    employment_rows = [
+        {
+            "Employee_Key": key, "Role_Key": 1, "Startdatum": pd.Timestamp("2020-01-01"),
+            "Einddatum": None, "Dienstverband_status": "Actief",
+        }
+        for key, _ in active_employees
+    ]
+    return {
+        "dim_role": _ar16_dim_role(),
+        "dim_department": pd.DataFrame({"Department_Key": [1], "Afdeling_Naam": ["Productie"]}),
+        "dim_hire_source": _ar16_dim_hire_source(),
+        "dim_employee": pd.DataFrame({
+            "Employee_Key": [key for key, _ in active_employees],
+            "Prestatie_Score": [score for _, score in active_employees],
+        }),
+        "fact_employment": pd.DataFrame(employment_rows),
+        "fact_employee_qualification": pd.DataFrame(),
+        "dim_education": pd.DataFrame({
+            "Education_Key": [1], "Opleiding_Naam": ["MBO Techniek"], "Opleidingsniveau": ["MBO"],
+        }),
+        "dim_candidate_quality_driver": [],
+        "_recruitment_pipeline_profiles": {},
+    }, _ar16_config(internal_weight, external_weight)
+
+
+def _ar16_vacancy():
+    return pd.Series({
+        "Vacancy_Key": 500, "Role_Key": 2, "Department_Key": 1,
+        "Vacature_Reden": "Groei", "Created_Date": pd.Timestamp("2024-01-01"),
+    })
+
+
+def test_choose_source_returns_the_eligible_internal_candidate_when_it_wins():
+    """A huge weight for Interne mobiliteit and a fixed seed force it to be
+    the very first draw; with an eligible candidate present, it must be
+    returned directly (no redraw needed)."""
+    state, config = _ar16_state([(10, 3.5)], internal_weight=1000.0)
+    simulator = RecruitmentSimulator(config, schema=None, rng=random.Random(1))
+
+    source, employee_key, profile = simulator._choose_source(
+        state, _ar16_vacancy(), state["dim_role"].iloc[1], "Productie",
+        reserved_internal_employees=set(), internal_pool_cache={},
+    )
+
+    assert source["Bron_Naam"] == "Interne mobiliteit"
+    assert employee_key == 10
+    assert profile is not None
+
+
+def test_choose_source_redraws_among_remaining_sources_when_internal_wins_but_has_no_eligible_candidate():
+    """Regression test for AR-16 (see BACKLOG.md "Architecture review"):
+    the eligibility scan now runs only for the source actually drawn. When
+    that source is Interne mobiliteit and turns out to have no eligible
+    candidate (no active employees here), the draw must fall back to the
+    only other configured source rather than returning nothing - matching
+    the old behaviour of excluding an infeasible source before drawing."""
+    state, config = _ar16_state([], internal_weight=1000.0, external_weight=1.0)
+    simulator = RecruitmentSimulator(config, schema=None, rng=random.Random(1))
+
+    source, employee_key, profile = simulator._choose_source(
+        state, _ar16_vacancy(), state["dim_role"].iloc[1], "Productie",
+        reserved_internal_employees=set(), internal_pool_cache={},
+    )
+
+    assert source["Bron_Naam"] == "Vacaturebank"
+    assert employee_key is None
+    assert profile is not None
+
+
+def test_choose_source_returns_none_when_the_only_source_is_internal_and_ineligible():
+    """Edge case for the redraw loop: once the only source is removed for
+    being ineligible, `remaining` is empty and the loop must terminate
+    cleanly (not hang) and report no candidate, exactly like the original
+    `if not candidates: return None, None, None` path."""
+    state, config = _ar16_state([], internal_weight=1.0)
+    state["dim_hire_source"] = state["dim_hire_source"].iloc[[1]].reset_index(drop=True)
+    simulator = RecruitmentSimulator(config, schema=None, rng=random.Random(1))
+
+    source, employee_key, profile = simulator._choose_source(
+        state, _ar16_vacancy(), state["dim_role"].iloc[1], "Productie",
+        reserved_internal_employees=set(), internal_pool_cache={},
+    )
+
+    assert (source, employee_key, profile) == (None, None, None)
+
+
+def test_eligible_internal_pool_is_cached_per_vacancy_not_recomputed_per_call():
+    """The eligibility scan must run at most once per vacancy per run() call
+    - a second call for the same vacancy (e.g. a second application drawn
+    that week) must reuse the cached pool rather than re-scanning
+    fact_employment, even if fact_employment changed in between."""
+    state, config = _ar16_state([(10, 3.5)])
+    simulator = RecruitmentSimulator(config, schema=None, rng=random.Random(1))
+    vacancy = _ar16_vacancy()
+    cache = {}
+
+    first = simulator._eligible_internal_pool(state, vacancy, cache)
+    assert list(first["Employee_Key"]) == [10]
+
+    # Mutate fact_employment as if the candidate left - a fresh scan would
+    # now return an empty pool.
+    state["fact_employment"]["Dienstverband_status"] = "Inactief"
+
+    second = simulator._eligible_internal_pool(state, vacancy, cache)
+    assert list(second["Employee_Key"]) == [10]  # unchanged: served from cache
+
+
+def test_eligible_internal_pool_excludes_a_candidate_below_the_performance_floor():
+    state, config = _ar16_state([(10, 2.0), (11, 3.5)])
+    simulator = RecruitmentSimulator(config, schema=None, rng=random.Random(1))
+
+    pool = simulator._eligible_internal_pool(state, _ar16_vacancy(), {})
+
+    assert list(pool["Employee_Key"]) == [11]
+
+
+def test_choose_source_matches_the_configured_weights_when_internal_is_always_ineligible():
+    """Direct statistical check for AR-16: with Interne mobiliteit always
+    ineligible (no active employees), the redraw-on-ineligible approach must
+    still select each *external* source at its configured relative weight -
+    exactly matching the old behaviour of excluding it before drawing."""
+    state, config = _ar16_state([], internal_weight=3.0)
+    config.recruitment["source_profiles"]["Referral"] = {"application_volume_weight": 2.0}
+    state["dim_hire_source"] = pd.concat([
+        state["dim_hire_source"],
+        pd.DataFrame([{"HireSource_Key": 3, "Bron_Naam": "Referral", "Is_Internal": False}]),
+    ], ignore_index=True)
+    simulator = RecruitmentSimulator(config, schema=None, rng=random.Random(7))
+    vacancy = _ar16_vacancy()
+    target_role = state["dim_role"].iloc[1]
+
+    picks = []
+    for _ in range(4000):
+        source, employee_key, _ = simulator._choose_source(
+            state, vacancy, target_role, "Productie",
+            reserved_internal_employees=set(), internal_pool_cache={},
+        )
+        assert employee_key is None  # never internal - nobody is eligible
+        picks.append(source["Bron_Naam"])
+
+    assert "Interne mobiliteit" not in picks
+    vacaturebank_share = picks.count("Vacaturebank") / len(picks)
+    referral_share = picks.count("Referral") / len(picks)
+    # Configured weights are 1.0 (Vacaturebank) vs 2.0 (Referral) -> ~33%/67%.
+    assert 0.29 < vacaturebank_share < 0.37
+    assert 0.63 < referral_share < 0.71
+
+
+def test_choose_source_matches_the_configured_weight_when_internal_is_always_eligible():
+    """Same check with Interne mobiliteit always eligible: its overall
+    selection share should match its configured weight against the total,
+    the same as before AR-16's fix."""
+    state, config = _ar16_state([(10, 3.5)], internal_weight=1.0, external_weight=3.0)
+    simulator = RecruitmentSimulator(config, schema=None, rng=random.Random(7))
+    vacancy = _ar16_vacancy()
+    target_role = state["dim_role"].iloc[1]
+
+    picks = []
+    for _ in range(4000):
+        source, employee_key, _ = simulator._choose_source(
+            state, vacancy, target_role, "Productie",
+            reserved_internal_employees=set(), internal_pool_cache={},
+        )
+        picks.append(source["Bron_Naam"])
+        if source["Bron_Naam"] == "Interne mobiliteit":
+            assert employee_key == 10
+
+    internal_share = picks.count("Interne mobiliteit") / len(picks)
+    # Configured weights are 1.0 (internal) vs 3.0 (Vacaturebank) -> ~25%.
+    assert 0.21 < internal_share < 0.29

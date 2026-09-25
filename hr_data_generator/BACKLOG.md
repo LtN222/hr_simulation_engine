@@ -271,16 +271,74 @@ allocator kept in state).
 A cProfile of 5 simulated weeks (200 employees, in memory, no SQL) took about
 15 s per week. Roughly 85% of that came from AR-16 and AR-17.
 
-**AR-16 - Internal-candidate search runs once per application (high; about 35% of week time; full run: yes, the results change)**
-`_choose_source` calls `_internal_candidate` for every application
-(`simulation_recruitment.py:~573-576`). That call re-filters active rows and
-runs `eligible_internal` row by row over every active employee (`~619-636`).
-Each `eligible_internal` call repeats `dim_role.set_index` and qualification
-lookups (`role_eligibility.py:~105-137`). The cost scales with applications ×
-headcount.
-Direction: compute the eligible internal set once per vacancy (or target role)
-per week; pick the source first and only draw an internal candidate when the
-internal source is chosen; build credential/role dictionaries once per week.
+**✅ AR-16 fixed (2026-09-25) - Internal-candidate search ran once per application (was: high; about 35% of week time; full run: yes, the results change)**
+`_choose_source` called `_internal_candidate` for every application
+(`simulation_recruitment.py:~573-576`), which re-filtered active rows and ran
+`eligible_internal` row by row over every active employee (`~619-636`) -
+*before* the source was even chosen, so this ran for every application
+attempt regardless of whether "Interne mobiliteit" (weight 0.35 of ~10.5
+total in the shipped config, roughly a 3% chance of being drawn) ended up
+being used. Cost scaled with applications × headcount.
+
+**Fix - two parts, both in `simulation_recruitment.py`:**
+1. `_eligible_internal_pool(state, vacancy, cache)` computes and caches the
+   eligible-candidate pool once per vacancy (keyed by `Vacancy_Key`) for the
+   life of one `run()` call, instead of once per application drawn for that
+   vacancy. Safe/pure: `fact_employment`/`dim_employee`/`dim_role` don't
+   change between vacancies processed in the same weekly `run()` (the actual
+   hire happens later that week, in `HiringSimulator`).
+2. `_choose_source` now draws a source *first*, from a cheap weight list
+   (`_weighted_hire_sources`, no eligibility check), and only calls
+   `_eligible_internal_pool` if "Interne mobiliteit" is the one actually
+   drawn. If it turns out to have no eligible candidate, it redraws among
+   the remaining sources rather than discarding the application.
+
+**Design decision (checked with the user first, since it changes a real
+metric - internal-mobility's share of hires):** two options existed for what
+happens when internal mobility wins the draw but has no eligible candidate -
+(A) no application results this attempt (reduces total volume), or (B)
+redraw among the remaining sources (matches the pre-fix pool-exclusion
+behaviour more closely). Chose **B**. Worked out algebraically that B is
+distribution-equivalent to the original pool-exclusion approach: removing an
+always-infeasible option before drawing, versus drawing from all options and
+redrawing only when the infeasible one is hit, give every other source
+exactly the same final selection probability - confirmed empirically too
+(see validation below), not just derived on paper.
+
+**Validation - two layers, since this changes the number and sequence of
+random draws (unlike AR-17, this cannot be checked via exact-output
+equality):**
+- **Direct, well-powered statistical check** (`test_choose_source_matches_the_configured_weights_when_internal_is_always_ineligible`,
+  `test_choose_source_matches_the_configured_weight_when_internal_is_always_eligible`
+  in `test_simulation_recruitment.py`): called `_choose_source` 4,000 times
+  in isolation with fixed weights, both with internal-mobility always
+  ineligible and always eligible. Every source's empirical selection share
+  landed within the expected statistical tolerance of its configured weight
+  in both cases - the clean confirmation that the fix is unbiased.
+- **Full-scale run comparison** (50 employees, 60 simulated weeks, in
+  memory): an *initial* single-seed comparison looked alarming - internal
+  mobility's hire share dropped from 9.5% (baseline, seed 123) to 1.5%
+  (fixed code, same seed) - but this metric only has 1-8 internal-mobility
+  hires per 60-week run, an inherently noisy sample. Running 3 baseline
+  seeds (9.5%, 0%, 1.4%) and 8 fixed-code seeds (0%-4.2%, mean ~2.0%) showed
+  the baseline's 9.5% was itself a high outlier, not the typical value -
+  the two sets of samples are consistent with the same underlying rate once
+  more than one seed is looked at. Flagging this here because it's a real
+  lesson: a single-seed comparison on a rare-event metric is not sufficient
+  evidence either way, for a fix or against one.
+- **Timing**: the same 50-employee/60-week scenario ran in about 44 seconds
+  after the fix, versus roughly 7-8 minutes before it (in line with AR-17's
+  measured baseline at the same scale) - roughly a 10x speedup at this small
+  scale. This has *not* been confirmed at real headcount (1,000-1,500); the
+  review's own reasoning for why this was the dominant cost (cost scales
+  with applications x headcount) suggests the win should be at least as
+  large, possibly larger, at real scale, but that still needs an actual
+  benchmark - see "Suggested order".
+
+Full suite: 236 passed. Needs a full run once combined with the rest of the
+correctness/speed work per "Suggested order" (this fix does change history,
+since it changes which random numbers get drawn from the very first time
+"Interne mobiliteit" is drawn-but-infeasible in a run).
 
 **🟡 AR-17 partially fixed (2026-09-25) - Per-employee context is rebuilt every week (was: high; about 55% of week time; full run: no for the part fixed - it is output-preserving, see below)**
 Attrition scores satisfaction and engagement for every active employee every
@@ -611,7 +669,16 @@ is a cheap option and is the user's call.
   `engagement.py`, `simulation_safety.py` and `simulation_absence.py`.
   Verified output-preserving with a before/after byte-for-byte comparison of
   all 32 tables from an identical seeded scenario - no full run needed for
-  this part; AR-16 and the rest of AR-17's original scope are still open.
+  this part; the rest of AR-17's original scope is still open.
+- **AR-16 fixed: internal-candidate search only scans when actually drawn.**
+  Was the dominant per-week cost (review estimate: ~35%). Source is now
+  picked before the expensive eligibility scan runs, with a redraw (not a
+  dropped application) if internal mobility wins but has nobody eligible -
+  a real design choice, checked with the user first, and confirmed
+  distribution-equivalent to the old behaviour both algebraically and via a
+  4,000-draw statistical test. ~10x faster on the same 50-employee/60-week
+  scenario used to validate it (44s vs ~7-8 min); not yet confirmed at real
+  headcount. Changes history (different random draws) - needs a full run.
 - **AR-32 fixed: employee names are now seeded.** Surfaced while validating
   AR-17 above - `faker`'s own RNG, not `simulation_seed`, drove
   `Voornaam`/`Achternaam`. New `seed_person_names(seed)` in

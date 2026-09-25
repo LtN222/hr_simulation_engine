@@ -104,6 +104,13 @@ class RecruitmentSimulator:
         )
         reserved_internal_employees = self._reserved_internal_employees(fact_recruitment)
         accepted_applications = []
+        # Eligible-internal-mobility candidates for a vacancy's target role
+        # and Created_Date don't change while this method runs (the actual
+        # hire, which would change fact_employment/dim_employee, happens
+        # later that week in HiringSimulator - see simulation_runner.py), so
+        # this is computed at most once per vacancy rather than once per
+        # application drawn for it. See BACKLOG.md AR-16.
+        internal_pool_cache = {}
 
         for _, vacancy in self._open_vacancies(state).iterrows():
             if self._expire_stale_vacancy(state, vacancy, today):
@@ -116,7 +123,7 @@ class RecruitmentSimulator:
             self._withdraw_stale_candidates(state, vacancy["Vacancy_Key"], today)
             next_key = self._generate_new_applications(
                 state, vacancy, target_role, department_name, today,
-                reserved_internal_employees, next_key,
+                reserved_internal_employees, next_key, internal_pool_cache,
             )
             self._resolve_screening(state, vacancy, target_role, today)
             self._resolve_interview(state, vacancy, today, interview_capacity)
@@ -166,7 +173,7 @@ class RecruitmentSimulator:
 
     def _generate_new_applications(
         self, state, vacancy, target_role, department_name, today,
-        reserved_internal_employees, next_key,
+        reserved_internal_employees, next_key, internal_pool_cache,
     ):
         max_pending = self.recruitment_cfg.get("max_pending_pipeline_per_vacancy")
         if max_pending is not None:
@@ -188,7 +195,8 @@ class RecruitmentSimulator:
 
         for _ in range(count):
             source, employee_key, candidate_profile = self._choose_source(
-                state, vacancy, target_role, department_name, reserved_internal_employees
+                state, vacancy, target_role, department_name,
+                reserved_internal_employees, internal_pool_cache,
             )
             if source is None:
                 continue
@@ -566,30 +574,58 @@ class RecruitmentSimulator:
             }
         )
 
-    def _choose_source(self, state, vacancy, target_role, department_name, reserved_internal_employees):
-        candidates = []
-        weights = []
+    def _choose_source(
+        self, state, vacancy, target_role, department_name,
+        reserved_internal_employees, internal_pool_cache,
+    ):
+        """Pick a hire source, checking internal-mobility eligibility only
+        if that source is actually drawn.
 
+        The eligibility scan (every active employee x `eligible_internal`)
+        used to run unconditionally for every application, before the source
+        was even chosen - wasted work almost every time, since "Interne
+        mobiliteit" is deliberately low-weight and wins only a few percent
+        of draws. If it wins but turns out to have no eligible candidate,
+        redraw among the remaining sources rather than losing the
+        application - this reproduces the old pool-exclusion behaviour's
+        selection *probabilities* exactly (removing an always-infeasible
+        option before drawing and redrawing after an infeasible draw both
+        renormalise over the same remaining weights), it just resolves the
+        infeasibility after drawing instead of before. See BACKLOG.md AR-16.
+        """
+        remaining = self._weighted_hire_sources(state, department_name)
+
+        while remaining:
+            weights = [weight for _, weight in remaining]
+            index = self.rng.choices(range(len(remaining)), weights=weights)[0]
+            source, _ = remaining[index]
+
+            if self._is_internal_source(source):
+                internal_employee_key, internal_quality = self._internal_candidate(
+                    state, vacancy, source, reserved_internal_employees, internal_pool_cache,
+                )
+                if internal_employee_key is None:
+                    del remaining[index]
+                    continue
+            else:
+                internal_employee_key, internal_quality = None, None
+
+            profile = self._build_candidate_profile(state, source, target_role, internal_quality)
+            return source, internal_employee_key, profile
+
+        return None, None, None
+
+    def _weighted_hire_sources(self, state, department_name):
+        """Return [(source, weight), ...] for every hire source, without
+        checking internal-mobility eligibility - `_choose_source` only runs
+        that check for the source it actually draws."""
+        weighted = []
         for _, source in state["dim_hire_source"].iterrows():
-            internal_employee_key, internal_quality = self._internal_candidate(
-                state, vacancy, source, reserved_internal_employees
-            )
-            if self._is_internal_source(source) and internal_employee_key is None:
-                continue
-
             profile = self._source_profile(source)
             weight = float(profile.get("application_volume_weight", 1.0))
             weight *= float(profile.get("department_weights", {}).get(department_name, 1.0))
-
-            candidates.append((source, internal_employee_key, internal_quality))
-            weights.append(max(0.01, weight))
-
-        if not candidates:
-            return None, None, None
-
-        source, employee_key, internal_quality = self.rng.choices(candidates, weights=weights)[0]
-        profile = self._build_candidate_profile(state, source, target_role, internal_quality)
-        return source, employee_key, profile
+            weighted.append((source, max(0.01, weight)))
+        return weighted
 
     def _build_candidate_profile(self, state, source, target_role, internal_quality):
         """Build the candidate profile that both scores and gates the funnel.
@@ -606,38 +642,22 @@ class RecruitmentSimulator:
             return self._profile_from_quality(internal_quality, source)
         return self._external_candidate_profile(state, target_role, source)
 
-    def _internal_candidate(self, state, vacancy, source, reserved_internal_employees):
+    def _internal_candidate(
+        self, state, vacancy, source, reserved_internal_employees, internal_pool_cache,
+    ):
         if not self._is_internal_source(source):
             return None, None
 
-        employment = state.get("fact_employment", pd.DataFrame())
-        employees = state.get("dim_employee", pd.DataFrame())
-        roles = state.get("dim_role", pd.DataFrame())
-        if employment.empty or employees.empty or roles.empty:
+        pool = self._eligible_internal_pool(state, vacancy, internal_pool_cache)
+        if pool is None:
             return None, None
 
-        active = employment[employment["Dienstverband_status"] == "Actief"].copy()
-        target_role = roles.loc[roles["Role_Key"] == vacancy["Role_Key"]]
-        if active.empty or target_role.empty:
-            return None, None
-
-        target_role = target_role.iloc[0]
-        employee_scores = employees.set_index("Employee_Key")["Prestatie_Score"]
-        active["Prestatie_Score"] = active["Employee_Key"].map(employee_scores)
-        eligible = active[
-            ~active["Employee_Key"].isin(reserved_internal_employees)
-        ].copy()
-        role_lookup = roles.set_index("Role_Key")
-        eligible = eligible[eligible.apply(
-            lambda candidate: eligible_internal(
-                self.config, state, int(candidate["Employee_Key"]),
-                role_lookup.loc[candidate["Role_Key"]], target_role,
-                vacancy["Created_Date"], candidate["Prestatie_Score"],
-            ), axis=1)]
+        eligible = pool[~pool["Employee_Key"].isin(reserved_internal_employees)]
         if eligible.empty:
             return None, None
 
         # Known performance provides the main fit signal for an internal move.
+        eligible = eligible.copy()
         eligible["Selection_Weight"] = (
             eligible["Prestatie_Score"].fillna(2.7) - 2.3
         ).clip(lower=0.1)
@@ -651,6 +671,52 @@ class RecruitmentSimulator:
             + self.rng.normalvariate(0.25, 0.25)
         )
         return int(selected["Employee_Key"]), quality
+
+    def _eligible_internal_pool(self, state, vacancy, cache):
+        """Return this vacancy's eligible-for-internal-mobility candidates
+        (Employee_Key, Prestatie_Score), or None if there are none.
+
+        Ignores which candidates are currently reserved by another
+        in-progress application - that changes draw to draw within the same
+        vacancy/week and is applied by the caller, cheaply, against this
+        already-small pool. Cached per vacancy for the life of this run()
+        call: a vacancy's target role and Created_Date are fixed, and
+        fact_employment/dim_employee/dim_role don't change between vacancies
+        processed in the same weekly run (the actual hire happens later that
+        week, in HiringSimulator - see simulation_runner.py), so recomputing
+        this per application drawn for the same vacancy was pure repetition.
+        """
+        vacancy_key = vacancy["Vacancy_Key"]
+        if vacancy_key in cache:
+            return cache[vacancy_key]
+
+        employment = state.get("fact_employment", pd.DataFrame())
+        employees = state.get("dim_employee", pd.DataFrame())
+        roles = state.get("dim_role", pd.DataFrame())
+        if employment.empty or employees.empty or roles.empty:
+            cache[vacancy_key] = None
+            return None
+
+        active = employment[employment["Dienstverband_status"] == "Actief"].copy()
+        target_role_rows = roles.loc[roles["Role_Key"] == vacancy["Role_Key"]]
+        if active.empty or target_role_rows.empty:
+            cache[vacancy_key] = None
+            return None
+
+        target_role = target_role_rows.iloc[0]
+        employee_scores = employees.set_index("Employee_Key")["Prestatie_Score"]
+        active["Prestatie_Score"] = active["Employee_Key"].map(employee_scores)
+        role_lookup = roles.set_index("Role_Key")
+        eligible_mask = active.apply(
+            lambda candidate: eligible_internal(
+                self.config, state, int(candidate["Employee_Key"]),
+                role_lookup.loc[candidate["Role_Key"]], target_role,
+                vacancy["Created_Date"], candidate["Prestatie_Score"],
+            ), axis=1
+        )
+        pool = active[eligible_mask][["Employee_Key", "Prestatie_Score"]]
+        cache[vacancy_key] = pool if not pool.empty else None
+        return cache[vacancy_key]
 
     def _sample_decline_reason(self, candidate_quality):
         reasons = self.recruitment_cfg.get("decline_reasons", [])
