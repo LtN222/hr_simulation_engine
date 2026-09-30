@@ -29,7 +29,7 @@
     "blob_prefix": "images/",
     "reassign_existing_avatars": true
   },
-  "baseline_headcount": 200,
+  "baseline_headcount": 50,
   "staffing": {
     "minimum_count_for_manager_role": 1,
     "max_team_size": 10,
