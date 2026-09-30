@@ -6,7 +6,7 @@ from src.application.allocation import (
     scope_headcount,
 )
 from src.infrastructure.salary_policy import SalaryPolicy
-from src.infrastructure.shift_assignment import assign_ploegendienst_key
+from src.infrastructure.shift_assignment import carry_or_assign_shift_key
 from src.infrastructure.relevant_experience import carried_experience
 from src.infrastructure.role_eligibility import eligible_internal
 from src.infrastructure.location_assignment import resolve_location, effective_role_capacity
@@ -130,7 +130,7 @@ def simulate_career_events(
                     config,
                     service_start,
                     promoted_ratio,
-                    assign_ploegendienst_key(new_role, state, config, rng),
+                    carry_or_assign_shift_key(row, new_role, state, config, rng),
                     previous_department_key=department_key,
                     location_key=new_location_key,
                 ))
@@ -182,7 +182,7 @@ def simulate_career_events(
             config,
             service_start,
             target_ratio,
-            assign_ploegendienst_key(new_role, state, config, rng),
+            carry_or_assign_shift_key(row, new_role, state, config, rng),
             previous_department_key=department_key,
             location_key=new_location_key,
         ))

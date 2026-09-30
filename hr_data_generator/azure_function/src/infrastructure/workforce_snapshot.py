@@ -2,6 +2,7 @@
 
 import pandas as pd
 
+from src.infrastructure.performance_baseline import starting_performance
 from src.infrastructure.record_builder import build_record
 from src.infrastructure.manager_assignment import manager_as_of
 from src.infrastructure.salary_band import salary_band_key_for
@@ -70,7 +71,7 @@ def build_workforce_snapshots(
                 performance_reviews,
                 row["Employee_Key"],
                 snapshot_date,
-                employee.get("Prestatie_Score", 3.4)
+                starting_performance(employee)
             )
             performance_driver_key = _performance_driver_as_of(
                 performance_reviews, row["Employee_Key"], snapshot_date
@@ -171,7 +172,10 @@ def build_workforce_snapshots(
                 "PerformanceDriver_Key": performance_driver_key,
                 **capacity,
                 **absence_for_employee,
-                **benchmark_fields
+                **benchmark_fields,
+                # The benchmark carries the role's *current* scale; the
+                # snapshot keeps the scale of the effective employment row.
+                "SalaryScale_Key": row.get("SalaryScale_Key"),
             }
             records.append(build_record(schema, "fact_workforce_snapshot", record))
 

@@ -5,7 +5,7 @@ from src.infrastructure.manager_builder import assign_managers
 from src.infrastructure.record_builder import build_record
 from src.infrastructure.avatar import AvatarAssigner, avatar_fields
 from src.infrastructure.salary_policy import SalaryPolicy
-from src.infrastructure.shift_assignment import assign_ploegendienst_key
+from src.infrastructure.shift_assignment import carry_or_assign_shift_key
 from src.infrastructure.relevant_experience import (
     carried_experience,
     initial_relevant_experience,
@@ -353,7 +353,8 @@ class HiringSimulator:
                 "HireSource_Key": previous.get("HireSource_Key"),
                 "Role_Key": target_role["Role_Key"],
                 "Location_Key": new_location_key,
-                "Shift_Key": assign_ploegendienst_key(
+                "Shift_Key": carry_or_assign_shift_key(
+                    previous,
                     target_role,
                     state,
                     self.config,

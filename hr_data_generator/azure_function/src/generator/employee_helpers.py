@@ -1,6 +1,9 @@
 def choose_hire_source(config, dim_hire_source, rng):
     """Choose an original external source for a newly created employee.
 
+    Weighted by `initial_population.hire_source_weights` (per `Bron_Naam`) when
+    configured, uniform otherwise.
+
     Internal mobility can fill a vacancy, but it can never be an employee's
     original source of hire. Older narrow test fixtures do not carry the flag,
     so they retain their previous behaviour.
@@ -11,7 +14,18 @@ def choose_hire_source(config, dim_hire_source, rng):
         if not external_sources.empty:
             sources = external_sources
 
-    return rng.choice(sources["HireSource_Key"].tolist())
+    weights_by_name = getattr(config, "initial_population", {}).get("hire_source_weights")
+    if not weights_by_name or "Bron_Naam" not in sources.columns:
+        return rng.choice(sources["HireSource_Key"].tolist())
+
+    # Configured mix (measured from the simulated history); a source missing
+    # from the weights gets weight 0.
+    weights = [float(weights_by_name.get(name, 0.0)) for name in sources["Bron_Naam"]]
+    if sum(weights) <= 0:
+        raise ValueError(
+            "initial_population.hire_source_weights gives no external hire source a weight"
+        )
+    return rng.choices(sources["HireSource_Key"].tolist(), weights=weights, k=1)[0]
 
 
 def choose_education(

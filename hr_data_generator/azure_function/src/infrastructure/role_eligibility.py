@@ -2,6 +2,7 @@
 import pandas as pd
 
 from src.infrastructure.employment_history import employment_history_for
+from src.infrastructure.relevant_experience import carried_experience
 
 LEVELS = {"Geen": 0, "MBO": 1, "HBO": 2, "WO": 3, "PhD": 4}
 
@@ -48,16 +49,20 @@ def _required_relevant_experience(config, target_role, credentials):
     return min(required, 2.0) if has_relevant_wo else required
 
 
-def external_rejection_reason(config, target_role, candidate_profile):
-    """Return why an external candidate fails the role's eligibility policy,
-    or None if they pass.
+QUALIFICATION_REASON = "Opleiding of kwalificatie onvoldoende"
+EXPERIENCE_REASON = "Onvoldoende relevante werkervaring"
 
-    Mirrors `eligible_external`'s checks in the same order, so the reported
-    reason is always the first requirement the candidate actually failed -
-    derived from the same policy that gates the offer, not an independently
-    sampled label sitting alongside it.
+
+def qualification_and_experience_reason(config, target_role, credentials, experience):
+    """Return why a candidate fails the role's qualification or relevant-
+    experience requirement, or None if they pass both.
+
+    The single definition shared by external candidates and internal moves:
+    the minimum education level of a matching relevant qualification when a
+    formal qualification is required, then the minimum relevant experience
+    (including the WO exception for Senior roles). `credentials` are
+    name/level records; `experience` is the candidate's relevant years.
     """
-    credentials = candidate_profile.get("Qualifications", [])
     matches = _matching_credentials(config, target_role, credentials)
     min_level = LEVELS.get(_value(target_role, "Min_Opleidingsniveau", "Geen"), 0)
     has_required_qualification = any(
@@ -68,13 +73,32 @@ def external_rejection_reason(config, target_role, candidate_profile):
         target_role, "Formele_Kwalificatie_Vereist", False
     ))
     if formal_required and not has_required_qualification:
-        return "Opleiding of kwalificatie onvoldoende"
+        return QUALIFICATION_REASON
 
-    experience = float(candidate_profile.get("Relevante_Ervaring_Jaren", 0.0))
-    if experience < _required_relevant_experience(
+    if float(experience) < _required_relevant_experience(
         config, target_role, credentials
     ):
-        return "Onvoldoende relevante werkervaring"
+        return EXPERIENCE_REASON
+    return None
+
+
+def external_rejection_reason(config, target_role, candidate_profile):
+    """Return why an external candidate fails the role's eligibility policy,
+    or None if they pass.
+
+    Mirrors `eligible_external`'s checks in the same order, so the reported
+    reason is always the first requirement the candidate actually failed -
+    derived from the same policy that gates the offer, not an independently
+    sampled label sitting alongside it.
+    """
+    reason = qualification_and_experience_reason(
+        config,
+        target_role,
+        candidate_profile.get("Qualifications", []),
+        float(candidate_profile.get("Relevante_Ervaring_Jaren", 0.0)),
+    )
+    if reason:
+        return reason
 
     if bool(_value(target_role, "Leidinggevend", False)):
         leadership = float(candidate_profile.get(
@@ -109,20 +133,66 @@ def credentials_for(state, employee_key, date):
     lookup = state["dim_education"].set_index("Education_Key")["Opleiding_Naam"]
     return set(rows.Education_Key.map(lookup).dropna())
 
-def relevant_experience(state, employee_key, target_role, date, config=None):
+
+def credential_records_for(state, employee_key, date):
+    """An employee's qualifications as of `date` as name/level records.
+
+    Same shape as an external candidate's `Qualifications`, so the shared
+    qualification check works for both: `Opleiding_Naam` and
+    `Opleidingsniveau` come from `dim_education`.
+    """
+    rows = state.get("fact_employee_qualification", pd.DataFrame())
+    if rows.empty:
+        return []
+    rows = rows[
+        (rows.Employee_Key == employee_key)
+        & (pd.to_datetime(rows.Behaald_Datum) <= pd.Timestamp(date))
+    ]
+    if rows.empty:
+        return []
+    education = state["dim_education"].set_index("Education_Key")
+    records = []
+    for education_key in rows.Education_Key.dropna().unique():
+        if education_key in education.index:
+            records.append({
+                "Opleiding_Naam": education.at[education_key, "Opleiding_Naam"],
+                "Opleidingsniveau": education.at[education_key, "Opleidingsniveau"],
+            })
+    return records
+
+
+def internal_relevant_experience(state, config, employee_key, source_role, target_role, date):
+    """Relevant experience of an internal candidate for `target_role`.
+
+    Exactly what snapshots, promotions and hiring use: the effective
+    employment row's starting experience plus time since, carried in full
+    within a department and reduced by `relevant_experience_transfer_ratio`
+    across one (`carried_experience`).
+    """
+    row = _effective_employment_row(state, employee_key, date)
+    if row is None:
+        return 0.0
+    same_department = source_role.get("Department_Key") == target_role.get("Department_Key")
+    return carried_experience(row, date, same_department, config)
+
+
+def _effective_employment_row(state, employee_key, date):
+    """The employment row in effect on `date` (latest start; the newest row if
+    none covers the date, e.g. when a vacancy predates the employee's row)."""
     history = employment_history_for(state, employee_key)
-    roles = state["dim_role"].set_index("Role_Key")
-    target = target_role["Functie_Naam"]
-    allowed = {target}
-    for source, cfg in (getattr(config, "role_career_paths", {}) if config else {}).items():
-        if target in cfg.get("logische_doorgroei", []) or target in cfg.get("laterale_transfers", []): allowed.add(source)
-    total=0.0
-    for _, row in history.iterrows():
-        if roles.loc[row.Role_Key, "Functie_Naam"] not in allowed: continue
-        end=pd.Timestamp(row.Einddatum) if pd.notna(row.Einddatum) else pd.Timestamp(date)
-        start=pd.Timestamp(row.Startdatum)
-        total += max(0,(min(end,pd.Timestamp(date))-start).days/365.2425)
-    return total
+    if history.empty:
+        return None
+    date = pd.Timestamp(date)
+    starts = pd.to_datetime(history["Startdatum"], errors="coerce")
+    ends = (
+        pd.to_datetime(history["Einddatum"], errors="coerce")
+        if "Einddatum" in history.columns else pd.Series(pd.NaT, index=history.index)
+    )
+    in_effect = history[(starts <= date) & (ends.isna() | (ends >= date))]
+    candidates = in_effect if not in_effect.empty else history
+    order = ["Startdatum"] + (["Employment_Key"] if "Employment_Key" in candidates.columns else [])
+    return candidates.sort_values(order, kind="stable").iloc[-1]
+
 
 def leadership_experience(state, employee_key, date):
     """Total time spent in any leidinggevend role, as of `date`.
@@ -146,23 +216,38 @@ def leadership_experience(state, employee_key, date):
 
 
 def eligible_internal(config, state, employee_key, source_role, target_role, date, performance=3.0):
-    target_name=target_role["Functie_Naam"]
-    kind=movement_type(config, source_role["Functie_Naam"], target_name)
-    if not kind or performance < 2.7: return False
-    if kind == "Transfer" and source_role.SalaryScale_Key != target_role.SalaryScale_Key: return False
-    exp=relevant_experience(state,employee_key,target_role,date,config)
-    if exp < float(target_role.Min_Relevante_Ervaring_Jr): return False
-    required=set(config.role_career_paths[target_name].get("relevante_opleidingen", []))
-    has=credentials_for(state,employee_key,date)
-    if bool(target_role.Formele_Kwalificatie_Vereist) and required and not has.intersection(required): return False
-    # first line-management move has an explicit three-year internal exception
-    if bool(target_role.Leidinggevend) and not bool(source_role.Leidinggevend) and exp < 3: return False
+    """Whether an employee may move internally into `target_role`.
+
+    Uses the same qualification and relevant-experience policy as external
+    candidates (`qualification_and_experience_reason`), with the internal
+    experience definition of snapshots and promotions. The internal-only rules
+    stay: the movement must be a configured promotion or transfer, a minimum
+    performance, the same salary scale for a transfer and the leadership bars.
+    """
+    settings = getattr(config, "career_events", {})
+    target_name = target_role["Functie_Naam"]
+    kind = movement_type(config, source_role["Functie_Naam"], target_name)
+    if not kind or performance < float(settings.get("internal_min_performance", 2.7)):
+        return False
+    if kind == "Transfer" and source_role.SalaryScale_Key != target_role.SalaryScale_Key:
+        return False
+
+    experience = internal_relevant_experience(
+        state, config, employee_key, source_role, target_role, date
+    )
+    if qualification_and_experience_reason(
+        config, target_role, credential_records_for(state, employee_key, date), experience
+    ):
+        return False
+
+    # first line-management move has an explicit internal experience exception
+    first_leadership_years = float(settings.get("internal_first_leadership_min_experience_years", 3))
+    if bool(target_role.Leidinggevend) and not bool(source_role.Leidinggevend) and experience < first_leadership_years:
+        return False
     # a further move between leadership roles gets its own, discounted bar
     # rather than skipping the check entirely (as it used to)
     if bool(target_role.Leidinggevend) and bool(source_role.Leidinggevend):
-        discount = float(getattr(config, "career_events", {}).get(
-            "internal_leadership_experience_discount", 0.6
-        ))
+        discount = float(settings.get("internal_leadership_experience_discount", 0.6))
         required_leadership = float(target_role.Min_Leidinggevende_Ervaring_Jr) * discount
         if leadership_experience(state, employee_key, date) < required_leadership:
             return False

@@ -1,5 +1,10 @@
 import pandas as pd
 
+from src.infrastructure.absence_calendar import (
+    duration_days,
+    hours_per_workday,
+    workdays_between,
+)
 from src.infrastructure.record_builder import build_record
 from src.infrastructure.salary_band import salary_band_key_for
 from src.infrastructure.tenure import service_days
@@ -189,7 +194,7 @@ class SafetyIncidentSimulator:
         end = start + pd.Timedelta(days=duration - 1)
         if pd.notna(employment_end):
             end = min(end, employment_end)
-        duration = (end - start).days + 1
+        duration = duration_days(start, end)
 
         role_key = employment.get("Role_Key")
         department_key = self._department_for_role(state, role_key)
@@ -200,7 +205,7 @@ class SafetyIncidentSimulator:
         satisfaction_band_key = self.satisfaction_model.band_key_for(
             state.get("dim_satisfaction_band", pd.DataFrame()), satisfaction,
         )
-        workdays = len(pd.bdate_range(start, end))
+        workdays = workdays_between(start, end)
         hours_per_day = self._hours_per_workday(employment)
         hours = round(workdays * hours_per_day, 2)
 
@@ -243,12 +248,7 @@ class SafetyIncidentSimulator:
         return max(1, int(round(self.rng.triangular(min_days, max_days, mode_days))))
 
     def _hours_per_workday(self, employment):
-        weekly_hours = pd.to_numeric(employment.get("Contracturen"), errors="coerce")
-        if pd.isna(weekly_hours):
-            weekly_hours = getattr(self.config, "workforce", {}).get(
-                "full_time_weekly_hours", 40
-            )
-        return float(weekly_hours) / 5
+        return hours_per_workday(employment.get("Contracturen"), self.config)
 
     # ------------------------------------------------------------------
     # Lookups

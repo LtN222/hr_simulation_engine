@@ -14,7 +14,7 @@ roll would otherwise consider that employee.
 """
 import pandas as pd
 
-from src.infrastructure.departure_records import build_departure_row
+from src.infrastructure.departure_records import build_departure_row, close_open_absence
 from src.infrastructure.record_builder import build_record
 from src.infrastructure.relevant_experience import carried_experience
 from src.infrastructure.satisfaction import (
@@ -147,6 +147,7 @@ class ContractLifecycleSimulator:
 
             fact_employment.loc[index, "Dienstverband_status"] = "Inactief"
             fact_employment.loc[index, "Einddatum"] = today
+            close_open_absence(state, employee_key, today, self.config)
 
             departure_reason_key = self.departure_reason_map.get(
                 NON_RENEWAL_REASON,

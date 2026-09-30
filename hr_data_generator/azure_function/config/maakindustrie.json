@@ -59,6 +59,13 @@
     }
   },
   "initial_population": {
+    "hire_source_weights": {
+      "Vacaturebank": 52.5,
+      "Campus": 14.8,
+      "Interne recruiter": 14.7,
+      "Referral": 11.4,
+      "Recruitmentbureau": 6.7
+    },
     "burn_in_years": 4,
     "minimum_hire_age": 18,
     "tenure_years_distribution": {
@@ -132,6 +139,8 @@
     "internal_transfer_rate": 0.05,
     "relevant_experience_transfer_ratio": 0.45,
     "internal_leadership_experience_discount": 0.6,
+    "internal_min_performance": 2.7,
+    "internal_first_leadership_min_experience_years": 3,
     "salary_increase_rate": 1.0,
     "salary_growth": {
       "inflation_min": 0.018,
@@ -3761,6 +3770,7 @@
     }
   },
   "attrition": {
+    "no_show_max_tenure_days": 30,
     "Productie": 0.11,
     "Techniek": 0.08,
     "Kwaliteit": 0.07,

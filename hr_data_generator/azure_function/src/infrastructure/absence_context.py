@@ -3,6 +3,7 @@
 import pandas as pd
 
 from src.infrastructure.manager_assignment import manager_as_of
+from src.infrastructure.performance_baseline import starting_performance
 from src.infrastructure.satisfaction import (
     SatisfactionModel,
     score_employee_satisfaction,
@@ -70,7 +71,7 @@ def sync_absence_satisfaction(state, config):
             performance_reviews,
             employee_key,
             episode["Startdatum"],
-            employee.get("Prestatie_Score", 3.4),
+            starting_performance(employee),
         )
         manager_key = manager_as_of(
             manager_assignments,

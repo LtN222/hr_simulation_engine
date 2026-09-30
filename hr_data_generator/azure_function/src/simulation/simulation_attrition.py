@@ -4,7 +4,7 @@ import math
 
 import pandas as pd
 
-from src.infrastructure.departure_records import build_departure_row
+from src.infrastructure.departure_records import build_departure_row, close_open_absence
 from src.infrastructure.tenure import service_years
 from src.infrastructure.satisfaction import (
     SatisfactionModel,
@@ -168,6 +168,7 @@ class AttritionSimulator:
             # new one.
             fact_employment.loc[index, "Dienstverband_status"] = "Inactief"
             fact_employment.loc[index, "Einddatum"] = today
+            close_open_absence(state, employment["Employee_Key"], today, self.config)
 
             departure_records.append(build_departure_row(
                 self.schema,
@@ -337,15 +338,15 @@ class AttritionSimulator:
         if reason == "Pensioen":
             return 0.0
         if reason == "No-show":
-            return 0.02
+            # A no-show is a *new* hire who never turns up, not a veteran.
+            max_days = float(self.config.attrition.get("no_show_max_tenure_days", 30))
+            return 0.02 if tenure_years * 365.2425 < max_days else 0.0
         if reason == "Medisch":
             return 0.05
         if reason == "Disfunctioneren":
             return 0.30 if performance < 2.5 else 0.05
         if reason == "Ontslag":
             return 0.20
-        if reason == "Contract niet verlengd":
-            return 0.25 if tenure_years < 2 else 0.05
 
         settings = self.config.attrition.get(
             "voluntary_reason_satisfaction_multipliers",

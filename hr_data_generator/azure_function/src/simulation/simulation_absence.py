@@ -2,6 +2,11 @@ import math
 
 import pandas as pd
 
+from src.infrastructure.absence_calendar import (
+    duration_days,
+    hours_per_workday,
+    workdays_between,
+)
 from src.infrastructure.record_builder import build_record
 from src.infrastructure.salary_band import salary_band_key_for
 from src.infrastructure.tenure import service_days
@@ -619,9 +624,9 @@ class AbsenceSimulator:
         end = start + pd.Timedelta(days=duration - 1)
         if pd.notna(employment_end):
             end = min(end, employment_end)
-        duration = (end - start).days + 1
+        duration = duration_days(start, end)
         employment_context = self._employment_context(state, employment)
-        absence_workdays = len(pd.bdate_range(start, end))
+        absence_workdays = workdays_between(start, end)
         hours_per_day = self._hours_per_workday(employment)
         absence_hours = round(absence_workdays * hours_per_day, 2)
         is_sickness = bool(absence_type.get("Telt_als_verzuim", False))
@@ -653,17 +658,7 @@ class AbsenceSimulator:
         )
 
     def _hours_per_workday(self, employment):
-        weekly_hours = pd.to_numeric(
-            employment.get("Contracturen"),
-            errors="coerce"
-        )
-        if pd.isna(weekly_hours):
-            workforce_config = getattr(self.config, "workforce", {})
-            weekly_hours = workforce_config.get(
-                "full_time_weekly_hours",
-                40
-            )
-        return float(weekly_hours) / 5
+        return hours_per_workday(employment.get("Contracturen"), self.config)
 
     def _employment_context(self, state, employment):
         """Capture conformed dimensions as they were when absence started."""

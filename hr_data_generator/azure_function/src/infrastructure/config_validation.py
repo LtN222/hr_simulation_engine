@@ -38,6 +38,7 @@ def validate_role_configuration(config):
     problems.extend(_check_salary_scales(config, structure))
     problems.extend(_check_lost_time_absence_type(config))
     problems.extend(_check_voluntary_reasons_exist(config))
+    problems.extend(_check_hire_source_weights(config))
     return problems
 
 
@@ -231,3 +232,23 @@ def _check_voluntary_reasons_exist(config):
         for reason in attrition.get("voluntary_reason_satisfaction_multipliers", {})
         if reason not in known
     ]
+
+
+def _check_hire_source_weights(config):
+    """Every weighted initial hire source must exist and be external."""
+    weights = (getattr(config, "initial_population", None) or {}).get("hire_source_weights")
+    sources = getattr(config, "dim_hire_source", None)
+    if not weights or not sources:
+        return []
+    by_name = {source.get("Bron_Naam"): source for source in sources}
+    problems = []
+    for name in weights:
+        source = by_name.get(name)
+        if source is None:
+            problems.append(f"initial_population.hire_source_weights: '{name}' is not in dim_hire_source")
+        elif source.get("Is_Internal", False):
+            problems.append(
+                f"initial_population.hire_source_weights: '{name}' is an internal source"
+            )
+    return problems
+
