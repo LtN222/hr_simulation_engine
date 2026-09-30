@@ -2832,8 +2832,16 @@
       "roles": [
         "Operator A",
         "Productiemedewerker"
-      ]
+      ],
+      "name_locales": {
+        "Polen": "pl_PL",
+        "Roemenië": "ro_RO",
+        "Bulgarije": "bg_BG"
+      }
     }
+  },
+  "person_names": {
+    "max_display_length": 20
   },
   "gender_ratio": {
     "default": {"male": 0.49, "female": 0.49},

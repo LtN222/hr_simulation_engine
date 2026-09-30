@@ -517,6 +517,9 @@ worden bijgewerkt. De voortgang staat in `simulation_state`.
   Productontwikkelaar binnen R&D); `default` geldt voor niet-genoemde
   afdelingen. `salary_benchmark.compa_ratio.gender_pay_gap` bevat de aparte
   offsets voor de bewuste beloningskloof.
+- `person_names`: maximale lengte van de weergavenaam
+  (`max_display_length`). `special_arrangements.Expat.name_locales` bepaalt per
+  land de naamlocale.
 - `recruitment`: volume en uitkomstlogica van sollicitaties.
 - `absence`: type-specifieke kansen, duur en eligibility-regels.
 - `career_events`: performance, salarisgroei, promoties en transfers.
