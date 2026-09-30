@@ -250,29 +250,96 @@ def _ensure_table_columns(engine, table, cfg):
                 ADD {column} {sql_type} NULL
             """))
 
+def _column_dependency_drop_commands(conn, table, column):
+    """Statements that remove every object SQL Server lets block DROP COLUMN.
+
+    Foreign keys, indexes (including unique constraints), default constraints
+    and manually created statistics on the column must go first; automatically
+    created statistics (`_WA_Sys_*`) are removed by SQL Server itself. The
+    first real run of AR-07 failed on `IX_fact_absence_Ploegendienst_Key`
+    because only foreign keys were handled.
+    """
+    parameters = {"table_name": table, "column_name": column}
+    commands = []
+
+    foreign_keys = conn.execute(text("""
+        SELECT fk.name
+        FROM sys.foreign_keys AS fk
+        JOIN sys.foreign_key_columns AS fkc
+          ON fkc.constraint_object_id = fk.object_id
+        JOIN sys.columns AS c
+          ON c.object_id = fkc.parent_object_id
+         AND c.column_id = fkc.parent_column_id
+        WHERE fkc.parent_object_id = OBJECT_ID(:table_name)
+          AND c.name = :column_name
+    """), parameters).fetchall()
+    commands += [f"ALTER TABLE [{table}] DROP CONSTRAINT [{row[0]}]" for row in foreign_keys]
+
+    indexes = conn.execute(text("""
+        SELECT DISTINCT i.name, i.is_primary_key, i.is_unique_constraint
+        FROM sys.indexes AS i
+        JOIN sys.index_columns AS ic
+          ON ic.object_id = i.object_id
+         AND ic.index_id = i.index_id
+        JOIN sys.columns AS c
+          ON c.object_id = ic.object_id
+         AND c.column_id = ic.column_id
+        WHERE i.object_id = OBJECT_ID(:table_name)
+          AND c.name = :column_name
+          AND i.name IS NOT NULL
+    """), parameters).fetchall()
+    for name, is_primary_key, is_unique_constraint in indexes:
+        if is_primary_key:
+            raise ValueError(
+                f"{table}.{column} is deprecated but part of the primary key {name}; "
+                "remove it from deprecated_columns or change the primary key first."
+            )
+        if is_unique_constraint:
+            commands.append(f"ALTER TABLE [{table}] DROP CONSTRAINT [{name}]")
+        else:
+            commands.append(f"DROP INDEX [{name}] ON [{table}]")
+
+    defaults = conn.execute(text("""
+        SELECT dc.name
+        FROM sys.default_constraints AS dc
+        JOIN sys.columns AS c
+          ON c.object_id = dc.parent_object_id
+         AND c.column_id = dc.parent_column_id
+        WHERE dc.parent_object_id = OBJECT_ID(:table_name)
+          AND c.name = :column_name
+    """), parameters).fetchall()
+    commands += [f"ALTER TABLE [{table}] DROP CONSTRAINT [{row[0]}]" for row in defaults]
+
+    # Statistics that belong to an index disappear with the index above.
+    statistics = conn.execute(text("""
+        SELECT DISTINCT st.name
+        FROM sys.stats AS st
+        JOIN sys.stats_columns AS sc
+          ON sc.object_id = st.object_id
+         AND sc.stats_id = st.stats_id
+        JOIN sys.columns AS c
+          ON c.object_id = sc.object_id
+         AND c.column_id = sc.column_id
+        WHERE st.object_id = OBJECT_ID(:table_name)
+          AND c.name = :column_name
+          AND st.user_created = 1
+          AND NOT EXISTS (
+              SELECT 1 FROM sys.indexes AS i
+              WHERE i.object_id = st.object_id AND i.name = st.name
+          )
+    """), parameters).fetchall()
+    commands += [f"DROP STATISTICS [{table}].[{row[0]}]" for row in statistics]
+
+    return commands
+
+
 def _drop_deprecated_columns(engine, schema_config):
     """Remove explicitly deprecated source columns from existing SQL tables."""
     with engine.begin() as conn:
         for table, cfg in schema_config.items():
             for column in cfg.get("deprecated_columns", []):
-                foreign_keys = conn.execute(text("""
-                    SELECT fk.name
-                    FROM sys.foreign_keys AS fk
-                    JOIN sys.foreign_key_columns AS fkc
-                      ON fkc.constraint_object_id = fk.object_id
-                    JOIN sys.columns AS c
-                      ON c.object_id = fkc.parent_object_id
-                     AND c.column_id = fkc.parent_column_id
-                    WHERE fkc.parent_object_id = OBJECT_ID(:table_name)
-                      AND c.name = :column_name
-                """), {
-                    "table_name": table,
-                    "column_name": column
-                }).fetchall()
-                for foreign_key in foreign_keys:
-                    conn.execute(text(
-                        f"ALTER TABLE [{table}] DROP CONSTRAINT [{foreign_key[0]}]"
-                    ))
+                for command in _column_dependency_drop_commands(conn, table, column):
+                    conn.execute(text(command))
                 conn.execute(text(f"""
                     IF OBJECT_ID('{table}', 'U') IS NOT NULL
                     AND COL_LENGTH('{table}', '{column}') IS NOT NULL
