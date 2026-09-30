@@ -47,9 +47,11 @@ class SalaryPolicy:
             "Schaal_Min_Salaris": int(round(
                 float(scale["Minimum_Salaris"]) * growth_factor
             )),
-            "Schaal_Max_Salaris": int(round(
-                float(scale["Maximum_Salaris"]) * growth_factor
-            )),
+            # An open-ended scale (Boven-CAO) has no maximum: keep it None.
+            "Schaal_Max_Salaris": (
+                None if pd.isna(scale["Maximum_Salaris"])
+                else int(round(float(scale["Maximum_Salaris"]) * growth_factor))
+            ),
             "Markt_P25": int(round(median * (1 - spread))),
             "Markt_Mediaan": median,
             "Markt_P75": int(round(median * (1 + spread)))
@@ -65,8 +67,43 @@ class SalaryPolicy:
             gender=gender
         )
         benchmark = self.employee_benchmark(role, today, service_start)
-        salary = int(round(benchmark["Benchmark_Salaris"] * target_ratio))
+        salary = self.salary_for_ratio(benchmark, target_ratio, today)
         return salary, target_ratio
+
+    def salary_for_ratio(self, benchmark, target_ratio, date):
+        """Return the full-time salary for a benchmark and compa-ratio, floored."""
+        return self.apply_floor(
+            int(round(benchmark["Benchmark_Salaris"] * target_ratio)), date
+        )
+
+    def apply_floor(self, salary, date):
+        """Lift a full-time (1.0 FTE) salary to the legal minimum wage at `date`.
+
+        `Salaris` is always a full-time amount; the part-time pro rata is applied
+        by the consumer. Every path that sets a salary (initial, hire, review,
+        promotion/transfer, internal mobility) goes through this helper.
+        """
+        return max(int(salary), self.legal_minimum(date))
+
+    def legal_minimum(self, date):
+        """Full-time legal minimum salary on `date`, indexed backwards/forwards.
+
+        The reference-year floor (`legal_minimum_salary`: annual amount times
+        1 + the sum of the allowances, rounded up) applies on 1 January of the
+        reference year. Other dates scale it with the market growth factor, so
+        the floor is flat before `base_date` (burn-in years) and keeps growing
+        after the reference year.
+        """
+        policy = self.config.get("legal_minimum_salary")
+        if not policy:
+            return 0
+        allowances = sum(float(v) for v in policy.get("allowances", {}).values())
+        reference_floor = math.ceil(round(
+            float(policy["annual_full_time_salary"]) * (1 + allowances), 6
+        ))
+        reference_date = pd.Timestamp(int(policy["reference_year"]), 1, 1)
+        index = self._growth_factor(date) / self._growth_factor(reference_date)
+        return int(math.ceil(round(reference_floor * index, 6)))
 
     def draw_target_ratio(self, department_name, rng, is_new_hire=False, gender=None):
         """Draw from configured benchmark-status bands instead of a narrow mean."""
@@ -117,7 +154,7 @@ class SalaryPolicy:
             # restrained increase until market growth catches up.
             new_salary = int(round(float(current_salary) * (1 + minimum_raise)))
 
-        return new_salary, adjusted_ratio
+        return self.apply_floor(new_salary, today), adjusted_ratio
 
     def _gender_offset(self, gender, key):
         """Small, deliberate compa-ratio nudge modeling an unexplained

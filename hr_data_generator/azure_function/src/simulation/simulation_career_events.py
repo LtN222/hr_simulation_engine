@@ -228,9 +228,11 @@ def _simulate_salary_reviews(
         employee_key = int(row["Employee_Key"])
         if today.isocalendar()[1] != _salary_review_week(employee_key):
             continue
-        if rng.random() > increase_rate or pd.Timestamp(row["Startdatum"]).year == today.year:
+        if rng.random() > increase_rate:
             continue
         if _already_reviewed_this_year(fact_employment, employee_key, salary_event_key, today.year):
+            continue
+        if _joined_this_year(employees.loc[employee_key], today):
             continue
 
         role = roles.loc[row["Role_Key"]]
@@ -298,9 +300,9 @@ def _new_employment_record(
     location_key=None,
 ):
     benchmark = salary_policy.employee_benchmark(role, today, service_start)
-    salary = salary_override or int(round(
+    salary = salary_policy.apply_floor(salary_override or int(round(
         benchmark["Benchmark_Salaris"] * target_ratio
-    ))
+    )), today)
     return {
         "Employment_Key": employment_key,
         "Previous_Employment_Key": previous_row["Employment_Key"],
@@ -392,6 +394,19 @@ def _performance_factor(performance):
 
 def _salary_review_week(employee_key):
     return ((employee_key * 37) % 52) + 1
+
+
+def _joined_this_year(employee, today):
+    """Whether the employee's continuous service began this calendar year.
+
+    Only a genuinely new joiner skips the annual review. Using the current
+    employment row's `Startdatum` instead skipped anyone who renewed, moved
+    location or was promoted earlier the same year (AR-10).
+    """
+    service_start = pd.to_datetime(
+        employee.get("Aaneengesloten_Indienst_Datum"), errors="coerce"
+    )
+    return pd.notna(service_start) and service_start.year == today.year
 
 
 def _already_reviewed_this_year(fact_employment, employee_key, salary_event_key, year):

@@ -2,6 +2,7 @@ import pandas as pd
 
 from src.simulation.simulation_career_events import (
     _is_active_role,
+    _joined_this_year,
     _new_employment_record,
     _under_capacity,
 )
@@ -14,6 +15,9 @@ class _StubSalaryPolicy:
 
     def employee_benchmark(self, role, today, service_start):
         return {"Benchmark_Salaris": 50000, "SalaryScale_Key": role["SalaryScale_Key"]}
+
+    def apply_floor(self, salary, date):
+        return salary
 
 
 def _config():
@@ -163,3 +167,47 @@ def test_new_employment_record_computes_salary_from_the_benchmark_not_the_previo
     )
 
     assert record["Salaris"] == 50000
+
+
+def test_joined_this_year_uses_continuous_service_not_the_current_row():
+    today = pd.Timestamp("2024-06-10")
+
+    assert _joined_this_year(
+        pd.Series({"Aaneengesloten_Indienst_Datum": pd.Timestamp("2024-02-01")}), today
+    ) is True
+    # Renewed/promoted earlier this year, but continuous service is older.
+    assert _joined_this_year(
+        pd.Series({"Aaneengesloten_Indienst_Datum": pd.Timestamp("2019-02-01")}), today
+    ) is False
+    assert _joined_this_year(pd.Series({"Aaneengesloten_Indienst_Datum": None}), today) is False
+
+
+def test_new_employment_record_floors_a_salary_override_at_the_legal_minimum():
+    from src.infrastructure.salary_policy import SalaryPolicy
+
+    policy = SalaryPolicy(type("Config", (), {
+        "salary_benchmark": {
+            "legal_minimum_salary": {
+                "reference_year": 2026, "annual_full_time_salary": 31179,
+                "allowances": {"vakantiegeld": 0.08},
+            },
+        },
+        "dim_salary_scale": [{"SalaryScale_Key": 1, "Minimum_Salaris": 0,
+                              "Maximum_Salaris": 90000, "Aantal_Treden": 1}],
+    })())
+    role = pd.Series({"Role_Key": 2, "Functie_Naam": "CEO", "Department_Key": 1,
+                      "SalaryScale_Key": 1, "Salaris_min": 20000, "Salaris_max": 30000})
+    previous = pd.Series({
+        "Employment_Key": 1, "Employee_Key": 7, "Location_Key": 1, "Contracttype": "Vast",
+        "Startdatum": pd.Timestamp("2020-01-01"), "Relevante_Ervaring_Jaren_Bij_Start": 0,
+    })
+
+    record = _new_employment_record(
+        previous, 2, role, pd.Timestamp("2024-01-01"), 3, policy, _config(),
+        pd.Timestamp("2020-01-01"), 0.8, None, salary_override=30000,
+        previous_department_key=1,
+    )
+
+    # 2024 is two years before the reference year: 33,674 indexed back.
+    assert record["Salaris"] == policy.legal_minimum(pd.Timestamp("2024-01-01"))
+    assert 32000 < record["Salaris"] < 33674

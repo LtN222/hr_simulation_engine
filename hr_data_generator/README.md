@@ -293,6 +293,46 @@ Werkelijke salarissen worden gegenereerd rond een stabiele beloningspositie
 ten opzichte van die benchmark; de vijf benchmarkstatussen blijven daarom
 zichtbaar in de data zonder dat ze in Power BI worden geforceerd.
 
+`Salaris` is altijd een voltijdbedrag (1,0 FTE); de pro-ratering voor deeltijd
+gebeurt in de consumer. Voor dat voltijdbedrag geldt een wettelijke
+ondergrens, geindexeerd via `salary_benchmark.legal_minimum_salary`:
+`reference_year` (2026), `annual_full_time_salary` (EUR 31.179 excl.
+toeslagen) en een map `allowances` (nu `vakantiegeld: 0.08`; extra toeslagen
+zoals `eindejaarsuitkering` tellen gewoon op). De ondergrens in het
+referentiejaar is `ceil(annual_full_time_salary * (1 + som(allowances)))` =
+EUR 33.674 op 1 januari van dat jaar. Voor elke andere datum schaalt die met
+`annual_market_growth_rate` (zelfde groeifactor als de benchmark): in 2020
+ca. EUR 29.036, na het referentiejaar groeit hij door, en voor
+`salary_benchmark.base_date` (burn-in) is hij vlak. Alle salarispaden -
+initieel/instroom, salarisreview, promotie/transfer en interne mobiliteit -
+lopen via `SalaryPolicy.apply_floor(salaris, datum)`. Nieuw wettelijk minimum
+(nieuw jaar)? Werk `reference_year`, `annual_full_time_salary` en zo nodig de
+toeslagen bij **voor** een full run; `validate_role_configuration` bewaakt dat
+de laagste schaal niet onder de ondergrens van het eerste jaar begint.
+
+De laagste marktmedianen (o.a. Productie-/Magazijnmedewerker 41.000) en de
+schaalranges zijn zo gekozen dat de ondergrens zelden wordt geraakt. Gemeten
+met een smalle harness (alleen `SalaryPolicy`, geen weeksimulatie) is het
+aandeel salarissen dat exact op de ondergrens uitkomt voor 2020/2022/2024/2026
+ca. 2-4% voor Productie-/Magazijnmedewerker (instroom en initiele populatie) en
+minder dan 1% voor Financieel Medewerker en HR Medewerker, en dus ongeveer
+constant over de jaren (met de eerdere vlakke EUR 33.674 was dat in 2020 nog
+21-41%). De jaarlijkse salarisreview wordt alleen overgeslagen voor wie dat
+kalenderjaar aaneengesloten in dienst kwam (niet meer voor wie eerder dat jaar
+een verlenging, verhuizing of promotie kreeg).
+
+`dim_salary_scale` heeft een open einde voor de directieschaal **Boven-CAO**
+(`SalaryScale_Key` 7, code `BC`, minimum 105.000, `Maximum_Salaris` = NULL):
+Managing Director, CFO, Operations Director en Commercial Director vallen
+daarin (Plant Manager blijft in Schaal F). Voor die rollen is
+`fact_salary_benchmark.Schaal_Max_Salaris` dus NULL; de webapp en Power BI
+moeten een ontbrekend schaalmaximum aankunnen. Schaal A loopt van ca. 29.100
+(afgerond boven de geindexeerde 2020-ondergrens) tot 46.000.
+`validate_role_configuration` controleert dat elke rol een marktmediaan heeft,
+dat de markt-P25-P75 van elke rol binnen de eigen schaal valt (bij een schaal
+zonder maximum alleen het minimum) en dat de laagste schaal niet onder de
+geindexeerde ondergrens van 2020 begint.
+
 `salary_benchmark.compa_ratio.gender_pay_gap` (`female_starting_offset`,
 `female_review_offset`) trekt de `Streef_Compa_Ratio` van vrouwen bewust een
 klein stukje omlaag, zowel bij instroom als bij elke salarisreview. Dit is
@@ -302,7 +342,8 @@ gecorrigeerde verschil in de praktijk richting 0% convergeren, wat voor een
 Nederlands productiebedrijf onrealistisch positief zou zijn. Beide
 offsets zijn zo gekalibreerd (op een kleine, snelle in-memory testrun, niet
 een volledige full run) dat het resulterende, per-rol gecorrigeerde verschil
-uitkomt op ongeveer 4-5% - beter dan het Nederlandse bedrijfsleven-gemiddelde
+uitkomt op ongeveer 4-5% (gemeten 4,45% met `female_starting_offset` -0,043 en
+`female_review_offset` -0,0018, na de vloer en meerdere jaren reviews) - beter dan het Nederlandse bedrijfsleven-gemiddelde
 (CBS 2024: 6,1% gecorrigeerd in het bedrijfsleven, 1,7% bij de overheid) maar
 niet nul. Herkalibreer deze twee waarden als een langere/grotere run een
 ander resultaat oplevert.

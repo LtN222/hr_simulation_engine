@@ -357,8 +357,10 @@ def test_sector_roles_use_their_explicit_salary_scale_codes():
         "Operator B": "C",
         "Controller": "D",
         "QA Manager": "E",
-        "Operations Director": "G",
-        "Managing Director": "G",
+        "Operations Director": "BC",
+        "Managing Director": "BC",
+        "CFO": "BC",
+        "Commercial Director": "BC",
     }
     code_by_key = salary_scales.set_index("SalaryScale_Key")["Salarisschaal_Code"]
 

@@ -893,8 +893,8 @@
       "SalaryScale_Key": 1,
       "Salarisschaal_Code": "A",
       "Salarisschaal_Naam": "Schaal A",
-      "Minimum_Salaris": 29000,
-      "Maximum_Salaris": 38000,
+      "Minimum_Salaris": 29100,
+      "Maximum_Salaris": 46000,
       "Aantal_Treden": 10
     },
     {
@@ -939,10 +939,10 @@
     },
     {
       "SalaryScale_Key": 7,
-      "Salarisschaal_Code": "G",
-      "Salarisschaal_Naam": "Schaal G",
+      "Salarisschaal_Code": "BC",
+      "Salarisschaal_Naam": "Boven-CAO",
       "Minimum_Salaris": 105000,
-      "Maximum_Salaris": 190000,
+      "Maximum_Salaris": null,
       "Aantal_Treden": 10
     }
   ],
@@ -1054,6 +1054,13 @@
     "annual_market_growth_rate": 0.025,
     "market_percentile_spread": 0.1,
     "years_per_step": 3,
+    "legal_minimum_salary": {
+      "reference_year": 2026,
+      "annual_full_time_salary": 31179,
+      "allowances": {
+        "vakantiegeld": 0.08
+      }
+    },
     "benchmark_status_thresholds": {
       "ver_onder": 0.8,
       "onder": 0.9,
@@ -1120,26 +1127,26 @@
         "Directie": 0.04
       },
       "gender_pay_gap": {
-        "female_starting_offset": -0.036,
+        "female_starting_offset": -0.043,
         "female_review_offset": -0.0018
       }
     },
     "market_median_by_role": {
-      "Productiemedewerker": 33000,
-      "Operator A": 39000,
-      "Operator B": 44500,
+      "Productiemedewerker": 41000,
+      "Operator A": 42000,
+      "Operator B": 46000,
       "Teamleider Productie": 56000,
       "Productiemanager": 78000,
       "Plant Manager": 102500,
       "Monteur": 44000,
       "Teamleider Technische Dienst": 59000,
       "Hoofd Technische Dienst": 71000,
-      "QC Medewerker": 40000,
+      "QC Medewerker": 42500,
       "QC Engineer": 49500,
       "QA Officer": 51500,
       "Teamleider Kwaliteit": 63000,
       "QA Manager": 78000,
-      "Magazijnmedewerker": 33000,
+      "Magazijnmedewerker": 41000,
       "Teamleider Logistiek": 54000,
       "Supply Chain Planner": 46000,
       "Logistiek Manager": 69000,
@@ -1153,10 +1160,10 @@
       "Accountmanager": 47500,
       "Key Accountmanager": 63500,
       "Sales Manager": 82500,
-      "HR Medewerker": 38000,
+      "HR Medewerker": 42000,
       "HR Adviseur": 52500,
       "HR Manager": 75000,
-      "Financieel Medewerker": 37000,
+      "Financieel Medewerker": 42000,
       "Assistent Controller": 49000,
       "Controller": 60000,
       "Finance Manager": 85000,
@@ -1166,7 +1173,7 @@
       "Werkvoorbereider Technische Dienst": 50000,
       "Project Engineer": 59000,
       "Maintenance Engineer": 61000,
-      "QC Laborant": 39000,
+      "QC Laborant": 42000,
       "Senior QA Officer": 60000,
       "Productieplanner": 47500,
       "Inkoper": 47500,
@@ -1178,7 +1185,10 @@
       "Senior HR Adviseur": 62500,
       "QHSE Officer": 52500,
       "Senior QHSE Officer": 63500,
-      "QHSE Manager": 81000
+      "QHSE Manager": 81000,
+      "CFO": 140000,
+      "Commercial Director": 125000,
+      "Product Manager": 62000
     }
   },
   "absence": {
@@ -3602,7 +3612,7 @@
           110000,
           145000
         ],
-        "salary_scale_code": "G",
+        "salary_scale_code": "BC",
         "ploegendienst": false,
         "target_weight": 1,
         "initially_staffed": false,
@@ -3617,7 +3627,7 @@
           135000,
           190000
         ],
-        "salary_scale_code": "G",
+        "salary_scale_code": "BC",
         "ploegendienst": false,
         "target_weight": 1,
         "initially_staffed": true,
@@ -3632,7 +3642,7 @@
           110000,
           145000
         ],
-        "salary_scale_code": "G",
+        "salary_scale_code": "BC",
         "ploegendienst": false,
         "target_weight": 1,
         "initially_staffed": false,
@@ -3647,7 +3657,7 @@
           100000,
           135000
         ],
-        "salary_scale_code": "F",
+        "salary_scale_code": "BC",
         "ploegendienst": false,
         "target_weight": 1,
         "initially_staffed": false,

@@ -370,9 +370,7 @@ class HiringSimulator:
                 "Startdatum": today,
                 "Einddatum": None,
                 "Dienstverband_status": "Actief",
-                "Salaris": int(round(
-                    benchmark["Benchmark_Salaris"] * target_ratio
-                )),
+                "Salaris": salary_policy.salary_for_ratio(benchmark, target_ratio, today),
                 "Contracttype": previous["Contracttype"],
                 "Contracturen": previous.get("Contracturen"),
                 "Contract_einddatum": previous.get("Contract_einddatum"),
