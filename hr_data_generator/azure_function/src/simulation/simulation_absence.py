@@ -335,6 +335,19 @@ class AbsenceSimulator:
             ["AbsenceType_Key", "Verzuim_Type_Naam", "Telt_als_verzuim"]
         ].to_dict(orient="records")
 
+    def _drawable_types(self, absence_types):
+        """Drop types another simulator owns (`absence.excluded_from_random_draw`).
+
+        `Bedrijfsongeval` is created only by the safety simulator, next to the
+        `fact_safety_incident` row that caused it; drawing it here as well
+        produced episodes with no incident behind them (AR-33).
+        """
+        excluded = set(self.absence_cfg.get("excluded_from_random_draw", []))
+        return [
+            absence_type for absence_type in absence_types
+            if absence_type["Verzuim_Type_Naam"] not in excluded
+        ]
+
     def _choose_incident_type(
         self,
         employee,
@@ -347,6 +360,7 @@ class AbsenceSimulator:
         leave_event_counts=None,
     ):
         """Draw at most one weekly illness or leave episode per employee."""
+        absence_types = self._drawable_types(absence_types)
         candidates = []
         sickness_types = [
             absence_type
@@ -512,6 +526,7 @@ class AbsenceSimulator:
 
     def _choose_absence_type(self, absence_types):
         """Choose a sickness type for backwards-compatible direct callers."""
+        absence_types = self._drawable_types(absence_types)
         configured_weights = self.absence_cfg.get("type_weights", {})
         names = [absence_type["Verzuim_Type_Naam"] for absence_type in absence_types]
         weights = [configured_weights.get(name, 1.0) for name in names]

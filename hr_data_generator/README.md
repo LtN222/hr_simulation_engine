@@ -158,10 +158,17 @@ Belangrijke facts zijn:
 - `fact_safety_incident`: één regel per veiligheidsincident, inclusief het
   incidenttype, de rol/afdeling/locatie/ploegendienst op het moment van het
   incident en de verloren werkdagen. Een incident met werkelijk verzuim
-  (`Incidenttype_Naam = "Verzuimongeval"`) koppelt via `Absence_Key` aan de
-  bijbehorende `fact_absence`-episode van het type `Bedrijfsongeval`, zodat
+  (`Incidenttype_Naam = "Verzuimongeval"`) krijgt een bijbehorende
+  `fact_absence`-episode van het type `Bedrijfsongeval`, zodat
   bedrijfsongevallen in dezelfde verzuimrapportage meelopen als gewone
-  ziekmeldingen in plaats van in een geïsoleerde tabel te blijven staan.
+  ziekmeldingen in plaats van in een geïsoleerde tabel te blijven staan. Er is
+  geen sleutel tussen de twee facts; de koppeling loopt op querytijd via
+  `Employee_Key` en datum (zie verderop).
+  `Bedrijfsongeval` wordt uitsluitend door de veiligheidssimulator aangemaakt
+  (begin op de `Incident_Date`): `absence.excluded_from_random_draw` houdt het
+  type buiten de gewone verzuimtrekking, zodat elke episode een incident heeft
+  en het totale aantal ziekmeldingen alleen over kort/middellang/lang
+  verzuim wordt verdeeld.
 
 `fact_employment` is event-gebaseerd: promoties, transfers en salarisreviews
 kunnen meerdere regels voor een medewerker opleveren. Gebruik voor trends in
@@ -248,7 +255,13 @@ een schaalgrens geen impliciet toewijzingsmechanisme voor `dim_role`.
 Gebruik `fact_workforce_snapshot` voor headcount, dienstjaren en slicers op
 afdeling, functie, instroombron, opleidingsniveau, locatie, performance en
 tevredenheid. De fact heeft een medewerker-per-maandultimo-grain en bewaart
-dus de organisatiecontext die op dat moment gold.
+dus de organisatiecontext die op dat moment gold. Wie precies op een
+maandultimo uit dienst gaat, telt in die maand niet meer mee: een medewerker
+valt uit de snapshot vanaf zijn uitdienstdatum, en de nul-dagen "Uit dienst"-
+regel is nooit de regel waar een snapshot naar verwijst. Zo geldt
+headcount(begin) + instroom - uitstroom = headcount(einde). Verzuim in de
+uitdienstmaand en volledige `Beschikbare_*`-capaciteit voor in- en uitstromers
+zijn bewust nog niet aangepast.
 
 De snapshot bevat daarnaast `Betrokkenheid_Score`, `EngagementBand_Key`,
 `EngagementDriver_Key` en de actuele `PerformanceDriver_Key`.
@@ -543,6 +556,24 @@ worden bijgewerkt. De voortgang staat in `simulation_state`.
 - `safety`: jaarlijkse incidentkans per afdeling, de vermenigvuldigers voor
   ploegendienst en nieuwe medewerkers, de gewichten per incidenttype en de
   bandbreedte voor verloren werkdagen bij een `Verzuimongeval`.
+  `safety.annual_incident_rate_by_department` is een *basis*kans; de
+  gerealiseerde kans per medewerker-jaar is basis x verwachte ploegfactor x
+  verwachte nieuwe-medewerkerfactor. `safety.target_incident_rate_by_department`
+  (Productie 0,35, Techniek 0,30, Logistiek 0,25) legt de gewenste
+  gerealiseerde kans vast en `safety.calibration.new_hire_share_by_department`
+  (gemeten aandeel medewerkers binnen 180 dagen diensttijd: 19,7% / 16,9% /
+  15,7%) is de invoer voor de nieuwe-medewerkerfactor. De helper
+  `src/infrastructure/safety_calibration.py` rekent de verwachte kans uit
+  configuratie uit (aandeel ploegrollen uit `allocate_headcount` op de
+  groeigrens, ploegmix, multipliers) en geeft met `calibrated_base_rate` de
+  basiskans die het doel haalt; een test bewaakt dat de gerealiseerde kans
+  binnen 10% van het doel blijft. Huidige basiskansen: Productie 0,26,
+  Techniek 0,25, Logistiek 0,21.
+- `absence.excluded_from_random_draw`: verzuimtypen die een andere simulator
+  beheert (nu `Bedrijfsongeval`). `validate_role_configuration` controleert
+  dat `Bedrijfsongeval` bestaat en hierin staat, en dat elke sleutel van
+  `attrition.voluntary_reason_satisfaction_multipliers` een bestaande
+  vertrekreden is.
 
 ### `baseline_headcount` versus `initial_population.headcount`
 

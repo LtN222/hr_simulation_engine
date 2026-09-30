@@ -1243,6 +1243,7 @@
       "neutral": 1.0,
       "high": 0.94
     },
+    "excluded_from_random_draw": ["Bedrijfsongeval"],
     "type_weights": {
       "Kort verzuim": 0.72,
       "Middellang verzuim": 0.2,
@@ -2610,7 +2611,11 @@
       0.3,
       0.4,
       0.3
-    ]
+    ],
+    "by_department": {
+      "Techniek": {"weights": [0.4, 0.3, 0.3]},
+      "Logistiek": {"weights": [0.5, 0.5, 0.0]}
+    }
   },
   "retirement": {
     "minimum_age": 50,
@@ -2986,7 +2991,7 @@
           50000
         ],
         "salary_scale_code": "B",
-        "ploegendienst": false,
+        "ploegendienst": true,
         "target_weight": 3,
         "initially_staffed": true,
         "active_from_headcount": null,
@@ -3001,7 +3006,7 @@
           66000
         ],
         "salary_scale_code": "D",
-        "ploegendienst": false,
+        "ploegendienst": true,
         "target_weight": 1,
         "initially_staffed": false,
         "active_from_headcount": 8,
@@ -3188,7 +3193,7 @@
           37000
         ],
         "salary_scale_code": "A",
-        "ploegendienst": false,
+        "ploegendienst": true,
         "target_weight": 8,
         "initially_staffed": true,
         "active_from_headcount": null
@@ -3202,7 +3207,7 @@
           60000
         ],
         "salary_scale_code": "D",
-        "ploegendienst": false,
+        "ploegendienst": true,
         "target_weight": 1,
         "initially_staffed": true,
         "active_from_headcount": null
@@ -3794,7 +3799,7 @@
         "neutraal": 1.0,
         "hoog": 0.55
       },
-      "CarriÃ¨re switch": {
+      "Carrière switch": {
         "laag": 1.15,
         "neutraal": 1.0,
         "hoog": 0.85
@@ -3928,8 +3933,20 @@
     }
   ],
   "safety": {
+    "target_incident_rate_by_department": {
+      "Productie": 0.35,
+      "Techniek": 0.30,
+      "Logistiek": 0.25
+    },
+    "calibration": {
+      "new_hire_share_by_department": {
+        "Productie": 0.197,
+        "Techniek": 0.169,
+        "Logistiek": 0.157
+      }
+    },
     "annual_incident_rate_by_department": {
-      "Productie": 0.24,
+      "Productie": 0.26,
       "Techniek": 0.25,
       "Logistiek": 0.21,
       "Kwaliteit": 0.1,

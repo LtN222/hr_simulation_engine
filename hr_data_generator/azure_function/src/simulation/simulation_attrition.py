@@ -365,7 +365,7 @@ class AttritionSimulator:
                 factor *= 1.25
             elif salary_ratio >= 1.10:
                 factor *= 0.65
-        elif reason == "CarriÃ¨re switch" and performance >= 4.0:
+        elif reason == "Carrière switch" and performance >= 4.0:
             factor *= 1.20
         return factor
 

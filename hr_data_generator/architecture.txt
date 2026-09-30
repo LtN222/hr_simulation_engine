@@ -116,7 +116,12 @@ Facts include:
   yearly deviation, calibrated via the config "performance" section.
 - fact_safety_incident: one row per workplace safety incident, with the role,
   department, location and shift at incident time. Incidents that cause real
-  lost time also create the matching fact_absence episode (Bedrijfsongeval).
+  lost time also create the matching fact_absence episode (Bedrijfsongeval),
+  which only the safety simulator creates (absence.excluded_from_random_draw
+  keeps it out of the ordinary sickness draw). Ploegendienst roles now also
+  exist in Techniek and Logistiek, with per-department shift mixes in
+  ploegendienst_assignment.by_department; safety base rates are calibrated to
+  safety.target_incident_rate_by_department (safety_calibration.py).
   There is no stored key between the two facts (see modeling principles).
 
 Modeling principles

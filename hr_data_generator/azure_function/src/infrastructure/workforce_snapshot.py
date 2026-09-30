@@ -200,8 +200,25 @@ def _snapshot_dates(employment, start_date, end_date):
 
 
 def _active_employment(employment, snapshot_date):
-    active = employment[(employment["Startdatum"] <= snapshot_date) & (
-        employment["Einddatum"].isna() | (employment["Einddatum"] >= snapshot_date)
+    """The employment row each still-employed person has at a month-end.
+
+    Someone who leaves on or before `snapshot_date` is not part of that
+    month-end (a leaver on the last day of the month is already gone), so that
+    headcount(start) + hires - leavers = headcount(end). The zero-length
+    terminal "Uit dienst" row (Startdatum = Einddatum = departure date) marks
+    the departure and is never the row a snapshot points at.
+    """
+    status = employment.get("Dienstverband_status")
+    if status is not None:
+        terminal = status == "Uit dienst"
+        departed = employment.loc[
+            terminal & (employment["Startdatum"] <= snapshot_date), "Employee_Key"
+        ]
+        candidates = employment[~terminal & ~employment["Employee_Key"].isin(departed)]
+    else:
+        candidates = employment
+    active = candidates[(candidates["Startdatum"] <= snapshot_date) & (
+        candidates["Einddatum"].isna() | (candidates["Einddatum"] >= snapshot_date)
     )].copy()
     return active.sort_values(["Employee_Key", "Startdatum", "Employment_Key"]).drop_duplicates(
         subset=["Employee_Key"],
