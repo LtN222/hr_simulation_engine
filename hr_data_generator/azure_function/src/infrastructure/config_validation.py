@@ -39,6 +39,7 @@ def validate_role_configuration(config):
     problems.extend(_check_lost_time_absence_type(config))
     problems.extend(_check_voluntary_reasons_exist(config))
     problems.extend(_check_hire_source_weights(config))
+    problems.extend(_check_benchmark_key_bounds(config, structure))
     return problems
 
 
@@ -252,3 +253,32 @@ def _check_hire_source_weights(config):
             )
     return problems
 
+
+def _check_benchmark_key_bounds(config, structure):
+    """SalaryBenchmark_Key = yyyymm * 10000 + Role_Key * 100 + Salaris_Trede only
+    fits when every Role_Key and every step count stays below 100."""
+    from src.infrastructure.salary_benchmark import (
+        MAX_BENCHMARK_ROLE_KEY,
+        MAX_BENCHMARK_STEPS,
+    )
+
+    scales = getattr(config, "dim_salary_scale", None)
+    if not getattr(config, "salary_benchmark", None) or not scales:
+        return []
+    problems = []
+    for department, roles in structure.items():
+        for role_name, role_config in roles.items():
+            role_key = role_config.get("role_key")
+            if role_key is not None and int(role_key) > MAX_BENCHMARK_ROLE_KEY:
+                problems.append(
+                    f"{department}/{role_name}: role_key {role_key} exceeds "
+                    f"{MAX_BENCHMARK_ROLE_KEY} (SalaryBenchmark_Key uses two digits for the role)"
+                )
+    for scale in scales:
+        steps = scale.get("Aantal_Treden")
+        if steps is not None and int(steps) > MAX_BENCHMARK_STEPS:
+            problems.append(
+                f"salary scale {scale.get('Salarisschaal_Code')}: Aantal_Treden {steps} exceeds "
+                f"{MAX_BENCHMARK_STEPS} (SalaryBenchmark_Key uses two digits for the step)"
+            )
+    return problems

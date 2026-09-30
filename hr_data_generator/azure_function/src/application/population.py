@@ -11,6 +11,7 @@ from src.infrastructure.dimensions import (
     build_dim_departure_reason
 )
 from src.infrastructure.manager_assignment import sync_manager_assignments
+from src.generator.person_factory import seed_person_names
 
 from src.application.allocation import allocate_headcount
 from src.application.employee_generation import generate_employees
@@ -26,13 +27,25 @@ class WorkforceGenerator:
         sector="maakindustrie",
         seed=42,
         initial_date=None,
-        initial_headcount=None
+        initial_headcount=None,
+        config=None,
+        schema=None
     ):
+        """Build the initial population.
 
-        self.config = ConfigLoader().load()
-        self.schema = load_schema(self.config.get("schema"))
+        `config` and `schema` are passed in by the pipeline (loaded once per
+        run); they are only loaded here for standalone use. The population has
+        its own random stream, `Random(f"{seed}:population")`, and its own
+        Faker seed, so it never replays a stream the weekly loop also uses.
+        """
+        self.config = config if config is not None else ConfigLoader().load(sector)
+        self.schema = (
+            schema if schema is not None
+            else load_schema(self.config.get("schema"))
+        )
 
-        self.rng = random.Random(seed)
+        self.seed = seed
+        self.rng = random.Random(f"{seed}:population")
 
         self.today = initial_date or datetime(
             self.config.start_year_simulation,
@@ -61,6 +74,7 @@ class WorkforceGenerator:
 
     def run(self, include_history=True):
 
+        seed_person_names(f"{self.seed}:population:names")
         state = {}
 
         self._generate_dimensions(state)

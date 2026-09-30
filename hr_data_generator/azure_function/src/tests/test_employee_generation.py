@@ -30,7 +30,7 @@ from src.infrastructure.relevant_experience import carried_experience, experienc
 from src.infrastructure.engagement import engagement_driver_key_for
 from src.infrastructure.engagement import score_employee_engagement
 from src.infrastructure.avatar import AvatarAssigner, ensure_employee_avatars
-from src.run_simulation_incremental import _ensure_missing_static_dimensions
+from src.infrastructure.state.incremental_load import ensure_missing_static_dimensions as _ensure_missing_static_dimensions
 from src.generator.employment_factory import EmploymentFactory
 from src.simulation.simulation_attrition import AttritionSimulator
 from src.simulation.simulation_absence import AbsenceSimulator

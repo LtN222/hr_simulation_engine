@@ -79,11 +79,11 @@ def seed_person_names(seed):
     drawn through this module were not, since nothing seeded `faker`'s own
     generator from `simulation_seed`.
 
-    Call this exactly once per run, near wherever `random.Random(seed)` is
-    constructed (`run_simulation.py`/`run_simulation_incremental.py`) -
-    before any name is drawn, not per employee or per week. Calling it more
-    than once per employee/week would make every subsequent name repeat the
-    same short sequence instead of continuing it.
+    The pipeline calls this with a string seed (Faker accepts any hashable seed)
+    once for the initial population and once at the start of every simulated
+    week (`f"{seed}:{year}:{week}:names"`), so a week's names do not depend on
+    how many weeks ran before it. Do not call it per employee: every
+    subsequent name would repeat the same short sequence.
     """
     Faker.seed(seed)
 

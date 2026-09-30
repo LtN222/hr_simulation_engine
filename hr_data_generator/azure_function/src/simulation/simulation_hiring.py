@@ -1,7 +1,6 @@
 import pandas as pd
 
 from src.generator.employee_factory import EmployeeFactory
-from src.infrastructure.manager_builder import assign_managers
 from src.infrastructure.record_builder import build_record
 from src.infrastructure.avatar import AvatarAssigner, avatar_fields
 from src.infrastructure.salary_policy import SalaryPolicy
@@ -32,8 +31,6 @@ class HiringSimulator:
         accepted_applications = state.get("_accepted_applications", [])
 
         if not accepted_applications:
-            state["_latest_hires"] = []
-            state["vacancies"] = self._open_vacancy_count(state)
             return state
 
         dim_employee = state["dim_employee"]
@@ -52,7 +49,6 @@ class HiringSimulator:
         new_employees = []
         new_employments = []
         new_qualifications = []
-        latest_hires = []
         recruitment_employee_updates = {}
         vacancy_employee_updates = {}
         role_counts = self._active_role_counts(state)
@@ -96,15 +92,6 @@ class HiringSimulator:
                     state.setdefault("_vacancy_requests", []).append(
                         backfill_request
                     )
-                latest_hires.append({
-                    "Employee_Key": int(internal_employee_key),
-                    "Role_Key": role_row["Role_Key"],
-                    "Department_Key": role_row["Department_Key"],
-                    "HireSource_Key": application["HireSource_Key"],
-                    "Vacancy_Key": application["Vacancy_Key"],
-                    "Vacature_Reden": application["Vacature_Reden"],
-                    "Is_Internal_Mobility": True
-                })
                 recruitment_employee_updates[application["Recruitment_Key"]] = (
                     int(internal_employee_key)
                 )
@@ -228,14 +215,6 @@ class HiringSimulator:
                 )
             )
 
-            latest_hires.append({
-                "Employee_Key": employee_obj.employee_key,
-                "Role_Key": employee_obj.job.role_key,
-                "Department_Key": role_row["Department_Key"],
-                "HireSource_Key": employee_obj.hire_source_key,
-                "Vacancy_Key": application["Vacancy_Key"],
-                "Vacature_Reden": application["Vacature_Reden"]
-            })
             recruitment_employee_updates[application["Recruitment_Key"]] = (
                 employee_obj.employee_key
             )
@@ -264,15 +243,9 @@ class HiringSimulator:
         self._mark_recruitment_as_hired(state, recruitment_employee_updates)
         self._close_filled_vacancies(state, vacancy_employee_updates, today)
 
-        state["dim_employee"] = assign_managers(
-            state["dim_employee"],
-            state["fact_employment"],
-            state["dim_role"],
-            self.rng,
-            staffing_rules=self.config.staffing
-        )
-        state["vacancies"] = self._open_vacancy_count(state)
-        state["_latest_hires"] = latest_hires
+        # Manager assignment is owned by WeeklySimulationRunner, which assigns
+        # right after hiring with the simulated date (this call used to fall
+        # back to the wall clock, AR-22).
         state.pop("_accepted_applications", None)
         return state
 
@@ -424,12 +397,6 @@ class HiringSimulator:
             vacancy.loc[mask, "Filled_Employee_Key"] = employee_key
 
         state["fact_vacancy"] = vacancy
-
-    def _open_vacancy_count(self, state):
-        vacancy = state.get("fact_vacancy", pd.DataFrame())
-        if vacancy.empty or "Status" not in vacancy.columns:
-            return 0
-        return int((vacancy["Status"] == "Open").sum())
 
     def _active_role_counts(self, state):
         active = state["fact_employment"][

@@ -1,6 +1,7 @@
 {
   "dim_department": {
     "df": "dim_department",
+    "write_mode": "upsert",
     "primary_key": "Department_Key",
     "types": {
       "Department_Key": "INT",
@@ -9,6 +10,7 @@
   },
   "dim_role": {
     "df": "dim_role",
+    "write_mode": "upsert",
     "primary_key": "Role_Key",
     "types": {
       "Role_Key": "INT",
@@ -43,6 +45,7 @@
   },
   "dim_manager": {
     "df": "dim_manager",
+    "write_mode": "upsert",
     "primary_key": "Manager_Key",
     "types": {
       "Manager_Key": "INT",
@@ -52,6 +55,7 @@
   },
   "dim_location": {
     "df": "dim_location",
+    "write_mode": "upsert",
     "primary_key": "Location_Key",
     "types": {
       "Location_Key": "INT",
@@ -60,6 +64,7 @@
   },
   "dim_hire_source": {
     "df": "dim_hire_source",
+    "write_mode": "upsert",
     "primary_key": "HireSource_Key",
     "types": {
       "HireSource_Key": "INT",
@@ -71,6 +76,7 @@
   },
   "dim_recruitment_status": {
     "df": "dim_recruitment_status",
+    "write_mode": "upsert",
     "primary_key": "RecruitmentStatus_Key",
     "types": {
       "RecruitmentStatus_Key": "INT",
@@ -84,6 +90,7 @@
   },
   "dim_recruitment_stage": {
     "df": "dim_recruitment_stage",
+    "write_mode": "upsert",
     "primary_key": "Stage_Key",
     "types": {
       "Stage_Key": "INT",
@@ -93,6 +100,7 @@
   },
   "dim_decline_reason": {
     "df": "dim_decline_reason",
+    "write_mode": "upsert",
     "primary_key": "DeclineReason_Key",
     "types": {
       "DeclineReason_Key": "INT",
@@ -102,6 +110,7 @@
   },
   "dim_rejection_reason": {
     "df": "dim_rejection_reason",
+    "write_mode": "upsert",
     "primary_key": "RejectionReason_Key",
     "types": {
       "RejectionReason_Key": "INT",
@@ -111,6 +120,7 @@
   },
   "dim_education": {
     "df": "dim_education",
+    "write_mode": "upsert",
     "primary_key": "Education_Key",
     "types": {
       "Education_Key": "INT",
@@ -121,6 +131,7 @@
   },
   "dim_absence_type": {
     "df": "dim_absence_type",
+    "write_mode": "upsert",
     "primary_key": "AbsenceType_Key",
     "types": {
       "AbsenceType_Key": "INT",
@@ -130,6 +141,7 @@
   },
   "dim_satisfaction_band": {
     "df": "dim_satisfaction_band",
+    "write_mode": "upsert",
     "primary_key": "SatisfactionBand_Key",
     "types": {
       "SatisfactionBand_Key": "INT",
@@ -140,6 +152,7 @@
   },
   "dim_satisfaction_driver": {
     "df": "dim_satisfaction_driver",
+    "write_mode": "upsert",
     "primary_key": "SatisfactionDriver_Key",
     "types": {
       "SatisfactionDriver_Key": "INT",
@@ -153,6 +166,7 @@
   },
   "dim_engagement_band": {
     "df": "dim_engagement_band",
+    "write_mode": "upsert",
     "primary_key": "EngagementBand_Key",
     "types": {
       "EngagementBand_Key": "INT",
@@ -163,6 +177,7 @@
   },
   "dim_performance_driver": {
     "df": "dim_performance_driver",
+    "write_mode": "upsert",
     "primary_key": "PerformanceDriver_Key",
     "types": {
       "PerformanceDriver_Key": "INT",
@@ -174,6 +189,7 @@
   },
   "dim_engagement_driver": {
     "df": "dim_engagement_driver",
+    "write_mode": "upsert",
     "primary_key": "EngagementDriver_Key",
     "types": {
       "EngagementDriver_Key": "INT",
@@ -185,6 +201,7 @@
   },
   "dim_candidate_quality_driver": {
     "df": "dim_candidate_quality_driver",
+    "write_mode": "upsert",
     "primary_key": "CandidateQualityDriver_Key",
     "types": {
       "CandidateQualityDriver_Key": "INT",
@@ -196,6 +213,7 @@
   },
   "dim_salary_band": {
     "df": "dim_salary_band",
+    "write_mode": "upsert",
     "primary_key": "SalaryBand_Key",
     "types": {
       "SalaryBand_Key": "INT",
@@ -206,6 +224,7 @@
   },
   "dim_salary_scale": {
     "df": "dim_salary_scale",
+    "write_mode": "upsert",
     "primary_key": "SalaryScale_Key",
     "types": {
       "SalaryScale_Key": "INT",
@@ -218,6 +237,7 @@
   },
   "dim_shift": {
     "df": "dim_shift",
+    "write_mode": "upsert",
     "primary_key": "Shift_Key",
     "types": {
       "Shift_Key": "INT",
@@ -227,6 +247,7 @@
   },
   "dim_incident_type": {
     "df": "dim_incident_type",
+    "write_mode": "upsert",
     "primary_key": "IncidentType_Key",
     "types": {
       "IncidentType_Key": "INT",
@@ -236,6 +257,7 @@
   },
   "dim_employee": {
     "df": "dim_employee",
+    "write_mode": "upsert",
     "primary_key": "Employee_Key",
     "types": {
       "Employee_Key": "INT",
@@ -298,6 +320,7 @@
   },
   "dim_departure_reason": {
     "df": "dim_departure_reason",
+    "write_mode": "upsert",
     "primary_key": "DepartureReason_Key",
     "types": {
       "DepartureReason_Key": "INT",
@@ -307,6 +330,7 @@
   },
   "dim_event_type": {
     "df": "dim_event_type",
+    "write_mode": "upsert",
     "primary_key": "EventType_Key",
     "types": {
       "EventType_Key": "INT",
@@ -315,6 +339,7 @@
   },
   "fact_employee_qualification": {
     "df": "fact_employee_qualification",
+    "write_mode": "append",
     "primary_key": "EmployeeQualification_Key",
     "types": {
       "EmployeeQualification_Key": "INT",
@@ -338,6 +363,7 @@
   },
   "fact_employment": {
     "df": "fact_employment",
+    "write_mode": "upsert",
     "primary_key": "Employment_Key",
     "types": {
       "Employment_Key": "INT",
@@ -438,6 +464,7 @@
   },
   "fact_absence": {
     "df": "fact_absence",
+    "write_mode": "upsert",
     "primary_key": "Absence_Key",
     "deprecated_columns": [
       "AbsenceDuration_Key",
@@ -524,6 +551,7 @@
   },
   "fact_safety_incident": {
     "df": "fact_safety_incident",
+    "write_mode": "append",
     "primary_key": "Incident_Key",
     "types": {
       "Incident_Key": "INT",
@@ -582,6 +610,7 @@
   },
   "fact_vacancy": {
     "df": "fact_vacancy",
+    "write_mode": "upsert",
     "primary_key": "Vacancy_Key",
     "types": {
       "Vacancy_Key": "INT",
@@ -620,6 +649,7 @@
   },
   "fact_recruitment": {
     "df": "fact_recruitment",
+    "write_mode": "upsert",
     "primary_key": "Recruitment_Key",
     "types": {
       "Recruitment_Key": "INT",
@@ -710,6 +740,8 @@
   },
   "fact_workforce_snapshot": {
     "df": "fact_workforce_snapshot",
+    "write_mode": "upsert",
+    "delete_missing": true,
     "primary_key": "WorkforceSnapshot_Key",
     "types": {
       "WorkforceSnapshot_Key": "INT",
@@ -861,6 +893,7 @@
   },
   "fact_manager_assignment": {
     "df": "fact_manager_assignment",
+    "write_mode": "upsert",
     "primary_key": "ManagerAssignment_Key",
     "types": {
       "ManagerAssignment_Key": "INT",
@@ -890,6 +923,7 @@
   },
   "fact_salary_benchmark": {
     "df": "fact_salary_benchmark",
+    "write_mode": "append",
     "primary_key": "SalaryBenchmark_Key",
     "types": {
       "SalaryBenchmark_Key": "INT",
@@ -924,6 +958,7 @@
   },
   "fact_performance_review": {
     "df": "fact_performance_review",
+    "write_mode": "append",
     "primary_key": "PerformanceReview_Key",
     "types": {
       "PerformanceReview_Key": "INT",

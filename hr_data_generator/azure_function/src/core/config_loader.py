@@ -12,10 +12,14 @@ class ConfigLoader:
             os.path.dirname(os.path.dirname(__file__))
         )
 
-    def load(self) -> Config:
+    def load(self, sector=None) -> Config:
+        """Load the sector configuration merged with the runtime settings.
 
+        An explicit `sector` wins over the `HR_SECTOR` runtime setting.
+        """
         runtime_config = load_runtime_config()
-        sector = runtime_config["sector"]
+        sector = sector or runtime_config["sector"]
+        runtime_config = {**runtime_config, "sector": sector}
 
         json_config = self._load_sector_config(sector)
 

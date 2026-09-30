@@ -193,7 +193,6 @@ class AttritionSimulator:
                 "Datum_uitdienst",
             ] = today
 
-            state["vacancies"] = state.get("vacancies", 0) + 1
             state.setdefault("_vacancy_requests", []).append({
                 "Role_Key": employment["Role_Key"],
                 "Department_Key": role["Department_Key"],

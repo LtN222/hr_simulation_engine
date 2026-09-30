@@ -5,57 +5,36 @@ from sqlalchemy import create_engine, text, Integer, String, Date, Boolean, Nume
 import urllib
 import logging
 
+from src.infrastructure.state.table_changes import (
+    APPEND,
+    UPSERT,
+    WRITE_MODES,
+    normalize_column,
+    plan_incremental,
+    summarize,
+)
+
 
 # =====================================================
 # DATABASE WRITE PIPELINE
 # =====================================================
-
-STATIC_DIMENSIONS = {
-    "dim_department",
-    "dim_role",
-    "dim_location",
-    "dim_education",
-    "dim_absence_type",
-    "dim_satisfaction_band",
-    "dim_satisfaction_driver",
-    "dim_engagement_band",
-    "dim_performance_driver",
-    "dim_engagement_driver",
-    "dim_candidate_quality_driver",
-    "dim_salary_band",
-    "dim_salary_scale",
-    "dim_shift",
-    "dim_event_type",
-    "dim_departure_reason",
-    "dim_decline_reason",
-    "dim_rejection_reason",
-    "dim_recruitment_stage",
-    "dim_incident_type"
-}
-
-# These dimensions represent either current employee state or configuration
-# owned labels. Both need Type 1 updates on incremental runs.
-MUTABLE_DIMENSIONS = {
-    "dim_employee",
-    "dim_manager",
-    "dim_hire_source",
-    "dim_recruitment_status"
-}
-
-# Most facts are immutable events. An employment event is the exception: an
-# active event is completed in place when a contract ends, changes internally,
-# or receives its final departure context.
-MUTABLE_FACTS = {"fact_absence", "fact_employment", "fact_recruitment"}
+#
+# Every schema table declares its write mode (`write_mode`: "upsert" or
+# "append", see table_changes.py). A run writes in two phases:
+#
+#   1. schema evolution (create missing tables, add columns, drop retired
+#      tables/columns, constraints) - DDL, outside the data transaction;
+#   2. ONE transaction on one connection: a full run resets the managed tables
+#      and bulk-inserts everything, an incremental run writes only new and
+#      changed rows (plus explicit deletes), and the checkpoint in
+#      `simulation_state` is written LAST. A failure rolls everything back, so
+#      the database keeps its previous data and its previous checkpoint.
 
 # SQL Server accepts at most 2,100 bound parameters in a single statement. Keep
 # a small margin so pandas' ``method='multi'`` remains reliable for wide facts.
 SQL_SERVER_INSERT_PARAMETER_BUDGET = 2_000
 DEFAULT_INSERT_CHUNKSIZE = 100
 
-
-# =====================================================
-# 1️⃣ Database engine ophalen
-# =====================================================
 
 def get_engine(database_name):
 
@@ -79,11 +58,6 @@ def get_engine(database_name):
     )
 
     return engine
-
-
-# =====================================================
-# 2️⃣ SQL datatype mapping
-# =====================================================
 
 def map_sql_types(type_config):
 
@@ -111,7 +85,6 @@ def map_sql_types(type_config):
 
     return mapping
 
-
 def get_insert_chunksize(df):
     """Return a SQL Server-safe multi-row insert batch size for ``df``."""
     column_count = len(df.columns)
@@ -128,11 +101,6 @@ def get_insert_chunksize(df):
         max(1, SQL_SERVER_INSERT_PARAMETER_BUDGET // column_count)
     )
 
-
-# =====================================================
-# Helper: state filter
-# =====================================================
-
 def filter_state_tables(state):
 
     return {
@@ -140,11 +108,6 @@ def filter_state_tables(state):
         for key, value in state.items()
         if isinstance(value, pd.DataFrame)
     }
-
-
-# =====================================================
-# Helper: tabel volgorde bepalen
-# =====================================================
 
 def get_table_write_order(schema_config):
     """Return a stable write order in which referenced rows exist first.
@@ -202,57 +165,6 @@ def get_table_write_order(schema_config):
 
     return ordered_tables
 
-
-# =====================================================
-# Helper: bestaande primary key waarden ophalen
-# =====================================================
-
-def _get_existing_primary_keys(engine, table, pk_column):
-    try:
-        with engine.begin() as conn:
-            result = conn.execute(text(
-                f"SELECT CAST({pk_column} AS NVARCHAR(255)) FROM {table}"
-            ))
-            return {
-                str(row[0])
-                for row in result.fetchall()
-                if row[0] is not None
-            }
-    except Exception as exc:
-        logging.warning(f"Could not read existing keys for {table}: {exc}")
-        return set()
-
-
-def _filter_existing_primary_key_rows(engine, df, table, cfg):
-    if df.empty:
-        return df
-
-    pk_column = cfg.get("primary_key")
-    if not pk_column or pk_column not in df.columns:
-        return df
-
-    existing_keys = _get_existing_primary_keys(engine, table, pk_column)
-    if not existing_keys:
-        return df
-
-    df = df.drop_duplicates(subset=[pk_column], keep="first")
-
-    def _normalize_value(value):
-        if pd.isna(value):
-            return None
-        return str(value)
-
-    normalized_values = df[pk_column].apply(_normalize_value)
-    mask = normalized_values.isin(existing_keys)
-    filtered_df = df.loc[~mask]
-
-    skipped = len(df) - len(filtered_df)
-    if skipped > 0:
-        logging.info(f"{table}: skipped {skipped} rows already present in SQL")
-
-    return filtered_df
-
-
 def _normalize_dataframe_for_sql(df, type_config=None):
     normalized = df.copy()
 
@@ -267,7 +179,9 @@ def _normalize_dataframe_for_sql(df, type_config=None):
             return int(value)
 
         if sql_type and sql_type.startswith("DECIMAL"):
-            return float(value)
+            # Placeholder: DECIMAL columns are converted as a whole column below,
+            # with the exact quantization the change comparison uses.
+            return value
 
         if sql_type and sql_type.startswith("BIT"):
             return bool(value)
@@ -298,6 +212,11 @@ def _normalize_dataframe_for_sql(df, type_config=None):
     for col in normalized.columns:
         try:
             sql_type = type_config.get(col) if type_config else None
+            if sql_type and sql_type.startswith("DECIMAL"):
+                # Send Decimals quantized like the comparison does, never floats:
+                # SQL Server rounds float -> DECIMAL differently (6.805 -> 6.80).
+                normalized[col] = normalize_column(normalized[col], sql_type)
+                continue
             normalized[col] = pd.Series(
                 [
                     _normalize_scalar(value, sql_type)
@@ -310,7 +229,6 @@ def _normalize_dataframe_for_sql(df, type_config=None):
             continue
 
     return normalized
-
 
 def _ensure_table_columns(engine, table, cfg):
     """Add missing nullable columns when the schema evolves.
@@ -331,7 +249,6 @@ def _ensure_table_columns(engine, table, cfg):
                 ALTER TABLE {table}
                 ADD {column} {sql_type} NULL
             """))
-
 
 def _drop_deprecated_columns(engine, schema_config):
     """Remove explicitly deprecated source columns from existing SQL tables."""
@@ -361,7 +278,6 @@ def _drop_deprecated_columns(engine, schema_config):
                     AND COL_LENGTH('{table}', '{column}') IS NOT NULL
                     ALTER TABLE [{table}] DROP COLUMN [{column}]
                 """))
-
 
 def _drop_obsolete_tables(engine):
     """Remove tables retired from the reporting model and their constraints."""
@@ -393,267 +309,6 @@ def _drop_obsolete_tables(engine):
                 IF OBJECT_ID('{table}', 'U') IS NOT NULL
                 DROP TABLE [{table}]
             """))
-
-
-def _table_exists(engine, table):
-    with engine.begin() as conn:
-        return conn.execute(text(
-            "SELECT OBJECT_ID(:table_name, 'U')"
-        ), {"table_name": table}).scalar() is not None
-
-
-def _upsert_mutable_dimension(engine, table, dataframe, cfg):
-    """Insert new dimension members and update existing current-state rows."""
-    if dataframe.empty:
-        return
-
-    if not _table_exists(engine, table):
-        dataframe.to_sql(
-            table,
-            engine,
-            if_exists="append",
-            index=False,
-            chunksize=get_insert_chunksize(dataframe),
-            method="multi",
-            dtype=map_sql_types(cfg["types"])
-        )
-        return
-
-    pk_column = cfg.get("primary_key")
-    columns = [
-        column
-        for column in cfg.get("types", {})
-        if column in dataframe.columns
-    ]
-    if not pk_column or pk_column not in columns:
-        raise ValueError(f"{table} requires a primary key for an upsert.")
-
-    update_columns = [column for column in columns if column != pk_column]
-    update_sql = ", ".join(
-        f"[{column}] = :{column}"
-        for column in update_columns
-    )
-    insert_columns = ", ".join(f"[{column}]" for column in columns)
-    insert_values = ", ".join(f":{column}" for column in columns)
-    update_statement = text(f"""
-        UPDATE {table}
-        SET {update_sql}
-        WHERE [{pk_column}] = :{pk_column}
-    """)
-    insert_statement = text(f"""
-        INSERT INTO {table} ({insert_columns})
-        VALUES ({insert_values})
-    """)
-
-    rows = dataframe.drop_duplicates(
-        subset=[pk_column],
-        keep="last"
-    )[columns].to_dict(orient="records")
-
-    with engine.begin() as conn:
-        for row in rows:
-            result = conn.execute(update_statement, row)
-            if result.rowcount == 0:
-                conn.execute(insert_statement, row)
-
-
-# =====================================================
-# Helper: tabellen resetten
-# =====================================================
-
-def reset_tables(engine, table_order):
-
-    with engine.begin() as conn:
-        constraint_commands = _get_foreign_key_constraint_commands(
-            conn,
-            table_order
-        )
-
-        # SQL Server blocks parent deletes while FK constraints on child tables
-        # are active. During a full rebuild we intentionally empty all managed
-        # tables first, then insert a fresh consistent dataset.
-        for command in constraint_commands["disable"]:
-            conn.execute(text(command))
-
-        for table in reversed(table_order):
-
-            conn.execute(text(f"""
-                IF OBJECT_ID('{table}', 'U') IS NOT NULL
-                DELETE FROM {table}
-            """))
-
-        for command in constraint_commands["enable"]:
-            conn.execute(text(command))
-
-
-def _get_foreign_key_constraint_commands(conn, table_order):
-    escaped_table_names = [
-        table.replace("'", "''")
-        for table in table_order
-    ]
-    table_values = ", ".join(
-        f"('{table}')"
-        for table in escaped_table_names
-    )
-
-    if not table_values:
-        return {"disable": [], "enable": []}
-
-    rows = conn.execute(text(f"""
-        WITH ManagedTables AS (
-            SELECT table_name
-            FROM (VALUES {table_values}) AS v(table_name)
-        )
-        SELECT DISTINCT
-            'ALTER TABLE '
-                + QUOTENAME(OBJECT_SCHEMA_NAME(fk.parent_object_id))
-                + '.'
-                + QUOTENAME(OBJECT_NAME(fk.parent_object_id))
-                + ' NOCHECK CONSTRAINT '
-                + QUOTENAME(fk.name) AS disable_sql,
-            'ALTER TABLE '
-                + QUOTENAME(OBJECT_SCHEMA_NAME(fk.parent_object_id))
-                + '.'
-                + QUOTENAME(OBJECT_NAME(fk.parent_object_id))
-                + ' WITH CHECK CHECK CONSTRAINT '
-                + QUOTENAME(fk.name) AS enable_sql
-        FROM sys.foreign_keys fk
-        JOIN ManagedTables parent_tables
-            ON OBJECT_NAME(fk.parent_object_id) = parent_tables.table_name
-        JOIN ManagedTables referenced_tables
-            ON OBJECT_NAME(fk.referenced_object_id) = referenced_tables.table_name
-    """)).fetchall()
-
-    return {
-        "disable": [row.disable_sql for row in rows],
-        "enable": [row.enable_sql for row in reversed(rows)]
-    }
-
-
-# =====================================================
-# 3️⃣ DataFrames naar SQL schrijven
-# =====================================================
-
-def write_dataframes(engine, dataframes, schema_config, reset):
-    summary = {}
-    table_order = get_table_write_order(schema_config)
-    logging.info(f"Table write order: {table_order}")
-
-    for table in table_order:
-
-        cfg = schema_config[table]
-        _ensure_table_columns(engine, table, cfg)
-
-        df_name = cfg["df"]
-
-        if df_name not in dataframes:
-            logging.warning(f"DataFrame {df_name} not found — skipping")
-            continue
-
-        df = dataframes[df_name]
-
-        if not reset and table in STATIC_DIMENSIONS and _table_exists(engine, table):
-            missing_rows = _filter_existing_primary_key_rows(
-                engine,
-                df,
-                table,
-                cfg
-            )
-            if not missing_rows.empty:
-                dtype_map = map_sql_types(cfg["types"])
-                normalized = _normalize_dataframe_for_sql(
-                    missing_rows,
-                    cfg.get("types")
-                )
-                normalized.to_sql(
-                    table,
-                    engine,
-                    if_exists="append",
-                    index=False,
-                    chunksize=get_insert_chunksize(normalized),
-                    method="multi",
-                    dtype=dtype_map
-                )
-
-            summary[table] = {
-                "added": len(missing_rows),
-                "total": len(df)
-            }
-            logging.info(
-                f"{table}: +{len(missing_rows)} static rows "
-                f"(total {len(df)})"
-            )
-            continue
-
-        if not reset and table in MUTABLE_DIMENSIONS | MUTABLE_FACTS:
-            new_rows = _filter_existing_primary_key_rows(engine, df, table, cfg)
-            _ensure_table_columns(engine, table, cfg)
-            normalized = _normalize_dataframe_for_sql(
-                df,
-                cfg.get("types")
-            )
-            _upsert_mutable_dimension(engine, table, normalized, cfg)
-
-            summary[table] = {
-                "added": len(new_rows),
-                "total": len(df)
-            }
-            logging.info(
-                f"{table}: +{len(new_rows)} rows, "
-                f"{len(df) - len(new_rows)} rows updated"
-            )
-            continue
-
-        used_primary_key_filter = False
-
-        if not reset:
-            df = _filter_existing_primary_key_rows(engine, df, table, cfg)
-            used_primary_key_filter = bool(cfg.get("primary_key"))
-
-        try:
-            with engine.begin() as conn:
-                result = conn.execute(text(f"SELECT COUNT(*) FROM {table}"))
-                existing_rows = result.scalar()
-        except Exception:
-            existing_rows = 0
-
-        if reset or used_primary_key_filter:
-            df_to_insert = df
-        else:
-            df_to_insert = df.iloc[existing_rows:]
-
-        if len(df_to_insert) > 0:
-            _ensure_table_columns(engine, table, cfg)
-            dtype_map = map_sql_types(cfg["types"]) if "types" in cfg else None
-            df_to_insert = _normalize_dataframe_for_sql(
-                df_to_insert,
-                cfg.get("types")
-            )
-
-            df_to_insert.to_sql(
-                table,
-                engine,
-                if_exists="append",
-                index=False,
-                chunksize=get_insert_chunksize(df_to_insert),
-                method="multi",
-                dtype=dtype_map
-            )
-
-        rows_added = len(df_to_insert)
-
-        summary[table] = {
-            "added": rows_added,
-            "total": len(df)
-        }
-
-        logging.info(f"{table}: +{rows_added} rows (total {len(df)})")
-
-    return summary
-
-# =====================================================
-# 4️⃣ Constraints toepassen
-# =====================================================
 
 def apply_constraints(engine, schema_config):
 
@@ -718,33 +373,212 @@ def apply_constraints(engine, schema_config):
                     """))
 
 
+
+def table_exists(conn, table):
+    """Whether `table` exists; the only read failure callers may tolerate."""
+    return conn.execute(text(
+        "SELECT OBJECT_ID(:table_name, 'U')"
+    ), {"table_name": table}).scalar() is not None
+
+
 # =====================================================
-# 5️⃣ Dataset write orchestrator
+# Phase 1: schema evolution (before the data transaction)
 # =====================================================
 
-def write_dataset(engine, state, schema_config, reset=False):
+def _column_ddl(column, sql_type, primary_key):
+    nullability = "NOT NULL" if column == primary_key else "NULL"
+    return f"[{column}] {sql_type} {nullability}"
 
-    logging.info("Writing dataset to SQL")
 
+def _create_missing_tables(engine, schema_config, table_order):
+    with engine.begin() as conn:
+        for table in table_order:
+            cfg = schema_config[table]
+            primary_key = cfg["primary_key"]
+            columns = ", ".join(
+                _column_ddl(column, sql_type, primary_key)
+                for column, sql_type in cfg["types"].items()
+            )
+            conn.execute(text(f"""
+                IF OBJECT_ID('{table}', 'U') IS NULL
+                CREATE TABLE {table} (
+                    {columns},
+                    CONSTRAINT PK_{table} PRIMARY KEY ({primary_key})
+                )
+            """))
+
+
+def ensure_schema(engine, schema_config):
+    """Bring the SQL schema up to date. DDL: never run inside the data transaction."""
+    from src.infrastructure.state.simulation_state import ensure_simulation_state_table
+
+    table_order = get_table_write_order(schema_config)
     _drop_obsolete_tables(engine)
     _drop_deprecated_columns(engine, schema_config)
+    _create_missing_tables(engine, schema_config, table_order)
+    for table in table_order:
+        _ensure_table_columns(engine, table, schema_config[table])
+    apply_constraints(engine, schema_config)
+    with engine.begin() as conn:
+        ensure_simulation_state_table(conn)
 
-    if reset:
-        table_order = get_table_write_order(schema_config)
-        reset_tables(engine, table_order)
 
-    dataframes = filter_state_tables(state)
+# =====================================================
+# Phase 2: statements inside the data transaction
+# =====================================================
 
-    summary = write_dataframes(
-        engine,
-        dataframes,
-        schema_config,
-        reset
+def reset_tables(conn, table_order):
+    """Empty every managed table on `conn` (inside the caller's transaction).
+
+    Children are deleted before their parents (reverse write order), so no
+    foreign key has to be switched off: ALTER TABLE takes a schema-modification
+    lock that would block readers, even under READ_COMMITTED_SNAPSHOT, until the
+    commit. Deleting all rows of one self-referencing table in a single
+    statement (fact_employment.Previous_Employment_Key) is allowed.
+    """
+    for table in reversed(table_order):
+        conn.execute(text(f"""
+            IF OBJECT_ID('{table}', 'U') IS NOT NULL
+            DELETE FROM {table}
+        """))
+
+
+def insert_rows(conn, table, cfg, frame):
+    """Insert `frame` into `table` on `conn`."""
+    if frame.empty:
+        return
+    normalized = _normalize_dataframe_for_sql(frame, cfg.get("types"))
+    normalized.to_sql(
+        table,
+        conn,
+        if_exists="append",
+        index=False,
+        chunksize=get_insert_chunksize(normalized),
+        method="multi",
+        dtype=map_sql_types(cfg["types"])
     )
 
-    logging.info(f"Tables written: {list(dataframes.keys())}")
 
-    apply_constraints(engine, schema_config)
+def update_rows(conn, table, cfg, frame):
+    """UPDATE the changed rows (known to exist) by primary key, one batch."""
+    if frame.empty:
+        return
+    primary_key = cfg["primary_key"]
+    columns = [column for column in cfg["types"] if column in frame.columns]
+    update_columns = [column for column in columns if column != primary_key]
+    assignments = ", ".join(f"[{column}] = :{column}" for column in update_columns)
+    normalized = _normalize_dataframe_for_sql(frame[columns], cfg.get("types"))
+    conn.execute(
+        text(f"UPDATE {table} SET {assignments} WHERE [{primary_key}] = :{primary_key}"),
+        normalized.to_dict(orient="records"),
+    )
+
+
+def delete_rows(conn, table, cfg, keys):
+    """DELETE rows by primary key (only tables declaring `delete_missing`)."""
+    if not keys:
+        return
+    primary_key = cfg["primary_key"]
+    conn.execute(
+        text(f"DELETE FROM {table} WHERE [{primary_key}] = :key"),
+        [{"key": key} for key in keys],
+    )
+
+
+def _write_full(conn, tables, schema_config, table_order):
+    """Reset the managed tables and bulk-insert every table."""
+    reset_tables(conn, table_order)
+    summary = {}
+    for table in table_order:
+        cfg = schema_config[table]
+        frame = tables.get(cfg["df"])
+        if frame is None:
+            logging.warning(f"DataFrame {cfg['df']} not found - skipping")
+            continue
+        frame = frame.drop_duplicates(subset=[cfg["primary_key"]], keep="last")
+        insert_rows(conn, table, cfg, frame)
+        summary[table] = {
+            "added": len(frame), "updated": 0, "unchanged": 0, "deleted": 0, "total": len(frame),
+        }
+        logging.info(f"{table}: +{len(frame)} rows (full run)")
+    return summary
+
+
+def _write_incremental(conn, changes, schema_config):
+    for change in changes:
+        cfg = schema_config[change.table]
+        insert_rows(conn, change.table, cfg, change.added)
+        update_rows(conn, change.table, cfg, change.updated)
+        delete_rows(conn, change.table, cfg, change.deleted_keys)
+
+
+def write_dataset(
+    engine,
+    state,
+    schema_config,
+    reset=False,
+    baseline=None,
+    checkpoint=None,
+    write_checkpoint=None,
+    dry_run=False,
+):
+    """Write the state to SQL: schema first, then one atomic data transaction.
+
+    `baseline` (per-table row digests from the incremental load) is required for
+    an incremental write; a full run (`reset=True`) bulk-inserts everything.
+    `write_checkpoint(conn, checkpoint)` runs as the last statement of the
+    transaction. With `dry_run` schema evolution is skipped and the whole
+    transaction runs and is rolled back; the per-table counts are returned.
+    """
+    logging.info("Writing dataset to SQL")
+    if dry_run and reset:
+        raise ValueError("A dry run is only allowed for incremental writes.")
+    if not reset and baseline is None:
+        raise ValueError("An incremental write needs the baseline of the loaded tables.")
+
+    if dry_run:
+        # A dry run must not change anything, schema included. If the schema is
+        # out of date the write fails inside the transaction and rolls back.
+        logging.info("DRY RUN: schema evolution skipped.")
+    else:
+        ensure_schema(engine, schema_config)
+
+    table_order = get_table_write_order(schema_config)
+    tables = filter_state_tables(state)
+    # Planning is pure: it raises (before anything is written) when a table
+    # lost rows it may not lose.
+    changes = None if reset else plan_incremental(tables, schema_config, baseline, table_order)
+
+    conn = engine.connect()
+    transaction = conn.begin()
+    try:
+        if reset:
+            summary = _write_full(conn, tables, schema_config, table_order)
+        else:
+            _write_incremental(conn, changes, schema_config)
+            summary = summarize(changes)
+
+        if checkpoint is not None and write_checkpoint is not None:
+            write_checkpoint(conn, checkpoint)   # LAST statement of the transaction
+
+        if dry_run:
+            transaction.rollback()
+            logging.info("DRY RUN: the write transaction was rolled back; nothing was changed.")
+        else:
+            transaction.commit()
+    except BaseException:
+        try:
+            transaction.rollback()
+        except Exception:
+            logging.exception("The rollback itself failed; the server discards an open transaction when the connection closes.")
+        logging.error(
+            "The SQL write failed and was rolled back: the database still holds the "
+            "previous data and the previous checkpoint. No partial run is stored "
+            "(for a full run on a small tier the usual cause is a full transaction log)."
+        )
+        raise
+    finally:
+        conn.close()
 
     logging.info("Dataset write pipeline completed")
     return summary

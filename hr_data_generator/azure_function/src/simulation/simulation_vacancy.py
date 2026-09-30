@@ -122,7 +122,6 @@ class VacancySimulator:
         elif "fact_vacancy" not in state:
             state["fact_vacancy"] = pd.DataFrame(records)
 
-        state["vacancies"] = self._open_vacancy_count(state)
         state.pop("_vacancy_requests", None)
         return state
 
@@ -305,12 +304,6 @@ class VacancySimulator:
         return state["dim_role"].loc[
             state["dim_role"]["Role_Key"] == role_key, "Functie_Naam"
         ].iloc[0]
-
-    def _open_vacancy_count(self, state):
-        vacancy = state.get("fact_vacancy", pd.DataFrame())
-        if vacancy.empty or "Status" not in vacancy.columns:
-            return 0
-        return int((vacancy["Status"] == "Open").sum())
 
     def _target_ratio_for_role(self, state, role_row, active_structure):
         department_name = self._department_name(role_row["Department_Key"], state)

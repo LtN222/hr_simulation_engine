@@ -1,6 +1,6 @@
 import pandas as pd
 
-from src.run_simulation_incremental import _normalize_date_columns
+from src.infrastructure.state.incremental_load import normalize_date_columns as _normalize_date_columns
 
 
 def _schema():

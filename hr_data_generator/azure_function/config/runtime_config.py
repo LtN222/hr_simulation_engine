@@ -21,4 +21,12 @@ def load_runtime_config():
         os.environ.get("HR_SIMULATION_MODE", "incremental")
     )
 
+    # Validation helpers (see README "Lokaal draaien"): a dry run executes the
+    # whole write transaction and rolls it back; an as-of date replaces "today".
+    config["simulation_dry_run"] = os.environ.get(
+        "HR_SIMULATION_DRY_RUN", "false"
+    ).strip().lower() in ("1", "true", "yes")
+
+    config["simulation_as_of"] = os.environ.get("HR_SIMULATION_AS_OF") or None
+
     return config

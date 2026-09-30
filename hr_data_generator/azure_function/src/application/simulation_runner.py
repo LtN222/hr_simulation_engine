@@ -16,6 +16,23 @@ from src.infrastructure.manager_builder import assign_managers
 from src.infrastructure.manager_assignment import sync_manager_assignments
 
 
+# Per-week caches of resolved satisfaction/engagement inputs (see
+# satisfaction.py/engagement.py). They are only valid within one simulated week.
+WEEK_CACHE_KEYS = (
+    "_satisfaction_cache",
+    "_satisfaction_momentum_cache",
+    "_engagement_cache",
+    "_engagement_momentum_cache",
+    "_constructive_contributions_cache",
+)
+
+
+def clear_week_caches(state):
+    """Empty the per-week caches so nothing computed earlier leaks into a later step."""
+    for cache_key in WEEK_CACHE_KEYS:
+        state[cache_key] = {}
+
+
 class WeeklySimulationRunner:
     """Coordinates all HR simulation events for a single ISO week."""
 
@@ -58,14 +75,7 @@ class WeeklySimulationRunner:
         # a week (see satisfaction.py/engagement.py) since several
         # simulators ask for the same employee's score on the same date.
         # Clearing per week keeps the cache from growing for the entire run.
-        for cache_key in (
-            "_satisfaction_cache",
-            "_satisfaction_momentum_cache",
-            "_engagement_cache",
-            "_engagement_momentum_cache",
-            "_constructive_contributions_cache",
-        ):
-            state[cache_key] = {}
+        clear_week_caches(state)
 
         event_type_map = self._map_dimension(
             state["dim_event_type"],

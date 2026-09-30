@@ -8,6 +8,27 @@ from src.infrastructure.record_builder import build_record
 from src.infrastructure.salary_policy import SalaryPolicy
 
 
+MAX_BENCHMARK_ROLE_KEY = 99
+MAX_BENCHMARK_STEPS = 99
+
+
+def benchmark_key(benchmark_date, role_key, step):
+    """Deterministic surrogate: yyyymm * 10000 + Role_Key * 100 + Salaris_Trede.
+
+    Independent of how many roles/steps exist, so adding a role or a step never
+    relabels history, and an incremental run can rewrite a month by key. Needs
+    Role_Key <= 99 and Salaris_Trede <= 99 (validated in config) and stays
+    below the INT maximum until the year 2147.
+    """
+    role_key, step = int(role_key), int(step)
+    if not 0 < role_key <= MAX_BENCHMARK_ROLE_KEY or not 0 < step <= MAX_BENCHMARK_STEPS:
+        raise ValueError(
+            f"SalaryBenchmark_Key needs 1 <= Role_Key <= {MAX_BENCHMARK_ROLE_KEY} and "
+            f"1 <= Salaris_Trede <= {MAX_BENCHMARK_STEPS} (got role {role_key}, step {step})."
+        )
+    return int(pd.Timestamp(benchmark_date).strftime("%Y%m")) * 10_000 + role_key * 100 + step
+
+
 class SalaryBenchmarkBuilder:
     """Create deterministic monthly salary benchmarks from sector settings.
 
@@ -43,7 +64,6 @@ class SalaryBenchmarkBuilder:
             return pd.DataFrame()
 
         records = []
-        benchmark_key = 1
         for snapshot_date in snapshot_dates:
             for _, role in self.roles.sort_values("Role_Key").iterrows():
                 benchmark = self.for_role(role, snapshot_date)
@@ -53,7 +73,9 @@ class SalaryBenchmarkBuilder:
                             self.schema,
                             "fact_salary_benchmark",
                             {
-                                "SalaryBenchmark_Key": benchmark_key,
+                                "SalaryBenchmark_Key": benchmark_key(
+                                    snapshot_date, role["Role_Key"], step
+                                ),
                                 "Benchmark_Date": snapshot_date,
                                 "Role_Key": int(role["Role_Key"]),
                                 "SalaryScale_Key": benchmark["SalaryScale_Key"],
@@ -74,7 +96,6 @@ class SalaryBenchmarkBuilder:
                             }
                         )
                     )
-                    benchmark_key += 1
 
         return pd.DataFrame(records)
 
