@@ -66,7 +66,7 @@
       "Referral": 11.4,
       "Recruitmentbureau": 6.7
     },
-    "burn_in_years": 4,
+    "burn_in_years": 2,
     "minimum_hire_age": 18,
     "tenure_years_distribution": {
       "0-1": 0.32,

@@ -211,6 +211,41 @@ Facts for that discussion:
 - Redrawing names at generation needs a full run to change existing names. A
   display-name column or a shortening rule could be backfilled incrementally.
 
+**HP-03 ✔ verified - Salaries dip below the indexed legal minimum between reviews (high; full run: yes)**
+Found in the first full run after HP-01 (2026-09-30, baseline_headcount 50,
+as of 2026-09-16). 258 of 8,301 `fact_workforce_snapshot` rows (3.1%) are
+below the floor that applies on their snapshot date, by at most EUR 965
+(about 2.8%).
+
+In `fact_employment`, rows that copy the previous salary also start below
+the floor of their own start date: "Contract verlengd" (3 rows, up to
+-392) and "Uit dienst" (4 rows, up to -676). Another 9 "Aangenomen"/
+"Salarisaanpassing" rows are EUR 15-17 below in a SQL approximation of the
+floor formula; that is probably rounding in the check itself (not verified).
+
+Cause: `SalaryPolicy.legal_minimum(date)` rises continuously (2.5% a
+year via the market growth factor), but a salary only rises at hire,
+promotion/transfer and the annual review. Someone at or near the floor
+therefore falls below it within months. In reality the Dutch minimum
+wage is indexed on 1 January and 1 July, and employers must raise pay on
+those dates.
+
+Proposed fix (to decide when picked up):
+- Make the floor step-wise: constant from each 1 January / 1 July, still
+  indexed backwards from `legal_minimum_salary.reference_year`.
+- Add a minimum-wage adjustment on those dates: every active employee
+  below the new floor gets a `Salarisaanpassing` row that brings `Salaris`
+  up to the floor. This is either a small weekly step in the runner, or
+  part of the salary-review simulator.
+- Rows that copy a salary (renewal, location transfer, relocation,
+  departure) never need their own floor once the step adjustment exists,
+  but a test should assert that no active row is below the floor on any
+  snapshot date.
+- Validate with a narrow harness: 0 snapshot rows below the floor, and
+  the share exactly at the floor stays low.
+
+Bundle this with the next history-changing change; it needs a full run.
+
 ## Later - new features (agreed with the user on 2026-09-30)
 
 **LF-01 - Model a shift allowance (ploegentoeslag) (medium; full run: yes)**
