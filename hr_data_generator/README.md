@@ -53,6 +53,32 @@ De huidige sectorconfiguratie is `maakindustrie`.
   aansluit bij een echt productiebedrijf (bijv. Productie/Techniek
   overwegend mannelijk, Kwaliteit/HR overwegend vrouwelijk) in plaats van
   een vlakke 50/50-verdeling voor elke rol.
+- Namen: elke weergavenaam ("Voornaam Achternaam", inclusief spatie) is
+  maximaal `person_names.max_display_length` tekens (20) voor alle
+  medewerkers, omdat iedere medewerker later manager kan worden en
+  `dim_manager` uit `dim_employee` wordt opgebouwd. Een te lange naam wordt
+  helemaal opnieuw getrokken (max. 100 pogingen, daarna een foutmelding; er
+  wordt nooit afgekapt). Expats krijgen een naam die klopt bij hun geslacht en
+  land: `special_arrangements.Expat.name_locales` koppelt een land aan een
+  Faker-locale (nu Polen `pl_PL`, Roemenie `ro_RO`, Bulgarije `bg_BG`; een land
+  zonder koppeling valt terug op `en_US`, nog steeds geslachtsafhankelijk).
+  Poolse achternamen krijgen de vrouwelijke vorm (-ski wordt -ska), Bulgaarse
+  namen worden volgens het officiele Streamlined System naar Latijns schrift
+  getranslitereerd, en tekens die CP1252 niet kent (o.a. l, s, a, e met
+  diakriet, Roemeense s/t met komma) worden naar gewone letters teruggebracht:
+  de SQL-naamkolommen zijn `VARCHAR` met collation `SQL_Latin1_General_CP1_CI_AS`
+  (CP1252). Nederlandse namen blijven ongewijzigd. Alle namen zijn
+  reproduceerbaar vanuit `simulation_seed`.
+- Ploegendienst: naast Productie werken ook Monteur, Teamleider Technische
+  Dienst (Techniek), Magazijnmedewerker en Teamleider Logistiek (Logistiek) in
+  ploegendienst (`structure.<rol>.ploegendienst`). De verdeling over Dag,
+  2-ploeg en 3-ploeg staat in `ploegendienst_assignment`: `values`/`weights`
+  is de standaardmix en `by_department` overschrijft de gewichten per
+  afdeling (nu Techniek 40/30/30 en Logistiek 50/50/0 voor Dag/2-ploeg/
+  3-ploeg). Niet-ploegrollen blijven "Niet van toepassing". De ploegendienst
+  werkt door in de verzuimkans (`absence.ploegendienst_multipliers`), de
+  incidentkans (`safety.ploegendienst_multipliers`) en in het verlof "Tijd
+  voor tijd" (alleen 2-/3-ploeg).
 - Een bewuste, functie-gecorrigeerde beloningskloof tussen mannen en
   vrouwen (`salary_benchmark.compa_ratio.gender_pay_gap`), kleiner dan het
   Nederlandse bedrijfsleven-gemiddelde maar niet nul - zie de toelichting

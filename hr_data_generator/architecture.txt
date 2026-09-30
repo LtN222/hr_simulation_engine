@@ -94,8 +94,14 @@ Facts include:
 - fact_employment: employment-event history; promotions, transfers, salary
   reviews and exits create or complete employment records. It stores relevant
   experience at the event start; cross-domain transfers retain only the
-  configured share.
-- fact_workforce_snapshot: one active employee per month-end. This is the
+  configured share, while renewals, location moves and exits roll all
+  experience forward. Tenure in every simulator (attrition, absence, safety,
+  performance, salary review) is continuous service from
+  dim_employee.Aaneengesloten_Indienst_Datum, never the current row's
+  Startdatum.
+- fact_workforce_snapshot: one active employee per month-end (a leaver is
+  excluded from the month-end on or after the departure date, so
+  headcount(start) + hires - leavers = headcount(end)). This is the
   primary source for workforce trends, salary, performance, satisfaction,
   engagement, current relevant experience, capacity and employee-month
   absence metrics.

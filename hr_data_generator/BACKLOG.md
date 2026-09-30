@@ -31,6 +31,184 @@ also creating the matching `fact_absence` episode - type `Bedrijfsongeval` -
 so it feeds the same verzuim reporting rather than living in an isolated
 table) - is intentionally left off this list.
 
+## High priority - next up (added 2026-09-30)
+
+These are the next two items to fix. Neither has been started. New findings
+from the 2026-09-30 review (AR-33 onward) are in `architecture_review.md`.
+
+### Plan and decisions (agreed with the user on 2026-09-30)
+
+Work order. Groups 1-4 have priority over everything else:
+
+1. **Group 1 - Salary:** HP-01 plus AR-10. **Code, tests and docs done; awaiting the full run.**
+   - All four salary paths go through one `SalaryPolicy` floor helper.
+   - The lowest medians and Schaal A/B minimums are raised so the floor is
+     rarely hit.
+   - Calibrate with a narrow harness: under about 5% of salaries exactly at
+     the floor, and the gender pay gap still at about 4-5%.
+2. **Group 2 - Tenure from the continuous service date:** AR-34, AR-35 and
+   AR-08. One shared continuous-service helper, plus `carried_experience`
+   for renewals and relocations. **Code, tests and docs done; awaiting the
+   full run.** Helper: `src/infrastructure/tenure.py`. Expected effect (narrow
+   harness): attrition tenure multiplier 1.49 to 1.07 (about 13.3% to 10.0%
+   expected annual turnover before satisfaction/engagement effects); safety
+   new-hire multiplier share 52% to 11%. Attrition/safety config was not
+   retuned; that is the user's decision.
+3. **Group 3 - Names and gender:** HP-02 plus the Expat name fix.
+   **Code, tests and docs done; awaiting the full run.**
+4. **Group 4 - Shift work, small data-correctness fixes and safety
+   recalibration:** shift roles in Techniek/Logistiek, AR-33, AR-36, AR-40 and
+   the safety base rates. **Code, tests and docs done; awaiting the full
+   run.** Decisions: Monteur, Teamleider Technische Dienst, Magazijnmedewerker
+   and Teamleider Logistiek work shifts, with per-department mixes in
+   `ploegendienst_assignment.by_department` (Techniek 40/30/30, Logistiek
+   50/50/0); a leaver is excluded from a month-end snapshot on or after their
+   departure date (out of scope, still open: absence in the exit month
+   dropping out of snapshots, and full-month `Beschikbare_*` capacity for
+   hires/leavers); attrition config unchanged (the lower turnover after group
+   2 is accepted) and absence rates not retuned; safety targets live in config
+   (`safety.target_incident_rate_by_department`); the shift allowance stays
+   LF-01.
+5. **One full run** after groups 1-4, only after the user explicitly approves
+   it. Groups are batched so a single full run covers all of them.
+6. **Pipeline merge** (AR-20, absorbing AR-02 to AR-06): important, but only
+   after groups 1-4.
+7. **Speed work** (AR-17 remainder to AR-19): later, if there is room.
+
+Decisions:
+- **`Salaris` stays a full-time (1.0 FTE) amount.** The web app does the
+  part-time pro-rata calculation, so there is no separate actual-pay column.
+- **Minimum wage floor (indexed, revised):** `salary_benchmark.legal_minimum_salary`
+  holds `reference_year` 2026, `annual_full_time_salary` 31,179 and an
+  `allowances` map (`vakantiegeld` 0.08; extra entries add up). The reference
+  floor is `ceil(annual x (1 + sum(allowances)))` = €33,674 on 1 January 2026.
+  Any other date scales it with `annual_market_growth_rate` (so ~€29,036 in
+  2020, growing after 2026); before `base_date` it is flat, like the growth
+  factor. `SalaryPolicy.apply_floor(salary, date)` serves all four salary
+  paths. Update the config for a new year before a full run.
+- **Salary scales:** Schaal G becomes "Boven-CAO" (key 7, code `BC`, minimum
+  105,000, no maximum) for Managing Director, CFO, Operations Director and
+  Commercial Director; Plant Manager stays in F. `Schaal_Max_Salaris` is NULL
+  for those roles. Schaal A is now 29,100-46,000; B-F are unchanged.
+  `validate_role_configuration` enforces: every role has a market median;
+  market P25-P75 lies within its scale (open-ended scale: minimum only); the
+  lowest scale starts at or above the indexed 2020 floor.
+- **New medians:** CFO 140,000, Commercial Director 125,000, Product Manager
+  62,000 (2020 money). Productiemedewerker/Magazijnmedewerker 41,000, Operator
+  A 42,000, Operator B 46,000, QC Medewerker 42,500, QC Laborant, HR
+  Medewerker and Financieel Medewerker 42,000.
+- **Gender pay gap recalibrated:** `female_starting_offset` -0.036 to -0.043
+  (review offset unchanged at -0.0018); the role-corrected gap measured 3.75%
+  before and 4.45% after in the narrow harness.
+- **Names (implemented in group 3):** every employee's "Voornaam Achternaam" is capped at 20
+  characters, not only managers', since any employee can become a manager.
+  The Dutch name lists are fine: Robin, Sam and Senna are genuinely unisex.
+- **Expat names** must be both gender-correct and country-specific. Polish and
+  Romanian names use Faker `pl_PL` and `ro_RO`, including the gendered Polish
+  surnames (-ski/-ska). Faker `bg_BG` produces Cyrillic, so Bulgarian names
+  need a Latin-script solution. Decided in group 3: transliteration with the
+  Bulgarian Streamlined System, plus folding of characters CP1252 cannot store
+  to ASCII (no NVARCHAR migration). Faker's `pl_PL` turned out to have no
+  gendered surnames, so the -ski/-ska forms are generated in code.
+
+**HP-01 ✔ verified - Full-time salaries fall below the Dutch minimum wage (high; full run: yes)**
+The legal minimum is about €31,179 per year at 40 hours per week. A full-time
+week in this company is 40 hours (`workforce.full_time_weekly_hours`).
+Requirement: no employee at 1.0 FTE may earn less than €31,179. A lower salary
+is allowed only below 1.0 FTE, and then only pro rata: minimum × FTE.
+
+Live evidence (`fact_workforce_snapshot`, `Contracturen = 40`):
+- 2,736 of 23,946 rows are below €31,179;
+- 354 of the 4,519 rows in 2026 are below it;
+- the lowest salary is €24,676.
+
+Why it happens (`src/infrastructure/salary_policy.py`):
+- The salary is the step salary (Markt_P25 up to Markt_P75 of the role
+  median) × `Streef_Compa_Ratio` (`initial_salary`, :58-69).
+- The lowest medians are 33,000 (Productiemedewerker, Magazijnmedewerker), so
+  P25 = 29,700.
+- `compa_ratio.minimum_ratio` is 0.75, and the new-hire/initial distributions
+  reach 0.75-0.80.
+- The result is about €22,300 in 2020 and about €26,300 in 2026 (after
+  `annual_market_growth_rate`).
+- Nothing clamps the salary to a legal floor or to the scale minimum.
+  `dim_salary_scale` Schaal A itself starts at 29,000.
+- `review_salary` never lowers pay, so a floor has to apply both at hire and
+  at review.
+
+Important related finding: `Salaris` is never scaled by FTE. It is a
+full-time amount everywhere (hire, reviews, `fact_employment`, snapshot). On
+the latest snapshot, the average 16-hour employee earns €49,088. So
+"pro rata for part-time" is a semantic change, not just a floor.
+`Benchmark_Verschil`/`Benchmark_Status`, `SalaryBand_Key`, the satisfaction
+pay input and the gender-pay-gap calibration all compare `Salaris` with a
+full-time benchmark.
+
+To decide before fixing:
+- Does `Salaris` become the actual (pro-rata) pay, with a separate full-time
+  equivalent column for benchmarks and bands? Or does `Salaris` stay
+  full-time, with a new actual-pay column?
+- Is €31,179 including or excluding holiday pay?
+- Does the floor apply flat to every simulated year (2020 onward), or is it
+  indexed per year? The legal minimum in 2020 was lower.
+- Should the lowest scale and market ranges be raised, or only the floor
+  enforced?
+
+Needs a full run, because it changes every historical salary.
+
+**HP-02 ✔ verified, FIXED (group 3; awaiting full run) - Manager names longer than 20 characters break the app UI (high; full run: yes, existing names change)**
+Requirement: manager display names ("Voornaam Achternaam", including spaces)
+may be at most 20 characters.
+Fixed: `person_names.max_display_length` (20) applies to every employee, Dutch and
+Expat, in `PersonFactory`: the whole name is redrawn (max 100 attempts, then a
+`ValueError`, never truncation). Measured redraw rate: about 6.5% of Dutch
+draws. The Expat check runs after transliteration/folding, so it measures the
+stored name. Expat fix (same group): names are gender-correct and
+country-specific via `special_arrangements.Expat.name_locales`
+(Polen `pl_PL`, Roemenië `ro_RO`, Bulgarije `bg_BG`; other countries fall back
+to gender-aware `en_US`); Faker's `pl_PL` has no gendered surnames, so the
+-ski/-ska agreement is done in `person_factory.py`; Bulgarian Cyrillic is
+romanized with the Streamlined System and characters CP1252 cannot store are
+folded to ASCII (`src/generator/name_text.py`), instead of moving the columns
+to NVARCHAR.
+
+Facts for that discussion:
+- `dim_manager` is built from `dim_employee` (`Manager_Key = Employee_Key`,
+  `manager_builder.py:~415-440`). Any employee can become a manager later
+  through promotion.
+- So a rule only for managers means either limiting every employee's name, or
+  a separate shortened display name.
+- Names come from Faker `nl_NL` (`person_factory.py:108-118`); Expat names
+  come from generic Faker (:189-190).
+- Faker has its own seeded generator (AR-32). Redrawing a name that is too
+  long therefore doesn't shift the simulation's other random draws.
+- Live: 11 of 150 managers are over 20 characters (longest 30, e.g. "Kaylee
+  Luitgardis van Neustrië"); 91 of 1,529 employees are.
+- Schema: `dim_manager` Voornaam/Achternaam are `VARCHAR(50)`; `dim_employee`
+  uses `VARCHAR(100)`.
+- Redrawing names at generation needs a full run to change existing names. A
+  display-name column or a shortening rule could be backfilled incrementally.
+
+## Later - new features (agreed with the user on 2026-09-30)
+
+**LF-01 - Model a shift allowance (ploegentoeslag) (medium; full run: yes)**
+Shift work is modelled (`Shift_Key`, `ploegendienst_assignment`, with safety
+and absence multipliers). In group 4, Techniek and Logistiek get shift roles
+as well. But `Salaris` contains no shift allowance, so a 3-ploeg operator
+earns the same as a day worker in the same role and step. Dutch
+manufacturing CAOs typically pay a percentage on top of base pay, depending
+on the shift type; a common order of magnitude is 2-ploeg about 10-15% and
+3-ploeg about 20-30%.
+
+To decide when this is picked up:
+- A separate column (for example `Ploegentoeslag`, in Dutch per the naming
+  convention) or included in `Salaris`? A separate column keeps `Salaris`
+  comparable with the market benchmark and keeps the minimum-wage floor
+  about base pay.
+- Percentages in config per shift type, possibly per department.
+- Effects on satisfaction/engagement (the pay input), benchmark status and
+  the gender pay gap calibration.
+
 ## Architecture review (2026-09-25) - prioritized open items
 
 A read-only architecture review of the whole repo, done on 2026-09-25 against
@@ -168,7 +346,8 @@ guards against a column being both live and deprecated at once.
 
 ### Priority 2 - simulation correctness (affects full runs too)
 
-**AR-08 ✔ verified - Contract renewals and location transfers reset relevant experience (high; full run: yes)**
+**AR-08 ✔ verified, FIXED (group 2; awaiting full run) - Contract renewals and location transfers reset relevant experience (high; full run: yes)**
+Fixed: renewal/conversion, location transfer, department relocation and the departure row now use `carried_experience(..., same_department=True)`.
 `ContractLifecycleSimulator._carried_context`
 (`simulation_contracts.py:~301-317`) and the location-transfer record
 (`simulation_location_transfer.py:~83`, `**row.to_dict()`) copy
@@ -1192,6 +1371,21 @@ output lands back near the original target instead of near the new, lower
 base numbers themselves. Confirmed these values are only reachable with the
 new lowered base rates in the config - the previous overshoot (0.51/0.35/0.30
 under the old 0.35/0.30/0.25 base) is gone. No further change needed.
+
+**Recalibrated in group 4 (2026-10).** That 2025 reduction partly compensated
+for the AR-35 bug (tenure measured from the reset employment row made about
+half of all employees look like new hires, so the 1.8x multiplier stacked on
+far too many people). With continuous-service tenure the new-hire share is
+about 16-20%, and Techniek/Logistiek gained shift work, so the base rates were
+re-derived rather than kept: `safety.target_incident_rate_by_department`
+(Productie 0.35, Techniek 0.30, Logistiek 0.25 realized per employee-year)
+divided by the expected shift and new-hire factors from
+`src/infrastructure/safety_calibration.py` (flagged-role share from
+`allocate_headcount` at headcount 800, the configured shift mixes and
+`safety.calibration.new_hire_share_by_department` 0.197/0.169/0.157, measured
+on `fact_workforce_snapshot` 2020-2026). New base rates: Productie 0.24 to
+0.26, Techniek 0.25 and Logistiek 0.21 unchanged; realized -1.6%/+1.7%/-0.3%
+against target. A test keeps the realized rates within 10% of the targets.
 
 ## Recruitment
 
