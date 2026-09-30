@@ -23,10 +23,10 @@ When documentation and implementation appear inconsistent, inspect the relevant 
 
 Active application code is under `azure_function/`:
 
-- `function_app.py` — HTTP/timer entry points and full/incremental selection.
+- `function_app.py` — HTTP/timer entry points; validates the mode and calls `run_pipeline`.
 - `config/` — runtime/sector configuration and SQL schemas.
 - `src/core/` — `Config`/`ConfigLoader`: typed access to the merged runtime + sector JSON configuration.
-- `src/application/` — orchestration and workforce allocation.
+- `src/application/` — orchestration and workforce allocation. `pipeline.py` is the single pipeline for full and incremental runs (`prepare_state` → `run_weeks` → `post_process` → `store.write`): an incremental run is a full run resumed from a checkpoint (next week to simulate, per-week random streams, persisted non-table state in `src/infrastructure/state/checkpoint.py`). A new non-table `state[...]` key must be classified in `STATE_KEY_REGISTER`. Every table in the schema must declare a `write_mode` (`upsert` or `append`; a table that may lose rows also `delete_missing`) — the SQL write sends only new/changed rows in one transaction with the checkpoint last, and a run without a preceding load or with lost rows fails loudly.
 - `src/domain/` — employee/person/job/contract domain objects.
 - `src/generator/` — initial population generation.
 - `src/simulation/` — weekly HR event simulators (attrition, career events, hiring, recruitment, vacancy, absence, performance, economic growth, location transfer, safety incidents).
@@ -45,6 +45,8 @@ Full test suite:
 ```powershell
 python -m pytest -q
 ```
+
+The multi-week pipeline equivalence tests are marked `slow` and skipped by default (`addopts = -m "not slow"` in `pytest.ini`). `python -m pytest -q -m slow` must also pass before committing any change to the pipeline, the weekly runner, the state keys, `post_process` or the SQL writer.
 
 Local Function App:
 
@@ -98,7 +100,7 @@ This part of the simulation is under active revision, so treat these as the curr
 - `azure_function/src/simulation/simulation_career_events.py` turns eligible internal moves into new `fact_employment` rows (`_simulate_salary_reviews`, then promotion/transfer sampling per active employee). Promotion/transfer candidates are also filtered by `_is_active_role` (the same `role_is_active`/`active_from_headcount` gate `simulation_vacancy.py`'s growth path already used) — a target role must have actually unlocked at the company's current headcount, not just be structurally eligible via `eligible_internal`.
 - `azure_function/src/simulation/simulation_vacancy.py` creates vacancy demand (replacement + growth) from `dim_role`/`config.structure`, and `simulation_recruitment.py` (`RecruitmentSimulator`) runs the funnel, including the `Interne mobiliteit` source that reuses `eligible_internal` to pick an internal candidate instead of generating a new person.
 - Relevant experience carried across a move (`carried_experience` in `relevant_experience.py`) is full within the same functional domain and reduced by `career_events.relevant_experience_transfer_ratio` across a domain change — this must stay consistent between promotions, transfers and the internal-mobility hire path.
-- `azure_function/src/tests/test_workforce_planning.py`, `test_employee_generation.py`, `test_role_eligibility.py`, `test_simulation_career_events.py`, `test_simulation_recruitment.py` and `test_simulation_vacancy.py` are the closest existing coverage for allocation/eligibility. `test_role_eligibility.py` currently only covers `eligible_external`/`external_rejection_reason`; `eligible_internal` and `movement_type` still lack direct unit tests there — consider extending it when changing that logic.
+- `azure_function/src/tests/test_workforce_planning.py`, `test_employee_generation.py`, `test_role_eligibility.py`, `test_simulation_career_events.py`, `test_simulation_recruitment.py` and `test_simulation_vacancy.py` are the closest existing coverage for allocation/eligibility. `test_role_eligibility.py` covers `eligible_external`/`external_rejection_reason`, the shared `qualification_and_experience_reason`, `eligible_internal` (experience, education, config thresholds, leadership gates) and `movement_type`; extend it when changing that logic.
 
 ## Configuration, schema and documentation changes
 

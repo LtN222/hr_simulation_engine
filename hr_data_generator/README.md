@@ -230,6 +230,25 @@ huidige rol. Een hogere salarisschaal is dus geen promotiecriterium. Interne
 transfers blijven een afzonderlijke, laterale mobiliteitsroute en worden als
 `Transfer` vastgelegd.
 
+Interne kandidaten voor een promotie, transfer of de bron `Interne mobiliteit`
+worden op dezelfde kwalificatie- en ervaringsregels beoordeeld als externe
+kandidaten (`qualification_and_experience_reason` in
+`src/infrastructure/role_eligibility.py`): het minimale opleidingsniveau van
+een relevante opleiding, de WO-uitzondering voor Senior-rollen en de minimale
+relevante ervaring. Hun ervaring is dezelfde waarde als in snapshots, promoties
+en instroom (`carried_experience`): de startervaring van de geldende
+employment-regel plus opgebouwde tijd, volledig binnen een afdeling en met
+`career_events.relevant_experience_transfer_ratio` over een afdelingsgrens.
+Alleen de interne regels blijven: het type beweging (`Promotie` of
+`Transfer`), de minimale performance
+(`career_events.internal_min_performance`, 2,7), dezelfde salarisschaal bij
+een transfer en de leiderschapsdrempels
+(`career_events.internal_first_leadership_min_experience_years`, 3, en
+`internal_leadership_experience_discount`). Bij een promotie of transfer
+binnen dezelfde afdeling houdt een medewerker in ploegendienst zijn
+ploegendienst; alleen bij een andere afdeling of een niet-ploegenrol wordt de
+ploegendienst opnieuw bepaald.
+
 `fact_recruitment` heeft één regel per sollicitatie. De fact bevat zowel de
 compacte tekstkolom `Status` als `RecruitmentStatus_Key`; gebruik voor nieuwe
 Power BI-relaties en legendes de laatste key naar `dim_recruitment_status`.
@@ -285,7 +304,12 @@ dus de organisatiecontext die op dat moment gold. Wie precies op een
 maandultimo uit dienst gaat, telt in die maand niet meer mee: een medewerker
 valt uit de snapshot vanaf zijn uitdienstdatum, en de nul-dagen "Uit dienst"-
 regel is nooit de regel waar een snapshot naar verwijst. Zo geldt
-headcount(begin) + instroom - uitstroom = headcount(einde). Verzuim in de
+headcount(begin) + instroom - uitstroom = headcount(einde). Vóór de eerste
+performance review toont de snapshot de startscore
+(`dim_employee.Aanvangs_Prestatie_Score`) en dus niet de huidige
+`Prestatie_Score`; `SalaryScale_Key` is de schaal van de geldende
+employment-regel, terwijl de benchmarkbedragen van de huidige rolschaal
+blijven uitgaan. Verzuim in de
 uitdienstmaand en volledige `Beschikbare_*`-capaciteit voor in- en uitstromers
 zijn bewust nog niet aangepast.
 
@@ -406,7 +430,12 @@ vakantie en ouderschapsverlof. Filter
 ziekteverzuim. `Duur_dagen` is de kalenderduur van een episode; gebruik voor
 verzuimpercentages de werkdag- of uurkolommen. De velden
 `Tevredenheid_Score_Bij_Aanvang` en `SatisfactionBand_Key` beschrijven de
-tevredenheid bij de start van de episode.
+tevredenheid bij de start van de episode. Een episode die nog loopt wanneer een
+medewerker uit dienst gaat (uitstroom, pensioen of een niet verlengd contract)
+wordt afgekapt op de uitdienstdatum: `Einddatum`, `Duur_dagen` en de
+werkdag- en uurkolommen worden herberekend, zodat er geen verzuim meer wordt
+geteld nadat iemand is vertrokken. Eindigde de episode al eerder, dan blijft
+hij ongewijzigd.
 
 Maak geen directe relatie tussen facts, ongeacht of de data wordt gelezen
 door de webapp of door Power BI. Facts worden via gedeelde dimensies
@@ -492,6 +521,8 @@ bestand is bewust niet versiebeheerbaar.
 | `HR_SECTOR` | Sectorconfiguratie, standaard `maakindustrie`. |
 | `HR_SIMULATION_MODE` | `full` of `incremental`. |
 | `HR_SIMULATION_SEED` | Seed voor reproduceerbare willekeur. |
+| `HR_SIMULATION_DRY_RUN` | Optioneel, standaard `false`. Bij `true` (alleen voor `incremental`) draait de hele pipeline en de volledige schrijftransactie, waarna alles wordt teruggedraaid; de log en het antwoord tonen per tabel hoeveel rijen er zouden zijn toegevoegd, bijgewerkt en verwijderd. Een dry run past het schema niet aan (schema-evolutie wordt overgeslagen); is het schema verouderd, dan mislukt het schrijven binnen de transactie, wordt teruggedraaid en volgt een foutmelding. De **timer negeert deze instelling** (zie onder). |
+| `HR_SIMULATION_AS_OF` | Optioneel, `YYYY-MM-DD`, standaard de echte datum van vandaag. Vervangt "vandaag" in beide modi; een datum in de toekomst wordt geweigerd. De HTTP-trigger respecteert beide validatie-instellingen; **`weekly_hr_run` (de timer) negeert `HR_SIMULATION_AS_OF` en `HR_SIMULATION_DRY_RUN` altijd**: de timer draait met de echte datum en commit altijd, en logt een WARNING wanneer een van beide is gezet. Verwijder ze uit de app settings na het valideren. |
 | `HR_TIMER_SCHEDULE` | NCRONTAB-schema voor de timertrigger. |
 
 `SQL_CONNECTION_TEMPLATE` wordt door de code ingevuld met de database uit de
@@ -521,6 +552,30 @@ http://localhost:7071/api/generate_hr_data
 De timertrigger voert altijd een incremental run uit. De lokale listener
 verwacht daarom ook dat Azurite beschikbaar is op poort 10000.
 
+### Valideren tegen de demo-database (dry run en as-of)
+
+Met twee instellingen kun je het SQL-pad valideren zonder te wachten tot er
+een week voorbij is en zonder de database te wijzigen:
+
+1. **Full run met `HR_SIMULATION_AS_OF`** twee weken terug (bijvoorbeeld
+   `2026-09-16`). Dit schrijft de database en het eerste checkpoint, tot en met
+   die datum.
+2. **Dry-run incremental** zonder `HR_SIMULATION_AS_OF`
+   (`HR_SIMULATION_DRY_RUN=true`, mode `incremental`). Er worden echt twee
+   weken gesimuleerd en de volledige schrijftransactie (inclusief checkpoint)
+   wordt uitgevoerd en daarna teruggedraaid. Controleer in de log de aantallen
+   per tabel (toegevoegd/bijgewerkt/ongewijzigd/verwijderd) en dat er niets is
+   veranderd in de database.
+3. **Echte incremental** (`HR_SIMULATION_DRY_RUN` weer `false`): dezelfde twee
+   weken worden nu echt geschreven.
+4. **Dezelfde incremental nogmaals** als nulmeting: er is geen week meer due,
+   dus er worden 0 weken gesimuleerd en 0 rijen toegevoegd of bijgewerkt. Dat
+   bewijst dat de vergelijking van gewijzigde rijen klopt.
+
+Een dry run is niet toegestaan voor een full run (die reset de database; valideer
+een full run met een echte run). `HR_SIMULATION_AS_OF` werkt voor beide modi en
+mag niet in de toekomst liggen; zet hem weer leeg voor normale runs.
+
 ### Full run
 
 Zet tijdelijk `HR_SIMULATION_MODE` op `full` en roep de HTTP-endpoint aan.
@@ -535,20 +590,138 @@ de driverkeys en `Relevante_Ervaring_Jaren`. Een incremental run kan
 nieuwe dimensiekolommen en statuskeys aanvullen, maar kan historische
 snapshotwaarden en sollicitatie-uitkomsten niet realistisch hersimuleren.
 
-Zet de instelling na afloop terug op `incremental`.
+Zet de instelling na afloop terug op `incremental`. Een full run schrijft ook
+het eerste checkpoint waarmee incremental runs daarna verdergaan.
 
 ### Incremental run
 
-Een incremental run leest de huidige SQL-state, simuleert alle ontbrekende
-weken tot vandaag en voegt nieuwe facts toe. Actuele dimensies en facts met
-nabewerkte gebeurteniscontext, zoals `fact_employment` en `fact_absence`,
-worden bijgewerkt. De voortgang staat in `simulation_state`.
+Een incremental run is een full run die vanaf een checkpoint wordt
+hervat: beide modi lopen door dezelfde pipeline
+(`src/application/pipeline.py`: `prepare_state` - `run_weeks` -
+`post_process` - `store.write`). De incremental run leest de beheerde tabellen
+en het checkpoint uit `simulation_state`, simuleert alle weken vanaf de
+volgende nog te simuleren week tot en met de week van vandaag en werkt de
+tabellen bij. Actuele dimensies en facts met nabewerkte gebeurteniscontext,
+zoals `fact_employment` en `fact_absence`, worden bijgewerkt.
+
+Het checkpoint bevat: de `simulation_seed`, `next_year`/`next_week` (de
+**volgende** week die nog gesimuleerd moet worden, dus een week wordt nooit
+twee keer gesimuleerd; `current_year`/`current_week` blijven de laatst
+gesimuleerde week ter leesbaarheid), een vingerafdruk van de sectorconfiguratie
+en de simulatiestate die geen tabel is (`checkpoint_json`: geopende locaties en
+hun capaciteitsstreak, verhuisde afdelingen, de kandidaatprofielen van de
+lopende recruitmentpipeline en openstaande vacatureverzoeken). Welke
+statesleutels bewaard worden en welke tijdelijk zijn staat in
+`STATE_KEY_REGISTER` (`src/infrastructure/state/checkpoint.py`); een nieuwe
+sleutel die daar niet in staat, laat de run falen.
+
+Elke gesimuleerde week gebruikt een eigen willekeurige stroom,
+`Random(f"{seed}:{jaar}:{week}")`, en zet de naamgenerator opnieuw op
+`f"{seed}:{jaar}:{week}:names"`; de initiële populatie heeft een eigen stroom
+(`{seed}:population`). Een week geeft daardoor dezelfde uitkomst, ongeacht
+hoeveel weken er eerder in hetzelfde proces zijn gesimuleerd. De jaarlijkse
+groeivoet wordt eenmalig uit `Random(f"{seed}:growth-rate")` afgeleid en is dus
+in elke run gelijk. Acceptatie-eis: een full run tot week N geeft dezelfde
+tabellen als een full run tot week N-1 gevolgd door een incremental week
+(`src/tests/test_pipeline_equivalence.py`).
+
+Na het deployen van deze versie heeft de bestaande database geen checkpoint en
+een andere sleutelindeling voor `fact_salary_benchmark`: **draai eerst een full
+run**; een incremental run stopt anders met de melding dat er geen checkpoint
+is. Ook een andere `HR_SIMULATION_SEED` dan die van het checkpoint stopt de
+run; een gewijzigde sectorconfiguratie geeft alleen een waarschuwing in de log.
+Alleen `full` en `incremental` zijn geldige waarden voor `HR_SIMULATION_MODE`.
+Afrondingsverschillen van SQL-`DECIMAL`-kolommen tussen een in-memory run en
+een run via SQL worden geaccepteerd.
+
+#### Schrijven naar SQL
+
+**Schrijfmodus per tabel.** Elke tabel in `hr_maakindustrie_schema.json` heeft
+`write_mode`: `upsert` (nieuwe sleutels invoegen en gewijzigde rijen bijwerken)
+voor alle `dim_*`-tabellen (ook de statische, zodat wijzigingen in de
+configuratie de beschrijvende kolommen bereiken; sleutels blijven behouden),
+`fact_employment`, `fact_absence`, `fact_recruitment`, `fact_vacancy`,
+`fact_manager_assignment` en `fact_workforce_snapshot`; of `append` (alleen
+nieuwe sleutels, een bestaande rij wordt nooit gewijzigd) voor
+`fact_performance_review`, `fact_safety_incident`,
+`fact_employee_qualification` en `fact_salary_benchmark`. Een nieuwe tabel moet
+een `write_mode` declareren (een schematest dwingt dat af). De
+equivalentietests op `InMemoryStore`, die dezelfde schrijfmodi toepast, zijn het
+bewijs dat de indeling klopt: een `append`-tabel waarvan bestaande rijen in het
+geheugen veranderen laat die tests falen.
+
+**Alleen gewijzigde rijen.** De incremental load bewaart per tabel een
+genormaliseerde baseline (een digest per primaire sleutel). Bij het schrijven
+worden alleen rijen weggeschreven die nieuw zijn of waarvan de waarden
+afwijken, zodat een incrementele week ruim binnen de 10 minuten van het
+Consumption-plan blijft. Beide kanten worden op dezelfde manier genormaliseerd:
+waarden volgen het schematype, `DECIMAL(p,s)` wordt op zijn schaal afgerond
+(een opnieuw berekende 6,8123 is gelijk aan de opgeslagen 6,81, anders zou
+vrijwel elke herberekende rij als gewijzigd tellen), NaN/None/NaT zijn gelijk,
+datums worden als datum vergeleken en gehele getallen en kommagetallen met
+dezelfde waarde zijn gelijk. De log toont per tabel toegevoegd/bijgewerkt/
+ongewijzigd/verwijderd. Een full run leegt de beheerde tabellen en voegt alles
+in bulk in. Rijen worden bij het laden in volgorde van de primaire sleutel
+gelezen (`ORDER BY`), omdat de simulatoren tabellen in rijvolgorde doorlopen en
+daarbij willekeurige getallen trekken; beide modi starten de weeklus vanuit
+dezelfde volgorde (`canonicalize_row_order`).
+
+**Atomair schrijven.** Eerst volgt schema-evolutie buiten de datatransactie
+(ontbrekende tabellen en kolommen, verouderde tabellen en kolommen, constraints
+en de kolommen van `simulation_state`). Daarna volgt **een transactie op een
+verbinding**: bij een full run het leegmaken plus alle inserts, bij een
+incremental run alle inserts, updates en deletes (bij een full run worden de
+tabellen in omgekeerde schrijfvolgorde leeggemaakt, kinderen eerst, zonder
+foreign keys uit te zetten), en als **laatste statement**
+het checkpoint in `simulation_state`. Mislukt er iets (bijvoorbeeld een vol
+transactielog op een kleine tier tijdens een full run), dan wordt alles
+teruggedraaid en blijven de oude data en het oude checkpoint staan; de log zegt
+dat expliciet. Het lezen van de state (`load_current_state`) faalt luid bij
+elke fout behalve "tabel bestaat niet".
+
+**Wat de webapp ziet tijdens het schrijven.** Azure SQL gebruikt standaard
+`READ_COMMITTED_SNAPSHOT`: lezers (webapp, Power BI) blijven bij zowel een
+incremental als een full run de oude, consistente data zien tot de commit en
+zien dus nooit een half geschreven of leeg gemaakte tabel. De transactie bevat
+bewust geen `ALTER TABLE` (ook geen tijdelijk uitzetten van foreign keys): dat
+neemt een schema-modificatielock die ook snapshot-lezers tot de commit blokkeert.
+Een mislukte delete of insert draait alles terug en laat de oude data staan.
+(Alleen schema-evolutie, zoals een nieuwe kolom, gebeurt vooraf buiten die
+transactie en wordt bij een dry run overgeslagen.) `DECIMAL`-waarden worden als
+`Decimal` verstuurd, afgerond op precies dezelfde manier als de vergelijking van
+gewijzigde rijen (halve waarden omhoog): een `float` zou SQL Server anders
+afronden (6,805 wordt 6,80) en elke run als wijziging laten tellen.
+
+**Verwijderde rijen.** Geen enkele tabel verliest rijen tijdens een run, met een
+uitzondering: `fact_workforce_snapshot` (`"delete_missing": true`). De open maand
+wordt bij elke run herbouwd; een medewerker die na de vorige run op of vóór de
+maandultimo uit dienst gaat, valt uit die maand (zie de snapshotregel bij
+`fact_workforce_snapshot`) en zijn rij wordt binnen de transactie verwijderd. Een
+ingeladen rij die in een andere tabel ontbreekt, geeft een duidelijke fout en er
+wordt niets geschreven.
+
+**Snapshots en benchmarks: alleen de open maand.** Een incremental run bouwt
+`fact_workforce_snapshot` en `fact_salary_benchmark` alleen voor de maandultimo's
+vanaf de eerste dag van de maand waarin de eerste gesimuleerde week valt en voegt
+ze samen met de ingeladen rijen (eerdere maanden blijven ongemoeid; de open maand
+wordt bij elke run herschreven). Een full run bouwt alles. De sleutels zijn
+deterministisch: `WorkforceSnapshot_Key` = `yyyymm * 10000 + Employee_Key` en
+`SalaryBenchmark_Key` = `yyyymm * 10000 + Role_Key * 100 + Salaris_Trede` (past
+in een `INT`; configuratievalidatie eist `Role_Key` en het aantal treden onder
+100), zodat het toevoegen van een rol of trede geen bestaande sleutels verschuift.
+De kosten van de simulatie zelf groeien nog met de geschiedenis (AR-18, open).
 
 ## Configuratie
 
 `maakindustrie.json` bevat onder andere:
 
-- `initial_population`: omvang, burn-in en dienstjarenverdeling.
+- `initial_population`: omvang, burn-in en dienstjarenverdeling, plus
+  `hire_source_weights`: de mix van externe instroombronnen van de initiële
+  populatie (Vacaturebank 52,5, Campus 14,8, Interne recruiter 14,7, Referral
+  11,4, Recruitmentbureau 6,7 - gemeten aan `fact_recruitment` met status
+  Aangenomen). Een bron zonder gewicht krijgt 0; zonder gewichten is de keuze
+  uniform. `validate_role_configuration` controleert dat elke bron bestaat en
+  extern is.
 - `growth`: groeipad, capaciteit en economische gebeurtenissen.
 - `structure`: afdelingen, rollen, salarisbanden en managementrollen.
 - `gender_ratio`: man/vrouw-verhouding per afdeling, met `role_overrides`
@@ -573,6 +746,13 @@ worden bijgewerkt. De voortgang staat in `simulation_state`.
   beloning, manager, performance, loopbaanmomentum en afdeling.
 - `attrition`: uitstroompercentages per afdeling, plus de invloed van
   tevredenheid en betrokkenheid op vertrek- en vertrekredenlogica.
+  `no_show_max_tenure_days` (30): de vertrekreden `No-show` is alleen mogelijk
+  binnen zoveel dagen aaneengesloten diensttijd. De reden `Seizoenswerker` staat
+  in `dim_departure_reason` maar wordt nu nooit gebruikt, omdat er geen
+  seizoenscontracten worden gemodelleerd (`contract_rules.*.zomer_kans` is
+  ongebruikte configuratie); hij blijft staan omdat verwijderen de positionele
+  sleutels van latere redenen zou verschuiven. `Contract niet verlengd` hoort bij
+  de categorie `tijdelijk` en wordt alleen door de contractsimulator gebruikt.
 - `salary_benchmark`: marktmedianen per rol, marktgroei, treden en de
   classificatie onder/rond/boven benchmark.
 - `retirement`: pensioen vanaf 50, met de grootste uitstroom rond 65 en een
@@ -615,7 +795,7 @@ het doel de exponentiële `annual_growth_rate`-curve.
 
 Laat je `initial_population.headcount` weg, dan valt deze automatisch terug
 op `baseline_headcount` (zie `WorkforceGenerator` in `population.py` en
-`run_simulation.py`) — er is dus geen organische groei tijdens de burn-in en
+`simulation_parameters` in `pipeline.py`) — er is dus geen organische groei tijdens de burn-in en
 de periode dient alleen om geschiedenis (promoties, vervangingswerving,
 verzuim, salarisreviews) op een populatie van constante omvang op te bouwen
 voordat het zichtbare venster begint. Zet `initial_population.headcount`
@@ -635,6 +815,11 @@ Voer vanuit `azure_function/` uit:
 ```powershell
 python -m pytest -q
 ```
+
+De meerweekse pipeline-equivalentietests zijn gemarkeerd als `slow` en worden
+standaard overgeslagen (`addopts = -m "not slow"` in `pytest.ini`). Draai ze met
+`python -m pytest -q -m slow`; dat moet ook slagen voordat je wijzigingen aan de
+pipeline, de state of de SQL-writer commit.
 
 De tests dekken onder meer managerhierarchieen, employment-eventketens,
 workforce snapshots, salarisbenchmarking, recruitment, verzuim,

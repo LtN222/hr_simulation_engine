@@ -107,7 +107,8 @@ Related (low): a leaver's absence in their exit month drops out of the
 snapshots, and hires and leavers get full-month `Beschikbare_*` capacity
 (:327-346).
 
-**AR-37 - Internal eligibility ignores minimum education level (medium; full run: yes; not verified)**
+**AR-37 FIXED (group 5; awaiting full run) - Internal eligibility ignores minimum education level (medium; full run: yes; not verified)**
+Fixed together with AR-09: one shared qualification + experience helper for internal and external.
 `eligible_internal` (`role_eligibility.py:155-157`) checks only the
 qualification name. It ignores `Min_Opleidingsniveau` and the Senior/WO rule,
 which the external check enforces (:37-48, :62-70). This adds to AR-09's
@@ -144,7 +145,8 @@ use the mis-encoded key. `dim_departure_reason` spells it `"Carrière switch"`.
 As a result, the satisfaction multiplier and the performance ≥ 4 bonus for this
 reason never apply.
 
-**AR-41 - Departure-reason semantics (low-medium; full run: yes)**
+**AR-41 FIXED (group 5; awaiting full run) - Departure-reason semantics (low-medium; full run: yes)**
+Fixed: `No-show` limited by `attrition.no_show_max_tenure_days`; `Seizoenswerker` kept but documented as unused; the unreachable `Contract niet verlengd` branch removed (its category `tijdelijk` is never drawn by attrition).
 - `No-show` (weight 0.02) can be drawn for employees with any tenure,
   including 10-year veterans (`simulation_attrition.py:342`).
 - `Seizoenswerker` is never produced.
@@ -182,11 +184,13 @@ Read by the code but missing from config, so a default is used:
 
 Direction: fold into AR-25's typed and validated config.
 
-**AR-44 - The initial population's hire source ignores source weights (low; full run: yes)**
+**AR-44 FIXED (group 5; awaiting full run) - The initial population's hire source ignores source weights (low; full run: yes)**
+Fixed: `initial_population.hire_source_weights`.
 `choose_hire_source` (`employee_helpers.py:14`) picks uniformly across
 external sources. The `config` parameter is unused.
 
-**AR-45 - Promotions and transfers redraw the shift (low; full run: yes)**
+**AR-45 FIXED (group 5; awaiting full run) - Promotions and transfers redraw the shift (low; full run: yes)**
+Fixed: `carry_or_assign_shift_key`.
 `simulation_career_events.py:133,185` and `simulation_hiring.py:356` redraw
 `Shift_Key` at random on every move, even within the same shift department.
 
@@ -197,7 +201,8 @@ problems:
   dominates for experienced staff.
 - The driver is chosen by absolute value, whether the score is high or low.
 
-**AR-47 - A full run has two random generators with the same seed (low; full run: yes)**
+**AR-47 FIXED (pipeline merge part A, awaiting full run) - A full run has two random generators with the same seed (low; full run: yes)**
+Fixed: population generation uses `Random(f"{seed}:population")`; each week has its own stream.
 `run_simulation.py:29` and `population.py:35` both create
 `random.Random(seed)`, so population generation and the weekly loop replay the
 same number stream. Fold into AR-05.
@@ -219,6 +224,9 @@ same number stream. Fold into AR-05.
   crash if selected (it has no `types`). Delete it.
 - No SQL injection found: every f-string SQL uses schema-owned names, and the
   HTTP route reads no input.
+
+**AR-51 FIXED (pipeline merge part A, awaiting full run) - The incremental run redrew the annual growth rate on every run (medium; full run: yes)**
+`run_simulation_incremental.py:52` drew `annual_growth_rate` with the run's rng on every incremental run (and the full run drew it from its own stream), so the growth path changed from run to run. Fixed: derived once from `Random(f"{seed}:growth-rate")`.
 
 **AR-50 - `dim_employee.Manager_Key` has no foreign key (low; user decision)**
 It is the only non-primary `_Key` column without a foreign key. It can't

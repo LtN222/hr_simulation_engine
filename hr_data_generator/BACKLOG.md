@@ -69,7 +69,29 @@ Work order. Groups 1-4 have priority over everything else:
    2 is accepted) and absence rates not retuned; safety targets live in config
    (`safety.target_incident_rate_by_department`); the shift allowance stays
    LF-01.
-5. **One full run** after groups 1-4, only after the user explicitly approves
+   **Group 5 - Consistency fixes:** AR-14, AR-11, AR-45, AR-44, AR-41, and
+   AR-09 with AR-37. **Code, tests and docs done; awaiting the full run.**
+   Decisions: an open absence episode is shortened to end on the departure
+   date (inclusive, workdays/hours recomputed with `absence_calendar.py`) on
+   every departure path (attrition incl. retirement, contract non-renewal);
+   snapshots show `Aanvangs_Prestatie_Score` before the first review and keep
+   the employment row's `SalaryScale_Key`; promotions/transfers/internal
+   mobility keep the shift within a department (`carry_or_assign_shift_key`);
+   the initial hire source uses `initial_population.hire_source_weights`
+   (measured mix: Vacaturebank 52.5, Campus 14.8, Interne recruiter 14.7,
+   Referral 11.4, Recruitmentbureau 6.7); `No-show` only within
+   `attrition.no_show_max_tenure_days` (30) of continuous service,
+   `Seizoenswerker` stays in `dim_departure_reason` (AR-24 positional keys)
+   but is unused (no seasonal contracts, `zomer_kans` is dead config, AR-43),
+   the unreachable `Contract niet verlengd` branch in `_reason_weight` was
+   removed; internal eligibility uses `carried_experience` and the same
+   qualification and experience helper as external hiring, with the internal
+   performance floor and first-leadership threshold in
+   `career_events.internal_min_performance` (2.7) and
+   `internal_first_leadership_min_experience_years` (3). Of AR-23, only these
+   two eligibility thresholds moved to config (values unchanged); the rest of
+   AR-23 is still open. Promotion/transfer rates were not retuned.
+5. **One full run** after groups 1-5, only after the user explicitly approves
    it. Groups are batched so a single full run covers all of them.
 6. **Pipeline merge** (AR-20, absorbing AR-02 to AR-06): important, but only
    after groups 1-4.
@@ -209,6 +231,45 @@ To decide when this is picked up:
 - Effects on satisfaction/engagement (the pay input), benchmark status and
   the gender pay gap calibration.
 
+**LF-02 - Optional: a slightly more lenient education rule for internal candidates (low; full run: yes)**
+Before group 5, `eligible_internal` only checked that an internal candidate
+held one of the role's `relevante_opleidingen` by name, never
+`Min_Opleidingsniveau`. That was de-facto more lenient than external hiring,
+but it was never documented. Since AR-37 (group 5), internal and external
+candidates share one qualification/experience check. The user remembers
+deliberately wanting internal candidates to get a bit more room on
+education, since the organisation has seen their work for years. It was
+decided not to implement this in the 2026-09-30 round, because the AR-09
+experience change had already doubled promotion eligibility (27.6% -> 54.9%
+in a synthetic harness).
+
+If it is picked up, make it explicit and configurable. For example,
+`career_events.internal_education_level_tolerance: 1` would let an internal
+candidate sit one level below the minimum, but still require a relevant
+education in the right field. Alternatively, waive the level check only
+after a configured number of years of relevant experience. Record it as a
+deliberate rule so a later review doesn't "fix" it as an inconsistency.
+Measure the eligibility change with the same narrow harness before and after.
+
+**LF-03 - Automate deployment of the Function App (medium; full run: no)**
+Planned for right after the pipeline merge (AR-20 parts A and B) is
+finished, as requested by the user on 2026-09-30. Today the user deploys
+manually from bash (`func azure functionapp publish ...`, see
+`handleiding code.md`).
+
+Points to settle when this is picked up:
+- The CI/CD platform. The repo history shows both GitHub and Azure DevOps
+  remotes; pick one as the deploy source.
+- Run `python -m pytest -q` as a gate before every deploy.
+- Authentication without secrets in the repo (e.g. OIDC/federated
+  credentials or a service connection). `local.settings.json` stays local.
+- Trigger (on merge to `main`, manual approval, or both).
+- The deployment must never trigger a full run. Full runs stay local and are
+  started only by the user. Document that after a history-changing change,
+  the user should deploy only after the full run, so the weekly timer
+  doesn't write new-logic weeks on top of old data.
+- Update README "Deployen" and `handleiding code.md` afterwards.
+
 ## Architecture review (2026-09-25) - prioritized open items
 
 A read-only architecture review of the whole repo, done on 2026-09-25 against
@@ -247,7 +308,8 @@ runs re-inserted the deleted rows and retention deleted them again.
 the demo needs full history, so there is no retention window at all now.
 Needs a full run to restore the history already lost in the live database.
 
-**AR-02 ✔ verified - Changes made in place to rows already in SQL are never saved (high; full run: yes)**
+**AR-02 FIXED (pipeline merge part B, awaiting full run) - Changes made in place to rows already in SQL are never saved (high; full run: yes)**
+Fixed: every schema table declares `write_mode` (`upsert`/`append`) replacing the hard-coded sets; all dimensions (static ones included), `fact_employment`, `fact_absence`, `fact_recruitment`, `fact_vacancy`, `fact_manager_assignment` and `fact_workforce_snapshot` are upserted, only changed rows are written; `fact_performance_review`, `fact_safety_incident`, `fact_employee_qualification` and `fact_salary_benchmark` are append-only. The strict `InMemoryStore` applies the same modes and the equivalence tests prove the classification.
 Only `MUTABLE_FACTS = {"fact_absence", "fact_employment", "fact_recruitment"}`
 (`write_to_sql.py:48`) are upserted. Every other fact only gets new primary
 keys inserted (`write_to_sql.py:~607-641`). Rows changed in memory are
@@ -277,7 +339,9 @@ week 52 (`run_simulation.py:104`, `run_simulation_incremental.py:91`), so
 tested in `test_iso_week.py`) and use it in both loops instead of the
 `week > 52` wrap. Needs a full run to backfill the previously-skipped weeks.
 
-*Still open (repeated last week):* both loops store the last week they
+*Repeated last week - FIXED (pipeline merge part A, awaiting full run):* the checkpoint stores the NEXT week to simulate (`next_year`/`next_week`, `src/infrastructure/state/checkpoint.py`), so no week runs twice; tested by the equivalence tests.
+
+*Was open (repeated last week):* both loops store the last week they
 simulated (`run_simulation.py:108-115` before the fix,
 `run_simulation_incremental.py:95-102` before the fix), and the incremental
 run starts again from that same stored week, so each week is simulated twice
@@ -288,7 +352,8 @@ N-1 plus one incremental week".
 Direction: store the *next* week to simulate instead of the last one
 simulated, and add a resume test.
 
-**AR-04 - State that exists only in memory is lost between incremental runs (high; full run: no, but the next incremental runs are wrong)**
+**AR-04 FIXED (pipeline merge part A, awaiting full run) - State that exists only in memory is lost between incremental runs (high; full run: no, but the next incremental runs are wrong)**
+Fixed: `STATE_KEY_REGISTER` classifies every non-table state key; the persisted ones (location state, `_recruitment_pipeline_profiles`, `_vacancy_requests`) are stored in the checkpoint (`simulation_state.checkpoint_json`) and restored on load; an unclassified key fails the run.
 - Location state (`_location_open`, `_location_opened_on`,
   `_location_capacity_streak`, `_location_capacity_bonus`, `_home_location`;
   `location_assignment.py:~41-50`) is rebuilt from config each run. Fabriek
@@ -305,7 +370,8 @@ Direction: keep an explicit list of state keys, each marked "saved" or
 small table), or derive it from SQL (`fact_employment.Location_Key` history,
 the recruitment row's candidate columns).
 
-**AR-05 - Each incremental run restarts the random generator from the same seed (medium; full run: no)**
+**AR-05 FIXED (pipeline merge part A, awaiting full run) - Each incremental run restarts the random generator from the same seed (medium; full run: no)**
+Fixed: every simulated week uses `Random(f"{seed}:{year}:{week}")` and reseeds Faker with `f"{seed}:{year}:{week}:names"`; population generation has its own stream. Per-simulator sub-streams (AR-15) are not done.
 `run_simulation_incremental.py:37` creates `random.Random(seed)` every run, and
 each weekly run covers one or two weeks, so every incremental week consumes
 nearly the same random stream (e.g. the attrition shock draw at
@@ -313,7 +379,11 @@ nearly the same random stream (e.g. the attrition shock draw at
 Direction: seed per simulated week from `(seed, year, week)` in both paths;
 optionally one sub-stream per simulator (see AR-15 on data-dependent draws).
 
-**AR-06 - Writes are not atomic; the week counter advances before the data is written (medium-high; full run: no)**
+**AR-51 FIXED (pipeline merge part A, awaiting full run) - The incremental run redrew the annual growth rate on every run (medium; full run: yes)**
+`run_simulation_incremental.py:52` drew `annual_growth_rate` from a freshly seeded `rng` on every incremental run, and the full run drew it from a different point of its stream, so the growth path changed from run to run. Fixed: the rate is derived once from `Random(f"{seed}:growth-rate")` in `simulation_parameters`, identical in every run.
+
+**AR-06 FIXED (pipeline merge part B, awaiting full run) - Writes are not atomic; the week counter advances before the data is written (medium-high; full run: no)**
+Fixed: schema evolution first, then one transaction on one connection (full: reset + inserts; incremental: upserts/appends/deletes) with the checkpoint written last; any failure rolls back and keeps the old data and checkpoint; `load_current_state` fails loudly except for a missing table. Not done: staging tables with a swap for full runs (a single transaction already keeps readers on the old data under READ_COMMITTED_SNAPSHOT; the risk is the transaction log size on a small tier).
 `update_simulation_state` commits (`run_simulation.py:115`,
 `run_simulation_incremental.py:102`) before `write_dataset` runs
 (`function_app.py:89`). `reset_tables` and each table write commit separately.
@@ -361,7 +431,8 @@ This feeds snapshots and performance scores.
 Direction: use `carried_experience(previous_row, today, same_department=True, config)`
 in both places, as career events and hiring already do.
 
-**AR-09 - Two different definitions of relevant experience (medium-high; full run: yes)**
+**AR-09 FIXED (group 5; awaiting full run) - Two different definitions of relevant experience (medium-high; full run: yes)**
+Fixed: `eligible_internal` uses `carried_experience` (with AR-37's shared qualification/experience helper); `relevant_experience()` was removed and the thresholds live in config.
 `role_eligibility.relevant_experience` (`role_eligibility.py:~112-125`) counts
 only internal time in the target role or its feeder roles. It ignores
 `Relevante_Ervaring_Jaren_Bij_Start` and the cross-domain transfer ratio,
@@ -381,7 +452,8 @@ performance reviews.
 Direction: base the check on the last `Salarisverhoging` event date or on
 `Aaneengesloten_Indienst_Datum`, not the current row's `Startdatum`.
 
-**AR-11 - Snapshots use today's values in historical rows (medium-high; full run: yes)**
+**AR-11 FIXED (group 5; awaiting full run) - Snapshots use today's values in historical rows (medium-high; full run: yes)**
+Fixed: `Aanvangs_Prestatie_Score` before the first review (snapshots and absence context) and the employment row's `SalaryScale_Key`.
 - Performance before the first review falls back to the *current*
   `dim_employee.Prestatie_Score` (`workforce_snapshot.py:~73`,
   `absence_context.py:~74`). A new hire's first 6+ months of snapshots show a
@@ -427,7 +499,8 @@ Direction: withdraw or finalize the application in the failure paths,
 re-check eligibility at hire, and route through `movement_type` plus one
 shared move builder.
 
-**AR-14 - Absence episodes are not cut off at departure (medium; full run: yes)**
+**AR-14 FIXED (group 5; awaiting full run) - Absence episodes are not cut off at departure (medium; full run: yes)**
+Fixed: `close_open_absence` in `departure_records.py`, called from attrition and contract non-renewal.
 Episodes are capped only at creation (`simulation_absence.py:~587-619`).
 Attrition and lapsed contracts never shorten open episodes, so
 `Verzuim_Werkdagen`/hours are counted after someone has left.
@@ -574,7 +647,8 @@ vectorized attrition). Revisit after AR-16 and before declaring AR-17 fully
 done; benchmark actual full-run time impact at real headcount before/after
 both are in (see "Suggested order").
 
-**AR-18 - Cost grows with accumulated history (medium; ✔ confirmed 2026-09-25, not yet fixed)**
+**AR-18 - Cost grows with accumulated history (medium; ✔ confirmed 2026-09-25) - PARTLY FIXED (pipeline merge part B, awaiting full run)**
+Fixed: incremental runs rebuild `fact_workforce_snapshot` and `fact_salary_benchmark` only from the open month and merge them with the loaded rows, and only changed rows are written. Still open: the simulation cost itself grows with history (O(weeks^2): full-table scans and `pd.concat` every week), and the snapshot key still limits `Employee_Key` to below 10,000.
 Growing tables are appended with `pd.concat` and scanned, copied and
 date-converted in full every week. Absence loops over all `dim_employee` rows,
 leavers included. `sync_manager_assignments` is O(active × open) per week. So
@@ -623,7 +697,8 @@ apply constraints only after a reset or schema change.
 
 ### Priority 4 - structure and maintainability
 
-**AR-20 - Merge the full and incremental pipelines (medium)**
+**AR-20 - Merge the full and incremental pipelines (medium) - DONE (parts A and B; awaiting full run)**
+Part A: one `run_pipeline` (`src/application/pipeline.py`) for both modes with a Store interface (`SqlStore`, `InMemoryStore`), config/schema loaded once, explicit `today`, one growth-parameter function, one `post_process` order, and the acceptance test "full to week N = full to N-1 + one incremental week". Part B: per-table write modes, changed-row upserts, one atomic transaction with the checkpoint last, open-month snapshots/benchmarks, deterministic benchmark keys, dry run and as-of date (see AR-02, AR-06, AR-18, AR-24).
 `run_simulation.py` and `run_simulation_incremental.py` are about 70% the same
 code and have already drifted apart:
 - `sync_recruitment_status_keys` runs after the simulation in the full path
@@ -659,7 +734,8 @@ Direction: `domain/` (models and rules), `simulation/` (plus locations and
 manager assignment), a new `reporting/` (snapshot, contexts, dimensions) and
 `infrastructure/` (database, state, blob, caches).
 
-**AR-22 - Make the weekly state contract explicit (medium-low)**
+**AR-22 FIXED (pipeline merge part A, awaiting full run) - Make the weekly state contract explicit (medium-low)**
+Fixed: the state keys are documented in `STATE_KEY_REGISTER`; the dead keys `vacancies` and `_latest_hires` (and their writes) were removed; the hiring simulator no longer calls `assign_managers` (it fell back to the wall clock), so `WeeklySimulationRunner` is the single owner and assigns with the simulated date. Backfill requests raised by hiring are still handled the following week; that is now explicit because `_vacancy_requests` is persisted in the checkpoint.
 - `state["vacancies"]` and `_latest_hires` are written but never read.
 - Backfill requests from hiring are created after `VacancySimulator` already
   ran, so they are handled a week late without that being stated.
@@ -682,7 +758,8 @@ make the runner the single owner of manager assignment.
 - Eligibility: the 2.7 and 3-year thresholds.
 - Performance: the driver constants.
 
-**AR-24 - Dimension keys depend on config order (medium)**
+**AR-24 - Dimension keys depend on config order (medium) - `fact_salary_benchmark` FIXED (pipeline merge part B, awaiting full run)**
+Fixed for the benchmark: `SalaryBenchmark_Key` = `yyyymm * 10000 + Role_Key * 100 + Salaris_Trede`, validated in config (Role_Key and steps below 100). The dimension keys from config order (bands, drivers, event types, locations, absence types, departure reasons) are still open.
 Bands, drivers, `dim_salary_band`, `dim_event_type`, `dim_location`,
 `dim_absence_type` and `dim_departure_reason` get their keys from their
 position in config (`dimension_factory.py:~28-47`). Inserting or reordering an
@@ -693,6 +770,7 @@ Direction: explicit keys in config, validated; deterministic benchmark keys
 (e.g. yyyymm + role + step).
 
 **AR-25 - Typed and validated config (low-medium)**
+*Mode validation done in pipeline merge part A:* `function_app` rejects any mode other than `full`/`incremental` and builds its response from the same value.
 `Config` exposes raw dicts with defaults scattered at the call sites.
 - `simulation_weeks` is unused.
 - `database` can be None (it becomes the database name "None").

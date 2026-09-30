@@ -32,14 +32,26 @@ Execution flow
 HTTP trigger or weekly timer
         |
         v
-run_hr_pipeline(mode)
+run_hr_pipeline(mode)      config and schema are loaded once and passed down
         |
-        +-- full: run_simulation()
-        |      Creates a population, runs history from the burn-in period,
-        |      then rebuilds managed reporting tables.
+        v
+run_pipeline(mode, config, schema, seed, store, today)   application/pipeline.py
         |
-        `-- incremental: run_incremental_simulation()
-               Loads the current SQL state and simulates missing weeks.
+        +-- prepare_state
+        |     full:        WorkforceGenerator population at the burn-in start
+        |     incremental: store.load + checkpoint (seed check, static
+        |                  dimension repair, date normalization, persisted state)
+        +-- run_weeks      from checkpoint.next_week while the week's Monday <= today;
+        |                  one random stream and one Faker seed per week
+        +-- post_process   the same sync_* sequence for both modes
+        `-- store.write    tables + checkpoint (reset only for a full run)
+                           SqlStore in production, InMemoryStore in tests.
+                           Phase 1: schema evolution (DDL). Phase 2: ONE
+                           transaction - full: reset + bulk insert; incremental:
+                           only new/changed rows per table write_mode (upsert or
+                           append), explicit deletes, and the checkpoint LAST.
+                           A failure rolls everything back; a dry run rolls back
+                           on purpose (HR_SIMULATION_DRY_RUN).
         |
         v
 WeeklySimulationRunner
@@ -73,9 +85,26 @@ Schema-driven Azure SQL writer
 
 Simulation state
 ----------------
-The in-memory state is a dictionary of pandas DataFrames. It is the contract
-between simulators and the SQL writer. `simulation_state` in SQL stores the
-last completed ISO year and week for incremental processing.
+The in-memory state is a dictionary of pandas DataFrames plus a few non-table
+keys. It is the contract between simulators and the store. Every non-table key
+is classified in STATE_KEY_REGISTER (infrastructure/state/checkpoint.py):
+persisted keys (location openings and capacity streaks, department relocations,
+the recruitment pipeline's candidate profiles, pending vacancy requests) are
+saved in the checkpoint; transient keys (per-week caches, the employment index,
+role_allocations, _accepted_applications) are rebuilt. A key that is neither a
+schema table nor registered makes the checkpoint fail. `simulation_state` in SQL
+stores the checkpoint: the NEXT ISO year and week to simulate, the seed, a
+config fingerprint and the persisted keys as JSON (current_year/current_week
+remain the last simulated week). An incremental run without a checkpoint or
+with a different seed stops; run a full run first. Every schema table declares a
+write_mode; the incremental load keeps a normalized per-row digest baseline of
+each table and a write only sends rows that are new or really changed (DECIMAL
+compared at its scale). Tables are read in primary-key order and both modes
+start the weekly loop from that canonical order. Incremental runs rebuild
+fact_workforce_snapshot and fact_salary_benchmark only for month-ends from the
+first day of the month of the first simulated week; only the snapshot table may
+lose rows (delete_missing). HR_SIMULATION_AS_OF replaces "today" (never in the
+future) for validation runs.
 
 Core reporting model
 --------------------
@@ -98,7 +127,11 @@ Facts include:
   experience forward. Tenure in every simulator (attrition, absence, safety,
   performance, salary review) is continuous service from
   dim_employee.Aaneengesloten_Indienst_Datum, never the current row's
-  Startdatum.
+  Startdatum. Internal eligibility (promotion, transfer, internal mobility)
+  uses the same qualification and relevant-experience policy as external
+  hiring (role_eligibility.qualification_and_experience_reason and
+  carried_experience); a promotion or transfer inside a department keeps the
+  employee's shift.
 - fact_workforce_snapshot: one active employee per month-end (a leaver is
   excluded from the month-end on or after the departure date, so
   headcount(start) + hires - leavers = headcount(end)). This is the
@@ -107,6 +140,8 @@ Facts include:
   absence metrics.
 - fact_absence: absence and leave episode events. It stores workday and hour
   values plus the employment, pay and satisfaction context at episode start.
+  Episodes still running at a departure are cut on the departure date
+  (departure_records.close_open_absence).
 - fact_vacancy and fact_recruitment: vacancy lifecycle and all applications.
   The accepted application determines the hire source of a filled vacancy.
 - fact_salary_benchmark: monthly role, scale and salary-step benchmarks.
@@ -166,7 +201,8 @@ Modeling principles
 
 Operational notes
 -----------------
-- The HTTP endpoint uses HR_SIMULATION_MODE to select full or incremental.
+- The HTTP endpoint uses HR_SIMULATION_MODE to select full or incremental
+  (any other value is rejected).
 - The timer trigger always uses incremental mode.
 - Run a full simulation after adding snapshot columns or driver keys; an
   incremental run does not backfill existing snapshot rows.
