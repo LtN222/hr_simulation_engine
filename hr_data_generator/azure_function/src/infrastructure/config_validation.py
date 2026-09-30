@@ -9,6 +9,11 @@ otherwise fail silently rather than loudly - the generator would just run
 with subtly wrong eligibility/reporting data.
 """
 
+import pandas as pd
+
+from src.infrastructure.salary_policy import SalaryPolicy
+from src.simulation.simulation_safety import LOST_TIME_ABSENCE_TYPE
+
 
 def validate_role_configuration(config):
     """Return a list of human-readable problems; an empty list means the
@@ -30,6 +35,9 @@ def validate_role_configuration(config):
     problems.extend(_check_lateral_transfer_salary_scales(structure, role_career_paths))
     problems.extend(_check_unreachable_roles(structure, growth))
     problems.extend(_check_relevante_opleidingen_resolve(role_career_paths, education_names))
+    problems.extend(_check_salary_scales(config, structure))
+    problems.extend(_check_lost_time_absence_type(config))
+    problems.extend(_check_voluntary_reasons_exist(config))
     return problems
 
 
@@ -133,3 +141,93 @@ def _check_relevante_opleidingen_resolve(role_career_paths, education_names):
                     f"{role_name}.relevante_opleidingen references unknown education '{education}'"
                 )
     return problems
+
+
+def _check_salary_scales(config, structure):
+    """Market medians, salary scales and the legal minimum must fit together.
+
+    (a) every role has a market median; (b) every role's market P25-P75 lies
+    inside its salary scale (a scale without a maximum only bounds the
+    minimum); (c) the lowest scale starts at or above the legal minimum in
+    the first simulated year, the lowest indexed floor.
+
+    Skipped when the config has no `salary_benchmark`/`dim_salary_scale`.
+    """
+    benchmark = getattr(config, "salary_benchmark", None)
+    scales = getattr(config, "dim_salary_scale", None)
+    if not benchmark or not scales:
+        return []
+
+    problems = []
+    medians = benchmark.get("market_median_by_role", {})
+    spread = float(benchmark.get("market_percentile_spread", 0.10))
+    scale_by_code = {scale.get("Salarisschaal_Code"): scale for scale in scales}
+
+    for department, roles in structure.items():
+        for role_name, role_config in roles.items():
+            location = f"{department}/{role_name}"
+            median = medians.get(role_name)
+            if median is None:
+                problems.append(f"{location}: no market median in salary_benchmark.market_median_by_role")
+                continue
+            code = role_config.get("salary_scale_code")
+            scale = scale_by_code.get(code)
+            if scale is None:
+                continue
+            p25, p75 = median * (1 - spread), median * (1 + spread)
+            minimum, maximum = scale.get("Minimum_Salaris"), scale.get("Maximum_Salaris")
+            if minimum is not None and p25 < minimum:
+                problems.append(
+                    f"{location}: market P25 {p25:,.0f} is below the minimum {minimum:,.0f} of scale {code}"
+                )
+            if maximum is not None and p75 > maximum:
+                problems.append(
+                    f"{location}: market P75 {p75:,.0f} is above the maximum {maximum:,.0f} of scale {code}"
+                )
+
+    if "legal_minimum_salary" in benchmark:
+        floor = SalaryPolicy(config).legal_minimum(
+            pd.Timestamp(benchmark.get("base_date", "2020-01-01"))
+        )
+        lowest = min(scales, key=lambda scale: scale["Minimum_Salaris"])
+        if lowest["Minimum_Salaris"] < floor:
+            problems.append(
+                f"lowest scale {lowest.get('Salarisschaal_Code')} starts at "
+                f"{lowest['Minimum_Salaris']:,.0f}, below the indexed legal minimum {floor:,.0f} "
+                f"on the benchmark base date"
+            )
+    return problems
+
+
+def _check_lost_time_absence_type(config):
+    """The safety simulator owns the lost-time absence type: it must exist in
+    `dim_absence_type` and be kept out of the absence simulator's random draw,
+    otherwise it is created twice (AR-33)."""
+    absence_types = getattr(config, "dim_absence_type", None)
+    absence = getattr(config, "absence", None)
+    if absence_types is None or absence is None:
+        return []
+    problems = []
+    if LOST_TIME_ABSENCE_TYPE not in absence_types:
+        problems.append(
+            f"dim_absence_type has no '{LOST_TIME_ABSENCE_TYPE}' (used by the safety simulator)"
+        )
+    if LOST_TIME_ABSENCE_TYPE not in absence.get("excluded_from_random_draw", []):
+        problems.append(
+            f"absence.excluded_from_random_draw must list '{LOST_TIME_ABSENCE_TYPE}'"
+        )
+    return problems
+
+
+def _check_voluntary_reasons_exist(config):
+    """A garbled or misspelled reason key silently never matches (AR-40)."""
+    attrition = getattr(config, "attrition", None)
+    reasons = getattr(config, "dim_departure_reason", None)
+    if not attrition or not reasons:
+        return []
+    known = {reason for group in reasons.values() for reason in group}
+    return [
+        f"attrition.voluntary_reason_satisfaction_multipliers: '{reason}' is not in dim_departure_reason"
+        for reason in attrition.get("voluntary_reason_satisfaction_multipliers", {})
+        if reason not in known
+    ]

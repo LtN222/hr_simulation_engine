@@ -181,6 +181,116 @@ def test_validate_role_configuration_flags_an_unresolved_relevante_opleidingen_e
     )
 
 
+def _salary_config(**benchmark_overrides):
+    benchmark = {
+        "base_date": "2020-01-01",
+        "annual_market_growth_rate": 0.025,
+        "market_percentile_spread": 0.10,
+        "market_median_by_role": {
+            "Operator": 40000, "Teamleider Productie": 60000, "QC Medewerker": 42000,
+        },
+        "legal_minimum_salary": {
+            "reference_year": 2026, "annual_full_time_salary": 31179,
+            "allowances": {"vakantiegeld": 0.08},
+        },
+    }
+    benchmark.update(benchmark_overrides)
+    return _config(
+        salary_benchmark=benchmark,
+        dim_salary_scale=[
+            {"Salarisschaal_Code": "B", "Minimum_Salaris": 30000, "Maximum_Salaris": 50000, "Aantal_Treden": 10},
+            {"Salarisschaal_Code": "D", "Minimum_Salaris": 50000, "Maximum_Salaris": None, "Aantal_Treden": 10},
+        ],
+    )
+
+
+def test_validate_role_configuration_accepts_a_consistent_salary_setup_with_an_open_ended_scale():
+    assert validate_role_configuration(_salary_config()) == []
+
+
+def test_validate_role_configuration_flags_a_role_without_a_market_median():
+    config = _salary_config(market_median_by_role={"Operator": 40000, "QC Medewerker": 42000})
+
+    problems = validate_role_configuration(config)
+
+    assert any("Teamleider Productie: no market median" in p for p in problems)
+
+
+def test_validate_role_configuration_flags_a_market_range_outside_its_scale():
+    config = _salary_config(market_median_by_role={
+        "Operator": 50000,  # P75 55,000 exceeds scale B's maximum 50,000
+        "Teamleider Productie": 50000,  # P25 45,000 is below scale D's minimum 50,000
+        "QC Medewerker": 42000,
+    })
+
+    problems = validate_role_configuration(config)
+
+    assert any("Operator: market P75" in p and "above the maximum" in p for p in problems)
+    assert any("Teamleider Productie: market P25" in p and "below the minimum" in p for p in problems)
+
+
+def test_validate_role_configuration_only_checks_the_minimum_of_an_open_ended_scale():
+    config = _salary_config(market_median_by_role={
+        "Operator": 40000, "Teamleider Productie": 900000, "QC Medewerker": 42000,
+    })
+
+    assert validate_role_configuration(config) == []
+
+
+def test_validate_role_configuration_flags_a_lowest_scale_below_the_indexed_legal_minimum():
+    config = _salary_config()
+    config.dim_salary_scale[0]["Minimum_Salaris"] = 20000
+    config.salary_benchmark["market_median_by_role"]["Operator"] = 25000
+
+    problems = validate_role_configuration(config)
+
+    assert any("below the indexed legal minimum" in p for p in problems)
+
+
+def test_validate_role_configuration_flags_a_lost_time_type_that_is_still_randomly_drawn():
+    config = _config(
+        dim_absence_type={"Kort verzuim": True, "Bedrijfsongeval": True},
+        absence={"excluded_from_random_draw": []},
+    )
+
+    problems = validate_role_configuration(config)
+
+    assert any("excluded_from_random_draw must list 'Bedrijfsongeval'" in p for p in problems)
+
+
+def test_validate_role_configuration_flags_a_missing_lost_time_absence_type():
+    config = _config(
+        dim_absence_type={"Kort verzuim": True},
+        absence={"excluded_from_random_draw": ["Bedrijfsongeval"]},
+    )
+
+    problems = validate_role_configuration(config)
+
+    assert any("no 'Bedrijfsongeval'" in p for p in problems)
+
+
+def test_validate_role_configuration_accepts_a_correct_lost_time_setup():
+    config = _config(
+        dim_absence_type={"Kort verzuim": True, "Bedrijfsongeval": True},
+        absence={"excluded_from_random_draw": ["Bedrijfsongeval"]},
+    )
+
+    assert validate_role_configuration(config) == []
+
+
+def test_validate_role_configuration_flags_an_unknown_voluntary_reason_key():
+    config = _config(
+        attrition={"voluntary_reason_satisfaction_multipliers": {
+            "Eigen initiatief": {}, "Carri\u00c3\u00a8re switch": {},
+        }},
+        dim_departure_reason={"vrijwillig": ["Eigen initiatief", "Carri\u00e8re switch"]},
+    )
+
+    problems = validate_role_configuration(config)
+
+    assert len(problems) == 1 and "Carri\u00c3\u00a8re switch" in problems[0]
+
+
 def test_the_real_maakindustrie_configuration_passes_validation():
     """The actual production sector config, not a synthetic fixture - this is
     the regression guard for the 55-role structure itself."""
