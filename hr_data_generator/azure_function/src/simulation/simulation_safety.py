@@ -2,6 +2,7 @@ import pandas as pd
 
 from src.infrastructure.record_builder import build_record
 from src.infrastructure.salary_band import salary_band_key_for
+from src.infrastructure.tenure import service_days
 from src.infrastructure.satisfaction import (
     SatisfactionModel,
     score_employee_satisfaction,
@@ -69,7 +70,7 @@ class SafetyIncidentSimulator:
 
             employment = employment_lookup.loc[employee_key]
             weekly_probability = self._weekly_probability(
-                self._annual_rate(employment, state, today)
+                self._annual_rate(employee, employment, state, today)
             )
             if weekly_probability <= 0 or self.rng.random() >= weekly_probability:
                 continue
@@ -113,13 +114,13 @@ class SafetyIncidentSimulator:
     # Risk calculation
     # ------------------------------------------------------------------
 
-    def _annual_rate(self, employment, state, today):
+    def _annual_rate(self, employee, employment, state, today):
         department_name = department_name_for_role(state, employment.get("Role_Key"))
         base_rate = self.safety_cfg.get("annual_incident_rate_by_department", {}).get(
             department_name, 0.0
         )
         shift_factor = self._ploegendienst_factor(employment, state)
-        tenure_factor = self._new_hire_factor(employment, today)
+        tenure_factor = self._new_hire_factor(employee, employment, today)
         return max(0.0, float(base_rate) * shift_factor * tenure_factor)
 
     def _ploegendienst_factor(self, employment, state):
@@ -129,15 +130,15 @@ class SafetyIncidentSimulator:
         shift_name = shift_name_for_key(state, employment.get("Shift_Key"))
         return float(multipliers.get(shift_name, 1.0))
 
-    def _new_hire_factor(self, employment, today):
+    def _new_hire_factor(self, employee, employment, today):
         rule = self.safety_cfg.get("new_hire_multiplier", {})
         within_days = int(rule.get("within_days", 0) or 0)
         if within_days <= 0:
             return 1.0
-        start = pd.to_datetime(employment.get("Startdatum"), errors="coerce")
-        if pd.isna(start):
+        # Continuous service: a new hire is new to the company, not to the row.
+        tenure_days = service_days(employee, employment, today)
+        if tenure_days is None:
             return 1.0
-        tenure_days = (pd.Timestamp(today) - start.normalize()).days
         return float(rule.get("multiplier", 1.0)) if 0 <= tenure_days <= within_days else 1.0
 
     @staticmethod

@@ -4,6 +4,7 @@ import pandas as pd
 
 from src.infrastructure.record_builder import build_record
 from src.infrastructure.salary_band import salary_band_key_for
+from src.infrastructure.tenure import service_days
 from src.infrastructure.satisfaction import (
     SatisfactionModel,
     score_employee_satisfaction,
@@ -64,7 +65,7 @@ class AbsenceSimulator:
                     continue
 
                 employment = employment_lookup.loc[employee_key]
-                if not self._eligible_for_absence(employment, today):
+                if not self._eligible_for_absence(employee, employment, today):
                     continue
 
                 if employee_key in occupied_employees:
@@ -185,12 +186,14 @@ class AbsenceSimulator:
         keys = pd.to_numeric(absence["Absence_Key"], errors="coerce").dropna()
         return int(keys.max()) + 1 if not keys.empty else 1
 
-    def _eligible_for_absence(self, employment, today):
-        start = pd.Timestamp(employment["Startdatum"]).normalize()
+    def _eligible_for_absence(self, employee, employment, today):
+        # Continuous service, not the current row's Startdatum: a salary
+        # review/renewal/move resets that date for people long in service.
         minimum_tenure = int(
             self.absence_cfg.get("minimum_tenure_days", 10)
         )
-        if today < start + pd.Timedelta(days=minimum_tenure):
+        tenure_days = service_days(employee, employment, today)
+        if tenure_days is None or tenure_days < minimum_tenure:
             return False
 
         end = self._employment_end(employment)
@@ -442,8 +445,8 @@ class AbsenceSimulator:
         if age > int(rule.get("max_age", 120)):
             return False
 
-        tenure_days = (today - pd.Timestamp(employment["Startdatum"])).days
-        if tenure_days < int(rule.get("min_tenure_days", 0)):
+        tenure_days = service_days(employee, employment, today)
+        if tenure_days is None or tenure_days < int(rule.get("min_tenure_days", 0)):
             return False
         if not self._has_required_ploegendienst(
             employment,

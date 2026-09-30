@@ -5,6 +5,7 @@ import math
 import pandas as pd
 
 from src.infrastructure.departure_records import build_departure_row
+from src.infrastructure.tenure import service_years
 from src.infrastructure.satisfaction import (
     SatisfactionModel,
     score_employee_satisfaction,
@@ -111,11 +112,7 @@ class AttritionSimulator:
                 float(self.config.attrition.get(department_name, 0.05)) / 52
             )
             weekly_attrition *= self._performance_multiplier(performance)
-            tenure_years = max(
-                0.0,
-                (pd.Timestamp(today) - pd.Timestamp(employment["Startdatum"])).days
-                / 365.2425,
-            )
+            tenure_years = service_years(employee, employment, today)
             weekly_attrition *= self._tenure_multiplier(tenure_years)
 
             salary_ratio = self._salary_ratio(

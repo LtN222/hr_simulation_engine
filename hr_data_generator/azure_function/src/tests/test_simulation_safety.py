@@ -42,6 +42,11 @@ def _employment_row(employee_key=1, role_key=1, startdatum=pd.Timestamp("2020-01
     })
 
 
+def _long_service(employment):
+    """An employee whose continuous service began when this row did."""
+    return pd.Series({"Aaneengesloten_Indienst_Datum": employment["Startdatum"]})
+
+
 def test_annual_rate_scales_with_department_shift_and_new_hire_multipliers():
     config = _config()
     simulator = SafetyIncidentSimulator(config, schema=None, rng=random.Random(1))
@@ -57,8 +62,8 @@ def test_annual_rate_scales_with_department_shift_and_new_hire_multipliers():
     new_hire = _employment_row(startdatum=pd.Timestamp("2023-12-15"))
     new_hire["Shift_Key"] = 3
 
-    base_rate = simulator._annual_rate(long_tenure, state, pd.Timestamp("2024-01-01"))
-    boosted_rate = simulator._annual_rate(new_hire, state, pd.Timestamp("2024-01-01"))
+    base_rate = simulator._annual_rate(_long_service(long_tenure), long_tenure, state, pd.Timestamp("2024-01-01"))
+    boosted_rate = simulator._annual_rate(_long_service(new_hire), new_hire, state, pd.Timestamp("2024-01-01"))
 
     assert base_rate == 1.0  # no shift bonus, not a new hire
     assert boosted_rate == 1.0 * 1.3 * 1.8  # shift bonus and new-hire bonus both apply
@@ -72,8 +77,8 @@ def test_new_hire_factor_only_applies_within_the_configured_window():
     recent = _employment_row(startdatum=today - pd.Timedelta(days=30))
     old = _employment_row(startdatum=today - pd.Timedelta(days=400))
 
-    assert simulator._new_hire_factor(recent, today) == 1.8
-    assert simulator._new_hire_factor(old, today) == 1.0
+    assert simulator._new_hire_factor(_long_service(recent), recent, today) == 1.8
+    assert simulator._new_hire_factor(_long_service(old), old, today) == 1.0
 
 
 def test_choose_incident_type_respects_configured_weights():

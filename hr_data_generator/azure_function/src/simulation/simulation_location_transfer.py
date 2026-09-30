@@ -8,6 +8,7 @@ in for a change of scenery.
 import pandas as pd
 
 from src.infrastructure.record_builder import build_record
+from src.infrastructure.relevant_experience import carried_experience
 
 
 def simulate_location_transfers(state, config, schema, today, rng, event_type_map):
@@ -84,6 +85,9 @@ def simulate_location_transfers(state, config, schema, today, rng, event_type_ma
                 "Employment_Key": next_key,
                 "Previous_Employment_Key": row["Employment_Key"],
                 "Location_Key": _location_key(state, destination),
+                "Relevante_Ervaring_Jaren_Bij_Start": carried_experience(
+                    row, today, True, config
+                ),
                 "Startdatum": today,
                 "Einddatum": None,
                 "Dienstverband_status": "Actief",

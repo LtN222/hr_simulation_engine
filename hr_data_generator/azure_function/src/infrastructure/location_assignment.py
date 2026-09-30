@@ -29,6 +29,7 @@ from src.application.allocation import (
     team_lead_role_name,
 )
 from src.infrastructure.record_builder import build_record
+from src.infrastructure.relevant_experience import carried_experience
 
 
 def open_locations(state, config, schema, today, event_type_map):
@@ -144,6 +145,9 @@ def relocate_department_group(state, config, schema, location_name, today, event
                     "Employment_Key": next_key,
                     "Previous_Employment_Key": row["Employment_Key"],
                     "Location_Key": location_key,
+                    "Relevante_Ervaring_Jaren_Bij_Start": carried_experience(
+                        row, today, True, config
+                    ),
                     "Startdatum": today,
                     "Einddatum": None,
                     "Dienstverband_status": "Actief",

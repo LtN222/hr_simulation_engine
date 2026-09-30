@@ -177,7 +177,20 @@ alleen wat bij externe instroom plausibel is; het is geen ervaringsmaat. Bij
 salariswijzigingen en promoties binnen hetzelfde domein loopt alle ervaring
 door. Bij een transfer naar een ander functioneel domein wordt het
 configureerbare deel `career_events.relevant_experience_transfer_ratio`
-overgedragen.
+overgedragen. Ook contractverlengingen en -omzettingen, locatietransfers,
+afdelingsverhuizingen en de uitdienst-regel rollen de opgebouwde ervaring door
+naar de nieuwe regel (`carried_experience`, zelfde domein), zodat
+`Relevante_Ervaring_Jaren` maand op maand niet terugvalt.
+
+Anciënniteit ("nieuw in dienst", tenure) komt in alle simulatoren uit de
+aaneengesloten diensttijd (`dim_employee.Aaneengesloten_Indienst_Datum`, via
+`src/infrastructure/tenure.py`), nooit uit de `Startdatum` van de actuele
+`fact_employment`-regel: die wordt bij elke salarisreview, verlenging,
+promotie of verhuizing opnieuw gezet. Dit geldt voor uitstroom (tenure-
+multiplier, salaris-, categorie- en redenlogica), verzuim
+(`minimum_tenure_days` en de `min_tenure_days` van verlofsoorten),
+veiligheidsincidenten (`new_hire_multiplier`), performance reviews en de
+salarisreview.
 
 Promoties volgen uitsluitend de geconfigureerde `Logische_Doorgroei` van de
 huidige rol. Een hogere salarisschaal is dus geen promotiecriterium. Interne

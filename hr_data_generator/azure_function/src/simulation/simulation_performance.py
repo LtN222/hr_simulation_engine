@@ -11,6 +11,7 @@ from src.infrastructure.satisfaction import (
 )
 from src.infrastructure.driver_selection import driver_key_for
 from src.infrastructure.relevant_experience import experience_as_of
+from src.infrastructure.tenure import service_days
 
 
 class PerformanceSimulator:
@@ -372,8 +373,8 @@ class PerformanceSimulator:
         fixed week happens to fall within 180 days of their fixed review
         week (it did for roughly a third of employees before this fix).
         """
-        hire_date = pd.to_datetime(emp["Aaneengesloten_Indienst_Datum"], errors="coerce")
-        return (pd.Timestamp(today) - hire_date).days
+        days = service_days(emp, None, today)
+        return float("nan") if days is None else days
 
     def _review_week(self, employee_key):
         return ((int(employee_key) * 31) % 52) + 1

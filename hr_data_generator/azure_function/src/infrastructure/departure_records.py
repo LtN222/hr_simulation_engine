@@ -9,6 +9,7 @@ the active row in place (Einddatum/Dienstverband_status only - its own
 EventType_Key is left untouched) and appends the row this module builds.
 """
 from src.infrastructure.record_builder import build_record
+from src.infrastructure.relevant_experience import carried_experience
 
 
 def build_departure_row(
@@ -37,8 +38,10 @@ def build_departure_row(
             "Shift_Key": employment.get("Shift_Key"),
             "SalaryScale_Key": employment.get("SalaryScale_Key"),
             "Streef_Compa_Ratio": employment.get("Streef_Compa_Ratio"),
-            "Relevante_Ervaring_Jaren_Bij_Start": employment.get(
-                "Relevante_Ervaring_Jaren_Bij_Start"
+            # Rolled forward to the departure date: this terminal row starts
+            # at `today`, so the closing row's starting value would understate it.
+            "Relevante_Ervaring_Jaren_Bij_Start": carried_experience(
+                employment, today, True, None
             ),
             "Startdatum": today,
             "Einddatum": today,

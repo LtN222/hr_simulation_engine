@@ -16,6 +16,7 @@ import pandas as pd
 
 from src.infrastructure.departure_records import build_departure_row
 from src.infrastructure.record_builder import build_record
+from src.infrastructure.relevant_experience import carried_experience
 from src.infrastructure.satisfaction import (
     SatisfactionModel,
     score_employee_satisfaction,
@@ -263,7 +264,7 @@ class ContractLifecycleSimulator:
             self.schema,
             "fact_employment",
             {
-                **self._carried_context(employment),
+                **self._carried_context(employment, today),
                 "Employment_Key": next_key,
                 "Previous_Employment_Key": employment["Employment_Key"],
                 "Startdatum": today,
@@ -284,7 +285,7 @@ class ContractLifecycleSimulator:
             self.schema,
             "fact_employment",
             {
-                **self._carried_context(employment),
+                **self._carried_context(employment, today),
                 "Employment_Key": next_key,
                 "Previous_Employment_Key": employment["Employment_Key"],
                 "Startdatum": today,
@@ -298,10 +299,14 @@ class ContractLifecycleSimulator:
             }
         )
 
-    @staticmethod
-    def _carried_context(employment):
+    def _carried_context(self, employment, today):
         """Fields that stay the same across a renewal/conversion - this is
-        not a role, pay or location change, just a contract-status change."""
+        not a role, pay or location change, just a contract-status change.
+
+        Relevant experience is rolled forward to `today`: the new row starts
+        at `Startdatum = today`, so copying the old row's starting value would
+        drop everything built up since it began (AR-08).
+        """
         return {
             "Employee_Key": employment["Employee_Key"],
             "HireSource_Key": employment.get("HireSource_Key"),
@@ -310,8 +315,8 @@ class ContractLifecycleSimulator:
             "Shift_Key": employment.get("Shift_Key"),
             "SalaryScale_Key": employment.get("SalaryScale_Key"),
             "Streef_Compa_Ratio": employment.get("Streef_Compa_Ratio"),
-            "Relevante_Ervaring_Jaren_Bij_Start": employment.get(
-                "Relevante_Ervaring_Jaren_Bij_Start"
+            "Relevante_Ervaring_Jaren_Bij_Start": carried_experience(
+                employment, today, True, self.config
             ),
             "Salaris": employment.get("Salaris"),
             "Contracturen": employment.get("Contracturen"),
