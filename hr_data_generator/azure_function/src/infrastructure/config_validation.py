@@ -40,6 +40,7 @@ def validate_role_configuration(config):
     problems.extend(_check_voluntary_reasons_exist(config))
     problems.extend(_check_hire_source_weights(config))
     problems.extend(_check_benchmark_key_bounds(config, structure))
+    problems.extend(_check_shift_allowance(config))
     return problems
 
 
@@ -281,4 +282,28 @@ def _check_benchmark_key_bounds(config, structure):
                 f"salary scale {scale.get('Salarisschaal_Code')}: Aantal_Treden {steps} exceeds "
                 f"{MAX_BENCHMARK_STEPS} (SalaryBenchmark_Key uses two digits for the step)"
             )
+    return problems
+
+
+def _check_shift_allowance(config):
+    """Every shift has a percentage between 0 and 0.5 and every key is a shift."""
+    settings = getattr(config, "shift_allowance", None)
+    shifts = getattr(config, "dim_shift", None)
+    if not settings or not shifts:
+        return []
+    percentages = settings.get("percentages", {})
+    names = {shift.get("Ploegendienst_Naam") for shift in shifts}
+    problems = []
+    for name in sorted(names - set(percentages), key=str):
+        problems.append(f"shift_allowance.percentages has no percentage for shift '{name}'")
+    for name, value in percentages.items():
+        if name not in names:
+            problems.append(f"shift_allowance.percentages: '{name}' is not a dim_shift Ploegendienst_Naam")
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            problems.append(f"shift_allowance.percentages['{name}'] is not a number: {value!r}")
+            continue
+        if not 0.0 <= number <= 0.5:
+            problems.append(f"shift_allowance.percentages['{name}'] = {number} is outside 0 - 0.5")
     return problems

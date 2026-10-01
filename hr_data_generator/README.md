@@ -416,6 +416,32 @@ betrokkenheid kijkt alleen naar `Promotie` en `Transfer`). `dim_event_type`
 heeft deze gebeurtenis als laatste, negende lid, zodat bestaande sleutels niet
 verschuiven.
 
+**Ploegentoeslag.** `Salaris` is het voltijd-*basis*salaris. Daarbovenop komt
+voor ploegendienst een aparte toeslag, de kolom `Ploegentoeslag` (hele euro's
+per jaar, op dezelfde voltijdbasis als `Salaris`) op `fact_employment` en
+`fact_workforce_snapshot`. De toeslag is een percentage van `Salaris` per type
+ploegendienst, `shift_allowance.percentages` in `maakindustrie.json` (sleutels
+zijn `dim_shift.Ploegendienst_Naam`): Niet van toepassing 0%, Dag 0%, 2-ploeg
+12% en 3-ploeg 20%. Dit zijn **eerste-passwaarden** (een gangbare orde van
+grootte in de maakindustrie, niet gekalibreerd); `validate_role_configuration`
+eist een percentage voor elke ploegendienst tussen 0 en 0,5. Het totale loon is
+`Salaris + Ploegentoeslag` (beide voltijd; de webapp past de FTE-pro-rata op beide
+toe). De vloer (wettelijk minimum), de marktbenchmark en `Benchmark_Status`,
+`Streef_Compa_Ratio`, salarisreviews, de beloningskloof-kalibratie en de
+beloningsinvoer van tevredenheid en betrokkenheid gebruiken **alleen `Salaris`**
+en zien de toeslag niet. De toeslag wordt op één plek berekend
+(`src/infrastructure/shift_allowance.py`: `round(Salaris * percentage)`, 0 bij een
+ontbrekende ploegendienst of een ontbrekend salaris) en in `post_process` voor elke
+`fact_employment`-regel afgeleid uit de eigen `Salaris` en `Shift_Key` van die
+regel; de snapshot kopieert hem van de geldende employment-regel zoals `Salaris`.
+Daardoor geven een full run en een hervatte incremental run dezelfde waarden en
+telt een herberekende waarde bij de vergelijking van gewijzigde rijen niet als
+wijziging. Een beloningskloof op *totaal* loon valt groter uit dan op `Salaris`,
+omdat ploegendienst mannelijk gedomineerd is. Wijzig je een percentage, dan
+veranderen de toeslagen van bestaande employment-regels; een snapshotmaand die niet
+meer wordt herbouwd (alleen de open maand wordt herschreven) houdt de oude waarde,
+dus draai een full run na zo'n wijziging.
+
 De laagste marktmedianen (o.a. Productie-/Magazijnmedewerker 41.000) en de
 schaalranges zijn zo gekozen dat de ondergrens zelden wordt geraakt. Gemeten
 met een smalle harness (alleen `SalaryPolicy`, geen weeksimulatie) is het

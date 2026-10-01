@@ -35,6 +35,7 @@ from src.infrastructure.employee_status import sync_employee_employment_status
 from src.infrastructure.manager_assignment import sync_manager_assignments
 from src.infrastructure.manager_builder import build_dim_manager
 from src.infrastructure.recruitment_context import sync_recruitment_status_keys
+from src.infrastructure.shift_allowance import derive_ploegentoeslag
 from src.infrastructure.state.checkpoint import checkpoint_state, initial_checkpoint
 from src.infrastructure.state.incremental_load import load_incremental_state
 from src.infrastructure.workforce_snapshot import build_workforce_snapshots
@@ -232,6 +233,7 @@ def post_process(state, config, schema, params, today, snapshot_from=None):
     state = sync_employee_employment_status(state)
     state = sync_employment_hire_sources(state)
     state = sync_recruitment_status_keys(state)
+    state = derive_ploegentoeslag(state, config)
     state = sync_manager_assignments(state, schema, today)
     state = build_dim_manager(state)
     state = sync_absence_satisfaction(state, config)

@@ -251,7 +251,8 @@ Bundle this with the next history-changing change; it needs a full run.
 
 ## Later - new features (agreed with the user on 2026-09-30)
 
-**LF-01 - Model a shift allowance (ploegentoeslag) (medium; full run: yes)**
+**LF-01 DONE (awaiting full run, together with HP-03) - Model a shift allowance (ploegentoeslag) (medium; full run: yes)**
+Decisions: a separate Dutch column `Ploegentoeslag` (INT, EUR per year, the same full-time basis as `Salaris`) on `fact_employment` and `fact_workforce_snapshot`, so `Salaris` stays the base pay that the minimum-wage floor, the benchmark, `Streef_Compa_Ratio`, the gender-pay-gap calibration and the satisfaction pay input compare. Percentages of `Salaris` per shift type in `shift_allowance.percentages` (Niet van toepassing 0, Dag 0, 2-ploeg 0.12, 3-ploeg 0.20; first-pass values, not calibrated), one set for all departments; validated in config (every shift has one, 0-0.5). Computed in one helper (`src/infrastructure/shift_allowance.py`) and derived for every employment row in `post_process` from the row's own `Salaris` and `Shift_Key`, so no row builder changed and full and incremental runs match; the snapshot copies it. Not included in `Salaris`, the floor, benchmarks, compa-ratio, reviews or satisfaction/engagement. A gender pay gap on total pay will be larger than on `Salaris`. See LF-04 for the optional pay-input follow-up. Original description follows.
 Shift work is modelled (`Shift_Key`, `ploegendienst_assignment`, with safety
 and absence multipliers). In group 4, Techniek and Logistiek get shift roles
 as well. But `Salaris` contains no shift allowance, so a 3-ploeg operator
@@ -268,6 +269,9 @@ To decide when this is picked up:
 - Percentages in config per shift type, possibly per department.
 - Effects on satisfaction/engagement (the pay input), benchmark status and
   the gender pay gap calibration.
+
+**LF-04 - Optional: include Ploegentoeslag in the satisfaction pay input (low-medium; full run: yes)**
+The satisfaction/engagement pay input compares `Salaris` (via the compa-ratio) only, so shift workers' extra pay does not make them more satisfied with their pay. Including `Ploegentoeslag` (total pay against the benchmark) would be more realistic but shifts satisfaction, and through it attrition and absence, for every shift worker. It needs a recalibration of the satisfaction pay effect and the attrition/absence rates, so it was left out of LF-01. If picked up: decide whether the benchmark comparison should also move to total pay for shift roles (it would otherwise compare base pay with a base-pay benchmark and total pay with the same benchmark inconsistently).
 
 **LF-02 - Optional: a slightly more lenient education rule for internal candidates (low; full run: yes)**
 Before group 5, `eligible_internal` only checked that an internal candidate

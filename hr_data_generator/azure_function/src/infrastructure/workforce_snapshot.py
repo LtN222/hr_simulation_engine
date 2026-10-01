@@ -147,6 +147,7 @@ def build_workforce_snapshots(
                 "Contracturen": row.get("Contracturen"),
                 "FTE": _fte(row.get("Contracturen"), config),
                 "Salaris": row.get("Salaris"),
+                "Ploegentoeslag": row.get("Ploegentoeslag"),
                 "Prestatie_Score": performance,
                 "Aaneengesloten_Indienst_Datum": service_start,
                 "Dienstjaren": _service_years(service_start, snapshot_date),

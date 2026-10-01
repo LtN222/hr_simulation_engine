@@ -12,6 +12,7 @@ class Config:
         self.special_arrangements = data.get("special_arrangements", {})
         self.gender_ratio = data.get("gender_ratio", {})
         self.person_names = data.get("person_names", {})
+        self.shift_allowance = data.get("shift_allowance", {})
         self.ploegendienst_assignment = data.get("ploegendienst_assignment", {})
 
         self.dim_location = data["dim_location"]

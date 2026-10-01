@@ -2856,6 +2856,14 @@
       }
     }
   },
+  "shift_allowance": {
+    "percentages": {
+      "Niet van toepassing": 0.0,
+      "Dag": 0.0,
+      "2-ploeg": 0.12,
+      "3-ploeg": 0.20
+    }
+  },
   "person_names": {
     "max_display_length": 20
   },
