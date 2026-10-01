@@ -147,7 +147,10 @@ Facts include:
 - fact_salary_benchmark: monthly role, scale and salary-step benchmarks.
   Salaris is always a full-time (1.0 FTE) amount, floored by an indexed legal
   minimum wage (salary_benchmark.legal_minimum_salary, indexed with the market
-  growth rate, flat before base_date). The director roles sit in the
+  growth rate, flat before base_date). The floor is a step function that changes
+  only on the indexation dates (indexation_months, default 1 Jan and 1 Jul); the
+  weekly runner raises everyone below the new floor with the employment event
+  Minimumloonaanpassing (first salary step of the week, no persisted state). The director roles sit in the
   open-ended Boven-CAO scale, so Schaal_Max_Salaris is NULL for them.
 - fact_manager_assignment: effective-dated manager history used to build the
   monthly workforce context. Assignments are sticky week to week; only

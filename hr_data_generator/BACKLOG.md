@@ -107,7 +107,9 @@ Decisions:
   Any other date scales it with `annual_market_growth_rate` (so ~€29,036 in
   2020, growing after 2026); before `base_date` it is flat, like the growth
   factor. `SalaryPolicy.apply_floor(salary, date)` serves all four salary
-  paths. Update the config for a new year before a full run.
+  paths. Update the config for a new year before a full run. **HP-03:** the
+  floor is a step function (indexation on 1 January and 1 July) and the weekly
+  runner raises employees below it with the new `Minimumloonaanpassing` event.
 - **Salary scales:** Schaal G becomes "Boven-CAO" (key 7, code `BC`, minimum
   105,000, no maximum) for Managing Director, CFO, Operations Director and
   Commercial Director; Plant Manager stays in F. `Schaal_Max_Salaris` is NULL
@@ -211,7 +213,8 @@ Facts for that discussion:
 - Redrawing names at generation needs a full run to change existing names. A
   display-name column or a shortening rule could be backfilled incrementally.
 
-**HP-03 ✔ verified - Salaries dip below the indexed legal minimum between reviews (high; full run: yes)**
+**HP-03 FIXED (awaiting full run) - Salaries dip below the indexed legal minimum between reviews (high; full run: yes)**
+Fixed: `SalaryPolicy.legal_minimum` is now step-wise (indexation on 1 January and 1 July, `legal_minimum_salary.indexation_months`), and the weekly runner adds the `Minimumloonaanpassing` event (`simulate_minimum_wage_adjustments`) as its first salary step. Decisions: own event type appended at the END of `dim_event_type` (AR-24: keys come from list position); not counted as a salary review (`_already_reviewed_this_year` keys on `Salarisaanpassing` only) and not a promotion/transfer (career momentum only reads those two); skipped for an employee whose certain annual review falls in the same week (the review applies the floor; avoids two rows on one day), but not for someone who joined this year or when `salary_increase_rate` < 1; no persisted state (weeks are contiguous), identical in full and incremental runs. Measured: step values 2020-2027 below; share exactly at the floor 0.4-3.1% per role/year (before 0.5-3.6%, no retuning); the small invariant run (60 employees, 2023-01 to 2025-01) produces 1 adjustment row in 2024 and 2 in 2025 and 0 snapshot rows below the floor (without the step: 2 of 2,484 rows, max EUR 211). Step values (1 Jan / 1 Jul): 2020 29,036 / 29,396; 2021 29,764 / 30,130; 2022 30,507 / 30,883; 2023 31,270 / 31,655; 2024 32,051 / 32,448; 2025 32,854 / 33,258; 2026 33,674 / 34,089; 2027 34,516 / 34,941. Original description follows.
 Found in the first full run after HP-01 (2026-09-30, baseline_headcount 50,
 as of 2026-09-16). 258 of 8,301 `fact_workforce_snapshot` rows (3.1%) are
 below the floor that applies on their snapshot date, by at most EUR 965

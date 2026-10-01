@@ -2,7 +2,10 @@ from datetime import datetime
 
 from src.simulation.simulation_absence import AbsenceSimulator
 from src.simulation.simulation_attrition import AttritionSimulator
-from src.simulation.simulation_career_events import simulate_career_events
+from src.simulation.simulation_career_events import (
+    simulate_career_events,
+    simulate_minimum_wage_adjustments,
+)
 from src.simulation.simulation_contracts import ContractLifecycleSimulator
 from src.simulation.simulation_growth import calculate_growth_target
 from src.simulation.simulation_hiring import HiringSimulator
@@ -89,6 +92,13 @@ class WeeklySimulationRunner:
         )
 
         state = open_locations(state, self.config, self.schema, today, event_type_map)
+
+        # First salary step of the week: when the legal minimum wage was just
+        # indexed, lift everyone below it, so every row created later this week
+        # already starts at or above the floor.
+        state = simulate_minimum_wage_adjustments(
+            state, self.config, self.schema, today, event_type_map
+        )
 
         # Runs before AttritionSimulator so a Tijdelijk contract that lapses
         # this week is already resolved as a departure before attrition's own

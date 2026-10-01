@@ -28,8 +28,13 @@ YEAR = 2024
 LAST_WEEK = 7          # the "full run to week N"
 
 
-def _small_config():
+def _small_config(indexation_months=None, high_floor=False):
     config = ConfigLoader().load()
+    if indexation_months:
+        config.salary_benchmark["legal_minimum_salary"]["indexation_months"] = indexation_months
+    if high_floor:
+        # a floor above many starting salaries, so an indexation step catches people
+        config.salary_benchmark["legal_minimum_salary"]["annual_full_time_salary"] = 37000
     config.avatar["auto_discover_from_blob"] = False   # no network in tests
     config.start_year_simulation = YEAR
     config.baseline_headcount = 60
@@ -194,3 +199,25 @@ def test_an_incremental_run_needs_a_checkpoint_and_the_same_seed(schema, stopped
     with pytest.raises(CheckpointError, match="seed"):
         run_pipeline("incremental", _small_config(), schema, SEED + 1,
                      copy.deepcopy(stopped_one_week_early), _monday(LAST_WEEK))
+
+
+def test_a_split_across_a_minimum_wage_indexation_equals_one_run(schema):
+    """The adjustment keeps no state, so resuming right at an indexation week must
+    give the same rows. Indexation on 1 February (a Thursday) makes the week of
+    Monday 5 February the one that adjusts everyone below the new floor."""
+    indexation_week = 6
+    config = lambda: _small_config(indexation_months=[1, 2], high_floor=True)
+
+    def run(mode, store, through_week):
+        run_pipeline(mode, config(), schema, SEED, store, _monday(through_week))
+        return store
+
+    one_run = run("full", InMemoryStore(schema), indexation_week)
+    split = run("full", InMemoryStore(schema), indexation_week - 1)
+    run("incremental", split, indexation_week)
+    adjustment_key = int(one_run.tables["dim_event_type"].set_index("Gebeurtenis")
+                         .loc["Minimumloonaanpassing", "EventType_Key"])
+
+    adjusted = one_run.tables["fact_employment"]["EventType_Key"] == adjustment_key
+    assert adjusted.sum() > 0                          # the indexation week really adjusted someone
+    assert table_differences(one_run, split) == []

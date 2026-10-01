@@ -5,6 +5,7 @@ from src.application.allocation import (
     role_is_active,
     scope_headcount,
 )
+from src.infrastructure.record_builder import build_record
 from src.infrastructure.salary_policy import SalaryPolicy
 from src.infrastructure.shift_assignment import carry_or_assign_shift_key
 from src.infrastructure.relevant_experience import carried_experience
@@ -418,3 +419,97 @@ def _already_reviewed_this_year(fact_employment, employee_key, salary_event_key,
         return False
     review_years = pd.to_datetime(rows["Startdatum"], errors="coerce").dt.year
     return (review_years == year).any()
+
+
+MINIMUM_WAGE_EVENT = "Minimumloonaanpassing"
+
+
+def simulate_minimum_wage_adjustments(state, config, schema, today, event_type_map):
+    """Raise everyone below the legal minimum when it was indexed.
+
+    Runs as the first salary step of the week, before contracts, attrition and
+    salary reviews, so every row created later that week already starts at or
+    above the floor. When an indexation date falls in the 7 days ending on
+    `today`, each active employee whose `Salaris` is below
+    `SalaryPolicy.legal_minimum(today)` gets the standard close-and-open
+    employment move (event "Minimumloonaanpassing", Salaris = the floor, all
+    other context carried, experience rolled forward). No state is kept: weeks
+    are contiguous, so a full run and a resumed run behave identically.
+
+    An employee whose annual salary review falls in this very week is skipped
+    when that review is certain to happen (it applies the floor itself and a
+    second row on the same day is avoided); anyone who will not get a review
+    that week (joined this year, or `salary_increase_rate` below 1) is adjusted.
+    """
+    event_key = event_type_map.get(MINIMUM_WAGE_EVENT)
+    fact_employment = state.get("fact_employment")
+    if event_key is None or fact_employment is None or fact_employment.empty:
+        return state
+
+    today = pd.Timestamp(today).normalize()
+    salary_policy = SalaryPolicy(config, state["dim_salary_scale"])
+    if salary_policy.indexation_date_in_week(today) is None:
+        return state
+
+    floor = salary_policy.legal_minimum(today)
+    salary = pd.to_numeric(fact_employment["Salaris"], errors="coerce")
+    below = fact_employment[
+        (fact_employment["Dienstverband_status"] == "Actief") & (salary < floor)
+    ]
+    if below.empty:
+        return state
+
+    employees = state["dim_employee"].set_index("Employee_Key")
+    review_is_certain = float(config.career_events.get("salary_increase_rate", 1.0)) >= 1.0
+    week = today.isocalendar()[1]
+    next_key = int(fact_employment["Employment_Key"].max()) + 1
+    new_records = []
+
+    for index, row in below.iterrows():
+        employee_key = int(row["Employee_Key"])
+        if (
+            review_is_certain
+            and week == _salary_review_week(employee_key)
+            and employee_key in employees.index
+            and not _joined_this_year(employees.loc[employee_key], today)
+        ):
+            continue   # this week's annual review applies the floor
+
+        _close_employment(fact_employment, index, today)
+        new_records.append(build_record(
+            schema,
+            "fact_employment",
+            {
+                "Employment_Key": next_key,
+                "Previous_Employment_Key": row["Employment_Key"],
+                "Employee_Key": row["Employee_Key"],
+                "HireSource_Key": row.get("HireSource_Key"),
+                "Role_Key": row["Role_Key"],
+                "Location_Key": row.get("Location_Key"),
+                "Shift_Key": row.get("Shift_Key"),
+                "SalaryScale_Key": row.get("SalaryScale_Key"),
+                "Streef_Compa_Ratio": row.get("Streef_Compa_Ratio"),
+                "Relevante_Ervaring_Jaren_Bij_Start": carried_experience(row, today, True, config),
+                "Startdatum": today,
+                "Einddatum": None,
+                "Dienstverband_status": "Actief",
+                "Salaris": floor,
+                "Contracttype": row.get("Contracttype"),
+                "Contracturen": row.get("Contracturen"),
+                "Contract_einddatum": row.get("Contract_einddatum"),
+                "Contract_ronde": row.get("Contract_ronde"),
+                "EventType_Key": event_key,
+                "DepartureReason_Key": None,
+                "Tevredenheid_Score_Bij_Uitdienst": None,
+                "SatisfactionBand_Key_Bij_Uitdienst": None,
+                "Betrokkenheid_Score_Bij_Uitdienst": None,
+                "EngagementBand_Key_Bij_Uitdienst": None,
+            },
+        ))
+        next_key += 1
+
+    if new_records:
+        state["fact_employment"] = pd.concat(
+            [fact_employment, pd.DataFrame(new_records)], ignore_index=True
+        )
+    return state

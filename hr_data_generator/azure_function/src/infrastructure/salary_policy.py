@@ -86,13 +86,18 @@ class SalaryPolicy:
         return max(int(salary), self.legal_minimum(date))
 
     def legal_minimum(self, date):
-        """Full-time legal minimum salary on `date`, indexed backwards/forwards.
+        """Full-time legal minimum salary on `date`: a step function.
 
-        The reference-year floor (`legal_minimum_salary`: annual amount times
-        1 + the sum of the allowances, rounded up) applies on 1 January of the
-        reference year. Other dates scale it with the market growth factor, so
-        the floor is flat before `base_date` (burn-in years) and keeps growing
-        after the reference year.
+        Like the Dutch minimum wage it changes only on the configured
+        indexation dates (`legal_minimum_salary.indexation_months`, default
+        1 January and 1 July; day 1 of each month). On `date` the value of the
+        most recent indexation date on or before it applies.
+
+        The value is anchored at 1 January of `reference_year`
+        (`annual_full_time_salary` times 1 + the sum of the allowances, rounded
+        up) and indexed with the market growth factor at the indexation date,
+        rounded up. The growth factor is flat before `base_date`, so every date
+        before the burn-in start gets the same value as the first one.
         """
         policy = self.config.get("legal_minimum_salary")
         if not policy:
@@ -102,8 +107,42 @@ class SalaryPolicy:
             float(policy["annual_full_time_salary"]) * (1 + allowances), 6
         ))
         reference_date = pd.Timestamp(int(policy["reference_year"]), 1, 1)
-        index = self._growth_factor(date) / self._growth_factor(reference_date)
+        indexation_date = self._indexation_date(date, policy)
+        index = self._growth_factor(indexation_date) / self._growth_factor(reference_date)
         return int(math.ceil(round(reference_floor * index, 6)))
+
+    @staticmethod
+    def _indexation_months(policy):
+        return sorted({int(month) for month in policy.get("indexation_months", [1, 7])})
+
+    def _indexation_date(self, date, policy):
+        """The most recent indexation date on or before `date`."""
+        months = self._indexation_months(policy)
+        date = pd.Timestamp(date).normalize()
+        for year in (date.year, date.year - 1):
+            for month in reversed(months):
+                candidate = pd.Timestamp(year, month, 1)
+                if candidate <= date:
+                    return candidate
+        return pd.Timestamp(date.year - 1, months[0], 1)
+
+    def indexation_date_in_week(self, today):
+        """The indexation date in the 7 days ending on `today` (exclusive start), or None.
+
+        The weekly runner simulates a week on its Monday, so a date that falls
+        in (today - 7 days, today] is the one the week just finished with; its
+        step value applies from `today` on.
+        """
+        policy = self.config.get("legal_minimum_salary")
+        if not policy:
+            return None
+        months = set(self._indexation_months(policy))
+        today = pd.Timestamp(today).normalize()
+        for offset in range(7):
+            day = today - pd.Timedelta(days=offset)
+            if day.day == 1 and day.month in months:
+                return day
+        return None
 
     def draw_target_ratio(self, department_name, rng, is_new_hire=False, gender=None):
         """Draw from configured benchmark-status bands instead of a narrow mean."""

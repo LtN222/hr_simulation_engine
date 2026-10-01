@@ -1066,6 +1066,7 @@
     "legal_minimum_salary": {
       "reference_year": 2026,
       "annual_full_time_salary": 31179,
+      "indexation_months": [1, 7],
       "allowances": {
         "vakantiegeld": 0.08
       }
@@ -2680,7 +2681,8 @@
     "Uit dienst",
     "Contract omgezet naar vast",
     "Contract verlengd",
-    "Locatietransfer"
+    "Locatietransfer",
+    "Minimumloonaanpassing"
   ],
   "recruitment": {
     "candidate_quality_weights": {

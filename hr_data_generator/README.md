@@ -376,15 +376,45 @@ ondergrens, geindexeerd via `salary_benchmark.legal_minimum_salary`:
 toeslagen) en een map `allowances` (nu `vakantiegeld: 0.08`; extra toeslagen
 zoals `eindejaarsuitkering` tellen gewoon op). De ondergrens in het
 referentiejaar is `ceil(annual_full_time_salary * (1 + som(allowances)))` =
-EUR 33.674 op 1 januari van dat jaar. Voor elke andere datum schaalt die met
-`annual_market_growth_rate` (zelfde groeifactor als de benchmark): in 2020
-ca. EUR 29.036, na het referentiejaar groeit hij door, en voor
-`salary_benchmark.base_date` (burn-in) is hij vlak. Alle salarispaden -
+EUR 33.674 op 1 januari van dat jaar. De ondergrens is **stapsgewijs**, zoals
+het Nederlandse minimumloon: hij verandert alleen op de indexatiedata
+(`legal_minimum_salary.indexation_months`, standaard `[1, 7]`: 1 januari en
+1 juli) en geldt op een datum met de waarde van de laatste indexatiedatum op of
+voor die datum. Die waarde schaalt met `annual_market_growth_rate` (zelfde
+groeifactor als de benchmark, naar boven afgerond) vanaf 1 januari van het
+referentiejaar: 1 januari 2020 EUR 29.036, 1 juli 2020 EUR 29.396, 1 januari
+2026 EUR 33.674, 1 juli 2026 EUR 34.089, 1 januari 2027 EUR 34.516. Na het
+referentiejaar groeit hij door en voor `salary_benchmark.base_date` (burn-in)
+is hij vlak (elke datum eerder dan 1 januari 2020 krijgt de waarde van
+1 januari 2020). Alle salarispaden -
 initieel/instroom, salarisreview, promotie/transfer en interne mobiliteit -
 lopen via `SalaryPolicy.apply_floor(salaris, datum)`. Nieuw wettelijk minimum
 (nieuw jaar)? Werk `reference_year`, `annual_full_time_salary` en zo nodig de
 toeslagen bij **voor** een full run; `validate_role_configuration` bewaakt dat
 de laagste schaal niet onder de ondergrens van het eerste jaar begint.
+
+Een salaris verandert alleen bij aanname, promotie/transfer, interne mobiliteit
+en de jaarlijkse review. Daarom brengt de wekelijkse runner na elke
+indexatiedatum iedereen onder de nieuwe ondergrens op de ondergrens met de
+gebeurtenis **`Minimumloonaanpassing`** (`simulate_minimum_wage_adjustments` in
+`simulation_career_events.py`). Dit is de eerste salarisstap van de week, vóór
+contractverlengingen, uitstroom en reviews, zodat elke regel die later die week
+ontstaat al op of boven de ondergrens begint. Valt een indexatiedatum in de
+zeven dagen die eindigen op de gesimuleerde maandag, dan krijgt elke actieve
+medewerker met `Salaris` onder `legal_minimum(maandag)` de gewone
+close-and-open-employment-beweging: de actieve regel sluit op die maandag, de
+nieuwe regel start die dag met `Salaris` = de ondergrens, en al het andere wordt
+overgenomen (rol, locatie, ploegendienst, schaal, `Streef_Compa_Ratio`, contract
+en de doorgerolde `Relevante_Ervaring_Jaren_Bij_Start`). Er is geen opgeslagen
+state: in een full run en in een hervatte incremental run gebeurt precies
+hetzelfde. Wie die week zijn jaarlijkse review krijgt (zeker: eerder dan dit
+kalenderjaar in dienst en `salary_increase_rate` 1) wordt overgeslagen, want die
+review past de ondergrens zelf toe. De gebeurtenis telt niet als salarisreview
+(een medewerker die in januari is aangepast krijgt zijn jaarreview nog gewoon),
+en niet als promotie of transfer (loopbaanmomentum in tevredenheid en
+betrokkenheid kijkt alleen naar `Promotie` en `Transfer`). `dim_event_type`
+heeft deze gebeurtenis als laatste, negende lid, zodat bestaande sleutels niet
+verschuiven.
 
 De laagste marktmedianen (o.a. Productie-/Magazijnmedewerker 41.000) en de
 schaalranges zijn zo gekozen dat de ondergrens zelden wordt geraakt. Gemeten
@@ -393,7 +423,7 @@ aandeel salarissen dat exact op de ondergrens uitkomt voor 2020/2022/2024/2026
 ca. 2-4% voor Productie-/Magazijnmedewerker (instroom en initiele populatie) en
 minder dan 1% voor Financieel Medewerker en HR Medewerker, en dus ongeveer
 constant over de jaren (met de eerdere vlakke EUR 33.674 was dat in 2020 nog
-21-41%). De jaarlijkse salarisreview wordt alleen overgeslagen voor wie dat
+21-41%; de stapsgewijze ondergrens verandert dat nauwelijks: 0,4-3,1%). De jaarlijkse salarisreview wordt alleen overgeslagen voor wie dat
 kalenderjaar aaneengesloten in dienst kwam (niet meer voor wie eerder dat jaar
 een verlenging, verhuizing of promotie kreeg).
 
