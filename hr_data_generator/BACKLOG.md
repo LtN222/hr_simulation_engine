@@ -213,7 +213,8 @@ Facts for that discussion:
 - Redrawing names at generation needs a full run to change existing names. A
   display-name column or a shortening rule could be backfilled incrementally.
 
-**HP-03 FIXED (awaiting full run) - Salaries dip below the indexed legal minimum between reviews (high; full run: yes)**
+**HP-03 ✔ verified, FIXED - Salaries dip below the indexed legal minimum between reviews (high; full run: yes)**
+Verified in the full run of 2026-10-02 (baseline_headcount 100, burn-in 4 years, up to 2026 week 40): 0 of 16,739 snapshot rows and 0 `fact_employment` rows of any event type are below the floor of their date; 102 snapshot rows (0.6%) sit exactly at it; 23 `Minimumloonaanpassing` rows (1-4 per indexation date, 2021-2026), each exactly at the step value on the first Monday on or after 1 January / 1 July; no zero-length row follows one.
 Fixed: `SalaryPolicy.legal_minimum` is now step-wise (indexation on 1 January and 1 July, `legal_minimum_salary.indexation_months`), and the weekly runner adds the `Minimumloonaanpassing` event (`simulate_minimum_wage_adjustments`) as its first salary step. Decisions: own event type appended at the END of `dim_event_type` (AR-24: keys come from list position); not counted as a salary review (`_already_reviewed_this_year` keys on `Salarisaanpassing` only) and not a promotion/transfer (career momentum only reads those two); skipped for an employee whose certain annual review falls in the same week (the review applies the floor; avoids two rows on one day), but not for someone who joined this year or when `salary_increase_rate` < 1; no persisted state (weeks are contiguous), identical in full and incremental runs. Measured: step values 2020-2027 below; share exactly at the floor 0.4-3.1% per role/year (before 0.5-3.6%, no retuning); the small invariant run (60 employees, 2023-01 to 2025-01) produces 1 adjustment row in 2024 and 2 in 2025 and 0 snapshot rows below the floor (without the step: 2 of 2,484 rows, max EUR 211). Step values (1 Jan / 1 Jul): 2020 29,036 / 29,396; 2021 29,764 / 30,130; 2022 30,507 / 30,883; 2023 31,270 / 31,655; 2024 32,051 / 32,448; 2025 32,854 / 33,258; 2026 33,674 / 34,089; 2027 34,516 / 34,941. Original description follows.
 Found in the first full run after HP-01 (2026-09-30, baseline_headcount 50,
 as of 2026-09-16). 258 of 8,301 `fact_workforce_snapshot` rows (3.1%) are
@@ -249,7 +250,17 @@ Proposed fix (to decide when picked up):
 
 Bundle this with the next history-changing change; it needs a full run.
 
-**HP-04 FIXED (awaiting full run) - Satisfaction and engagement scores are far too compressed; the outer bands never occur (medium-high; full run: yes)**
+**HP-04 ✔ verified, FIXED - Satisfaction and engagement scores are far too compressed; the outer bands never occur (medium-high; full run: yes)**
+Verified in the full run of 2026-10-02 (16,739 snapshot rows, 2020-01 to 2026-10), against the previous dataset (old code, up to 2026-08):
+- Satisfaction: mean 6.56 -> 6.84, sd 0.56 -> 1.11, bands 0 / 18.1 / 77.8 / 4.1 / 0% -> 1.8 / 20.7 / 50.2 / 20.0 / 7.3%; between / within sd 0.56 / 0.15 -> 1.00 / 0.58.
+- Engagement: mean 6.35 -> 6.49, sd 0.62 -> 1.16, bands 0.1 / 25.2 / 72.2 / 2.5 / 0% -> 3.9 / 30.7 / 46.3 / 14.8 / 4.4%; between / within sd 0.59 / 0.17 -> 1.03 / 0.65.
+- Correlation 0.77 -> 0.60. Scores at the 10.0 cap: 23 satisfaction and 31 engagement rows (0.2%).
+- Over 2024-2025, 90.9% of employees present for all 24 months spent at least 3 months outside their usual band; 42.9% visited at least 3 bands.
+- Annualized leave-next-month rate by satisfaction band: Zeer laag 34.5%, Laag 21.4%, Neutraal 15.4%, Hoog 14.9%, Zeer hoog 7.2% (before: Laag 19.2%, Neutraal 14.8%, Hoog 11.0%), so the outer-band multipliers now apply. Overall turnover 15.8% -> 16.3% a year.
+- The live means sit slightly above the harness (6.84 vs 6.74) and "Zeer laag" below it (1.8% vs 3.5%), as expected now that dissatisfied employees leave faster: the harness had no attrition selection. Accepted; no recalibration.
+- Drivers: "Beloning|Negatief" 55% -> 35%; "Geen dominant" 2.0% -> 2.2% (satisfaction) and 12.7% -> 13.0% (engagement).
+- Absence (verzuim): 3.4-5.0% of hours a year (before 5.0-6.4%; different population and headcount, not attributed to HP-04).
+- Open observation, not caused by HP-04: Kwaliteit has the highest turnover (22.2% a year, 23 of 26 departures voluntary, against a base rate of 0.07) despite above-average satisfaction (7.08). Techniek is lowest (8.6%). The previous dataset also had Kwaliteit above its base rate (14.6%). Worth a narrow check of the other attrition multipliers (age, tenure, engagement) for Kwaliteit if it shows up again.
 Fixed: the random parts are normal (`stable_normal`, each `*_spread` is a real sd), a stateless smoothed time-varying part per employee and month was added (`time_varying`: `sd`, `window_months`, `shared_fraction`), the factor effects were scaled up, and attrition/absence read their cut-offs from the band dimensions (`band_thresholds.py`; AR-23: the 4.5/6.0/7.5/8.5 satisfaction cut-offs, the 6.0/7.5 engagement cut-offs, the 6.0/8.5 category thresholds, the 6.0/7.5 reason groups and the absence 6.0/7.5 thresholds). `driver_selection.low_score/high_score` stay (driver thresholds, not bands). New config validation: five ordered, contiguous bands per dimension and sane `time_varying` values.
 
 Final values. Satisfaction: `baseline_mean` 7.0 -> 7.2, `individual_spread` 0.45 -> 0.5, `manager_effect_spread` 0.45 -> 0.5, `team_effect_spread` 0.2 -> 0.25, `culture_effect_spread` 0.15 -> 0.2, `time_varying` {sd 0.55, window_months 6, shared_fraction 0.3}, factor effects x1.35 (compa -1.15/-0.55/+0.15/+0.25 -> -1.5525/-0.7425/+0.2025/+0.3375, `performance_effect` 0.25 -> 0.3375, tenure, department and career-momentum effects x1.35). Engagement (revised after review, see "Engagement: pay is bounded context" below): `baseline_mean` 6.7 -> 6.61, `individual_spread` 0.45 -> 0.57, new `individual_shared_fraction` 0.7, `manager_effect_spread` 0.35 -> 0.3, `satisfaction_effect` 0.5 -> 0.15, `constructive_contribution_effect` 0.7 -> 4.0, `performance_effect` 0.22 -> 0.5, `time_varying` {sd 0.6, window_months 6, shared_fraction 1.0}, `compa_ratio_adjustments` unchanged at -0.45/-0.2/0.0/+0.08/+0.12, department effects x1.7 (Productie -0.17, Logistiek -0.136, Techniek -0.05, R&D/IT/Directie +0.17, Sales +0.085) and career momentum promotion 0.35 -> 0.6, transfer 0.15 -> 0.25, stagnation -0.3 -> -0.5. The attrition multipliers, department base rates and absence multipliers were NOT changed.
@@ -374,7 +385,8 @@ over time.
 
 ## Later - new features (agreed with the user on 2026-09-30)
 
-**LF-01 DONE (awaiting full run, together with HP-03) - Model a shift allowance (ploegentoeslag) (medium; full run: yes)**
+**LF-01 ✔ verified, DONE - Model a shift allowance (ploegentoeslag) (medium; full run: yes)**
+Verified in the full run of 2026-10-02: all 2,823 `fact_employment` rows have `Ploegentoeslag` = round(Salaris x 0 / 0.12 / 0.20) for their shift (0 mismatches, 0 NULLs); all 16,739 snapshot rows equal their employment row. Share of active employees with an allowance on 2026-09-30: Productie 67.0% (expected ~67%), Techniek 34.3% (~34%), Logistiek 25.5% (~36%; n = 47, within noise). Average allowance: 2-ploeg EUR 5,400-7,300, 3-ploeg EUR 9,300-10,100 a year.
 Decisions: a separate Dutch column `Ploegentoeslag` (INT, EUR per year, the same full-time basis as `Salaris`) on `fact_employment` and `fact_workforce_snapshot`, so `Salaris` stays the base pay that the minimum-wage floor, the benchmark, `Streef_Compa_Ratio`, the gender-pay-gap calibration and the satisfaction pay input compare. Percentages of `Salaris` per shift type in `shift_allowance.percentages` (Niet van toepassing 0, Dag 0, 2-ploeg 0.12, 3-ploeg 0.20; first-pass values, not calibrated), one set for all departments; validated in config (every shift has one, 0-0.5). Computed in one helper (`src/infrastructure/shift_allowance.py`) and derived for every employment row in `post_process` from the row's own `Salaris` and `Shift_Key`, so no row builder changed and full and incremental runs match; the snapshot copies it. Not included in `Salaris`, the floor, benchmarks, compa-ratio, reviews or satisfaction/engagement. A gender pay gap on total pay will be larger than on `Salaris`. See LF-04 for the optional pay-input follow-up. Original description follows.
 Shift work is modelled (`Shift_Key`, `ploegendienst_assignment`, with safety
 and absence multipliers). In group 4, Techniek and Logistiek get shift roles
@@ -664,7 +676,8 @@ Direction: withdraw or finalize the application in the failure paths,
 re-check eligibility at hire, and route through `movement_type` plus one
 shared move builder.
 
-**AR-14 FIXED (group 5; awaiting full run) - Absence episodes are not cut off at departure (medium; full run: yes)**
+**AR-14 ✔ verified, FIXED (group 5) - Absence episodes are not cut off at departure (medium; full run: yes)**
+Verified in the full run of 2026-10-02: 0 absence episodes end after the employee's departure date and 0 leavers have an open episode. Also verified (group 4): 0 snapshot rows on or after an employee's departure date.
 Fixed: `close_open_absence` in `departure_records.py`, called from attrition and contract non-renewal.
 Episodes are capped only at creation (`simulation_absence.py:~587-619`).
 Attrition and lapsed contracts never shorten open episodes, so

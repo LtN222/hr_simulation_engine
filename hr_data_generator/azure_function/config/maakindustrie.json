@@ -29,7 +29,7 @@
     "blob_prefix": "images/",
     "reassign_existing_avatars": true
   },
-  "baseline_headcount": 50,
+  "baseline_headcount": 100,
   "staffing": {
     "minimum_count_for_manager_role": 1,
     "max_team_size": 10,
@@ -66,7 +66,7 @@
       "Referral": 11.4,
       "Recruitmentbureau": 6.7
     },
-    "burn_in_years": 2,
+    "burn_in_years": 4,
     "minimum_hire_age": 18,
     "tenure_years_distribution": {
       "0-1": 0.32,
