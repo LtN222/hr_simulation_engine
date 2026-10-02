@@ -170,12 +170,15 @@ class SqlStore(Store):
     `load` keeps a normalized baseline of every table as loaded; `write` runs
     schema evolution, then ONE transaction (data, deletes, checkpoint last).
     With `dry_run` the transaction is rolled back and the counts are returned.
+    With a `lock` (see `acquire_simulation_lock`) `write` first verifies that the
+    simulation lock is still held and fails before writing anything if it is not.
     """
 
-    def __init__(self, engine, schema, dry_run=False):
+    def __init__(self, engine, schema, dry_run=False, lock=None):
         self.engine = engine
         self.schema = schema
         self.dry_run = dry_run
+        self.lock = lock
         self.baseline = None
 
     def load(self, schema):
@@ -199,4 +202,5 @@ class SqlStore(Store):
             checkpoint=checkpoint,
             write_checkpoint=write_checkpoint,
             dry_run=self.dry_run,
+            verify_lock=self.lock.verify if self.lock is not None else None,
         )

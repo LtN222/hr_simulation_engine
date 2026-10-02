@@ -6,3 +6,9 @@ tests
 __pycache__
 *.pyc
 local.settings.json
+.pytest_cache/
+.azurite/
+AzuriteConfig
+__azurite_db_*.json
+__blobstorage__/
+__queuestorage__/

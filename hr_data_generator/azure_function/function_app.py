@@ -18,7 +18,8 @@ sys.path.append(
 # 1️⃣ Project modules importeren
 # -----------------------------------------------------
 
-from datetime import datetime
+import uuid
+from datetime import datetime, timezone
 
 from src.application.pipeline import run_pipeline, validate_mode
 from src.application.run_options import resolve_run_options
@@ -89,13 +90,13 @@ def run_hr_pipeline(mode: str, use_validation_settings: bool = True):
     # Simulatie uitvoeren en schrijven (een pipeline voor beide modi)
     # -------------------------------------------------
 
-    with acquire_simulation_lock(engine):
+    with acquire_simulation_lock(engine) as lock:
         dataframes, summary = run_pipeline(
             mode,
             sector_config,
             schema_config,
             seed,
-            SqlStore(engine, schema_config, dry_run=dry_run),
+            SqlStore(engine, schema_config, dry_run=dry_run, lock=lock),
             today
         )
 
@@ -120,6 +121,22 @@ def _describe_changes(summary):
                 f"-{counts.get('deleted', 0)}"
             )
     return "; ".join(parts) or "No table has changes."
+
+
+def _error_message(error, reference):
+    """Reply text for a failed HTTP run.
+
+    A local `func start` (AZURE_FUNCTIONS_ENVIRONMENT=Development) gets the full
+    error, so a failing local full run explains itself in the reply. The deployed
+    app returns a generic message: driver errors (pyodbc) contain server and
+    database names. The full exception is always logged with the same reference.
+    """
+    if os.environ.get("AZURE_FUNCTIONS_ENVIRONMENT") == "Development":
+        return f"Error during HR data generation: {error}"
+    return (
+        "Error during HR data generation. The details are in the Function App "
+        f"logs; reference {reference}."
+    )
 
 
 # =====================================================
@@ -171,10 +188,11 @@ def generate_hr_data(req: func.HttpRequest) -> func.HttpResponse:
 
     except Exception as e:
 
-        logging.exception("HR data generation failed")
+        reference = f"{uuid.uuid4().hex[:12]} at {datetime.now(timezone.utc):%Y-%m-%d %H:%M:%S} UTC"
+        logging.exception("HR data generation failed (reference %s)", reference)
 
         return func.HttpResponse(
-            f"Error during HR data generation: {str(e)}",
+            _error_message(e, reference),
             status_code=500
         )
 

@@ -53,7 +53,7 @@ def test_a_deprecated_primary_key_column_is_refused():
 
 
 def test_known_legacy_columns_stay_marked_deprecated():
-    """Regression test for AR-07 (see BACKLOG.md "Architecture review"):
+    """Regression test for AR-07 (see CHANGELOG.md "Architecture review"):
     these columns were renamed in the schema at some point but the SQL
     columns themselves were never dropped, because a full run only inserts
     and `_ensure_table_columns` only adds columns - nothing ever removes a

@@ -64,7 +64,7 @@ def test_run_weekly_reviews_a_long_tenured_employee_even_right_after_a_salary_re
     row and opens a new one whose Startdatum is the review date itself. That
     must not make a long-tenured employee look newly hired and skip their
     annual performance review - real data showed ~36% of tenured employees
-    permanently stuck this way before the fix (see BACKLOG.md/CLAUDE.md)."""
+    permanently stuck this way before the fix (see CHANGELOG.md/CLAUDE.md)."""
     config = _config()
     simulator = PerformanceSimulator(config, schema=None, rng=random.Random(1))
 

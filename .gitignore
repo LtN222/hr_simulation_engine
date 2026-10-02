@@ -1,1 +1,4 @@
 hr_data_generator.zip
+
+# A mis-expanded "~" (a duplicate clone of mcp-sqlserver); never commit it
+/~/

@@ -10,8 +10,9 @@ import pytest
 from src.application import pipeline
 from src.application.run_options import resolve_run_options
 from src.infrastructure.database import write_to_sql
+from src.infrastructure.database.simulation_lock import SimulationLockLostError
 from src.infrastructure.state.checkpoint import Checkpoint
-from src.infrastructure.state.store import InMemoryStore
+from src.infrastructure.state.store import InMemoryStore, SqlStore
 from src.infrastructure.state.table_changes import (
     AppendTableChangedError,
     RowsLostError,
@@ -51,6 +52,24 @@ def test_the_write_modes_follow_the_design():
         assert definition["write_mode"] == expected, table
     # every dimension is an upsert, so configuration changes reach SQL
     assert all(d["write_mode"] == "upsert" for t, d in schema.items() if t.startswith("dim_"))
+
+
+def test_the_only_foreign_keys_between_facts_are_the_accepted_lineage_exceptions():
+    """AR-26: facts relate through shared dimensions. These references are the
+    documented exceptions (README data model, CLAUDE.md); a new one needs a decision."""
+    schema = _real_schema()
+    found = {
+        (table, column, target)
+        for table, definition in schema.items() if table.startswith("fact_")
+        for column, target, _ in definition.get("foreign_keys", [])
+        if target.startswith("fact_")
+    }
+
+    assert found == {
+        ("fact_workforce_snapshot", "Employment_Key", "fact_employment"),
+        ("fact_recruitment", "Vacancy_Key", "fact_vacancy"),
+        ("fact_employment", "Previous_Employment_Key", "fact_employment"),    # self-reference
+    }
 
 
 def test_only_the_snapshot_table_may_lose_rows():
@@ -326,6 +345,60 @@ def test_rows_lost_are_detected_before_anything_is_written(recorded):
     assert "begin" not in events                             # no transaction was even started
 
 
+def test_a_lost_simulation_lock_fails_before_schema_evolution_or_any_write(recorded):
+    events = recorded
+    schema = _schema()
+    store, state = _loaded_store(schema)
+
+    def lock_lost():
+        events.append("verify_lock")
+        raise SimulationLockLostError("no longer held")
+
+    with pytest.raises(SimulationLockLostError):
+        write_to_sql.write_dataset(
+            _Engine(events), state, schema, reset=False,
+            baseline=build_baseline(_loaded_store(schema)[1], schema),
+            checkpoint=_checkpoint(2), write_checkpoint=_checkpoint_writer(events),
+            verify_lock=lock_lost,
+        )
+
+    assert events == ["verify_lock"]         # no ensure_schema, connect, begin, insert or checkpoint
+
+
+def test_the_lock_is_verified_again_right_before_the_write_transaction_starts(recorded):
+    events = recorded
+    schema = _schema()
+    store, state = _loaded_store(schema)
+
+    write_to_sql.write_dataset(
+        _Engine(events), state, schema, reset=False,
+        baseline=build_baseline(_loaded_store(schema)[1], schema),
+        checkpoint=_checkpoint(2), write_checkpoint=_checkpoint_writer(events),
+        verify_lock=lambda: events.append("verify_lock"),
+    )
+
+    assert [e for e in events if e in ("verify_lock", "ensure_schema", "connect", "begin")] == [
+        "verify_lock", "ensure_schema", "verify_lock", "connect", "begin"]
+
+
+def test_the_sql_store_verifies_its_lock_before_writing(recorded):
+    events = recorded
+    schema = _schema()
+    _, state = _loaded_store(schema)
+
+    class LostLock:
+        def verify(self):
+            raise SimulationLockLostError("no longer held")
+
+    store = SqlStore(_Engine(events), schema, lock=LostLock())
+    store.baseline = build_baseline(state, schema)
+
+    with pytest.raises(SimulationLockLostError):
+        store.write(state, _checkpoint(2), reset=False)
+
+    assert events == []                      # not even a connection was opened
+
+
 def test_reads_fail_loudly_except_for_a_missing_table(monkeypatch):
     from src.infrastructure.state import load_state
 
@@ -569,7 +642,7 @@ def _patched_function_app(monkeypatch, runtime):
     monkeypatch.setattr(function_app, "load_schema", lambda name: {})
     monkeypatch.setattr(function_app, "ConfigLoader", lambda: type("L", (), {
         "load": lambda self, sector=None: type("C", (), {"database": "db", "schema": "s"})()})())
-    monkeypatch.setattr(function_app, "SqlStore", lambda engine, schema, dry_run=False: captured.update(dry_run=dry_run))
+    monkeypatch.setattr(function_app, "SqlStore", lambda engine, schema, dry_run=False, lock=None: captured.update(dry_run=dry_run))
     monkeypatch.setattr(function_app, "acquire_simulation_lock", lambda engine: __import__("contextlib").nullcontext())
     monkeypatch.setattr(function_app, "run_pipeline",
                         lambda mode, config, schema, seed, store, today: captured.update(today=today) or ({}, {}))

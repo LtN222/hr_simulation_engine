@@ -16,6 +16,7 @@ Treat historical behavior, table grain, effective-dated context and HR metric se
 - `azure_function/config/schemas/` — managed SQL schema, keys and indexes.
 - `azure_function/src/` — executable behavior.
 - `BACKLOG.md` — open work. Its "Architecture review (2026-09-25)" section is the prioritized list of known architectural defects (`AR-xx` items); check it before starting related work.
+- `CHANGELOG.md` — completed items (verified fixes, finished features and decisions), moved out of `BACKLOG.md`; check it for the history and rationale of finished work before changing that area.
 
 When documentation and implementation appear inconsistent, inspect the relevant code/config/schema before changing either.
 
@@ -60,6 +61,12 @@ A full run is required after historical-logic, snapshot-semantic, schema, driver
 
 **Never start a full run on your own initiative.** With the current sector config a full run takes more than two hours and occupies the demo database, and the user wants to decide when it runs (typically at the end of the work day, once no more changes are expected) and with which config settings. Start one only when the user explicitly asks you to (e.g. "do a full run for me"); a remark such as "I don't mind a full run after this" is not such a request. When a full run is required but you were not asked to start it, finish the code, tests and documentation, then say that a full run is required and why, and let the user decide: they may ask you to start it, run it themselves (point them to README "Full run"), or postpone it. This does not restrict read-only SQL queries or in-memory narrow harnesses.
 
+### Calibrating a new numeric parameter
+
+When tuning a new config value that only affects one or two isolated functions (e.g. a compa-ratio offset that only touches `SalaryPolicy.draw_target_ratio`/`review_salary`), do not validate by looping `WeeklySimulationRunner.run_week`/`simulate_week` over a `WorkforceGenerator`-built population for many simulated weeks. That routes every unrelated simulator (recruitment funnel, attrition, hiring, absence, safety incidents, location transfers, manager reassignment) through each simulated week even though none of them bear on the parameter being tuned, which is the dominant cost — a few hundred employees over 1-4 simulated years this way can take several minutes per attempt, and iterative calibration needs several attempts.
+
+Prefer a narrow harness that calls only the relevant function(s) directly: build a minimal fake config/state (see the `_config`/`_salary_policy_with_gender_gap`-style helpers in `src/tests/`) and either loop over synthetic samples in plain Python or vectorize with numpy across thousands of synthetic cases at once. This finishes in well under a second and is the same style already used by this project's own statistical unit tests (e.g. `test_choose_incident_type_respects_configured_weights`, `test_salary_policy_keeps_all_benchmark_categories_visible`). Reserve a full population/multi-week run for a final sanity check after the narrow calibration has already converged, not for the tuning loop itself.
+
 ## Core architecture and data invariants
 
 Preserve these unless the task explicitly changes them:
@@ -68,7 +75,7 @@ Preserve these unless the task explicitly changes them:
 - `WeeklySimulationRunner` coordinates weekly events; individual business-event logic belongs in the relevant simulator/helper rather than being duplicated in orchestration.
 - Prefer schema/config-driven behavior over ad-hoc SQL or hard-coded alternatives when the project already models the concept declaratively.
 - Static dimensions are configuration-owned; incremental processing must preserve existing keys so fact references remain valid.
-- Facts are intended to relate through shared dimensions in Power BI, not through direct fact-to-fact relationships.
+- Facts are intended to relate through shared dimensions, not through direct fact-to-fact relationships — in the web app's own queries as well as in Power BI. Where two fact rows need to be paired (e.g. an incident and the absence episode it caused), match on columns both facts already carry (such as `Employee_Key` + date) at query time rather than storing a fact-to-fact foreign key. Accepted exceptions (AR-26), kept as SQL foreign keys: `fact_workforce_snapshot.Employment_Key` → `fact_employment` and `fact_recruitment.Vacancy_Key` → `fact_vacancy`. They are lineage references, not reporting relationships: the web app and Power BI must not model a relationship on them. (`fact_employment.Previous_Employment_Key` is a self-reference, a separate case.) A new fact-to-fact key needs an explicit decision and a place in this list; a schema test guards it.
 - `fact_workforce_snapshot` is employee-per-month-end grain and the primary source for headcount and employee trends, including employees with zero absence.
 - `fact_employment` is event/effective-period based; do not use employment start dates as a headcount trend substitute.
 - `fact_absence` is episode-grain and includes sickness and non-sickness leave. `Telt_als_verzuim` determines what counts as sickness absence; workday/hour fields are preferred for capacity and absence-rate calculations.
@@ -80,6 +87,18 @@ Preserve these unless the task explicitly changes them:
 - Preserve seeded/reproducible behavior where randomness intentionally derives from the configured simulation seed.
 
 If a requested change conflicts with one of these semantics, surface the conflict instead of silently redefining the metric.
+
+### Recruitment, promotion and transfer model (active area)
+
+This part of the simulation is under active revision, so treat these as the current contract rather than assumed-stable legacy behavior:
+
+- `dim_role` is the single source of role identity/eligibility. Its `Min_Relevante_Ervaring_Jr`, `Formele_Kwalificatie_Vereist`, `Min_Opleidingsniveau`, `Leidinggevend` and `Min_Leidinggevende_Ervaring_Jr` columns are generated from `role_career_paths` in `maakindustrie.json`, plus `Relevante_Opleidingen`/`Logische_Doorgroei`/`Laterale_Transfers` string lists for reporting.
+- `role_career_paths.<Role_Name>` in the sector config carries the structured fields (`relevante_opleidingen`, `logische_doorgroei`, `laterale_transfers`) that drive both eligibility and the readable `dim_role` list columns — keep the two in sync when either changes.
+- `azure_function/src/infrastructure/role_eligibility.py` is the single place that decides whether a move is a `Promotie` or `Transfer` (`movement_type`) and whether an employee/candidate is eligible for a target role (`eligible_internal`, `eligible_external`). Promotion targets come only from `logische_doorgroei`; a higher salary scale is not itself a promotion criterion. Transfers are lateral moves from `laterale_transfers` and require the same `SalaryScale_Key`.
+- `azure_function/src/simulation/simulation_career_events.py` turns eligible internal moves into new `fact_employment` rows (`_simulate_salary_reviews`, then promotion/transfer sampling per active employee). Promotion/transfer candidates are also filtered by `_is_active_role` (the same `role_is_active`/`active_from_headcount` gate `simulation_vacancy.py`'s growth path already used) — a target role must have actually unlocked at the company's current headcount, not just be structurally eligible via `eligible_internal`.
+- `azure_function/src/simulation/simulation_vacancy.py` creates vacancy demand (replacement + growth) from `dim_role`/`config.structure`, and `simulation_recruitment.py` (`RecruitmentSimulator`) runs the funnel, including the `Interne mobiliteit` source that reuses `eligible_internal` to pick an internal candidate instead of generating a new person.
+- Relevant experience carried across a move (`carried_experience` in `relevant_experience.py`) is full within the same functional domain and reduced by `career_events.relevant_experience_transfer_ratio` across a domain change — this must stay consistent between promotions, transfers and the internal-mobility hire path.
+- `azure_function/src/tests/test_workforce_planning.py`, `test_employee_generation.py`, `test_role_eligibility.py`, `test_simulation_career_events.py`, `test_simulation_recruitment.py` and `test_simulation_vacancy.py` are the closest existing coverage for allocation/eligibility. `test_role_eligibility.py` covers `eligible_external`/`external_rejection_reason`, the shared `qualification_and_experience_reason`, `eligible_internal` (experience, education, config thresholds, leadership gates) and `movement_type`; extend it when changing that logic.
 
 ## Configuration, schema and documentation changes
 

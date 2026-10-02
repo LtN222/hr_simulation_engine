@@ -16,6 +16,7 @@ Treat historical behavior, table grain, effective-dated context and HR metric se
 - `azure_function/config/schemas/` — managed SQL schema, keys and indexes.
 - `azure_function/src/` — executable behavior.
 - `BACKLOG.md` — open work. Its "Architecture review (2026-09-25)" section is the prioritized list of known architectural defects (`AR-xx` items); check it before starting related work.
+- `CHANGELOG.md` — completed items (verified fixes, finished features and decisions), moved out of `BACKLOG.md`; check it for the history and rationale of finished work before changing that area.
 
 When documentation and implementation appear inconsistent, inspect the relevant code/config/schema before changing either.
 
@@ -77,7 +78,7 @@ Preserve these unless the task explicitly changes them:
 - `WeeklySimulationRunner` coordinates weekly events; individual business-event logic belongs in the relevant simulator/helper rather than being duplicated in orchestration.
 - Prefer schema/config-driven behavior over ad-hoc SQL or hard-coded alternatives when the project already models the concept declaratively.
 - Static dimensions are configuration-owned; incremental processing must preserve existing keys so fact references remain valid.
-- Facts are intended to relate through shared dimensions, not through direct fact-to-fact relationships — in the web app's own queries as well as in Power BI. Where two fact rows need to be paired (e.g. an incident and the absence episode it caused), match on columns both facts already carry (such as `Employee_Key` + date) at query time rather than storing a fact-to-fact foreign key.
+- Facts are intended to relate through shared dimensions, not through direct fact-to-fact relationships — in the web app's own queries as well as in Power BI. Where two fact rows need to be paired (e.g. an incident and the absence episode it caused), match on columns both facts already carry (such as `Employee_Key` + date) at query time rather than storing a fact-to-fact foreign key. Accepted exceptions (AR-26), kept as SQL foreign keys: `fact_workforce_snapshot.Employment_Key` → `fact_employment` and `fact_recruitment.Vacancy_Key` → `fact_vacancy`. They are lineage references, not reporting relationships: the web app and Power BI must not model a relationship on them. (`fact_employment.Previous_Employment_Key` is a self-reference, a separate case.) A new fact-to-fact key needs an explicit decision and a place in this list; a schema test guards it.
 - `fact_workforce_snapshot` is employee-per-month-end grain and the primary source for headcount and employee trends, including employees with zero absence.
 - `fact_employment` is event/effective-period based; do not use employment start dates as a headcount trend substitute.
 - `fact_absence` is episode-grain and includes sickness and non-sickness leave. `Telt_als_verzuim` determines what counts as sickness absence; workday/hour fields are preferred for capacity and absence-rate calculations.

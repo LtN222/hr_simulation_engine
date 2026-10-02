@@ -14,11 +14,19 @@ een van de twee kloppen.
 
 De startbezetting en de volwassen organisatiemix zijn afzonderlijk
 configureerbaar. `workforce_planning.department_target_weights` stuurt de
-langetermijnverdeling per afdeling; `fte_ratio` (of `target_weight`) bepaalt de
-verdeling van rollen binnen die afdeling. Met `initially_staffed: false` kan een
-rol wel in `dim_role` bestaan maar bij de start nog leeg blijven, en
-`active_from` voorkomt dat groei-vacatures vóór het gekozen organisatiemoment
-voor die rol worden aangemaakt.
+langetermijnverdeling per afdeling; `target_weight` (per rol in `structure`; de
+oude naam `fte_ratio` wordt nog als terugval gelezen) bepaalt de verdeling van
+rollen binnen die afdeling. `active_from_headcount` (met `active_from_scope`:
+`company`, `department` of `department_group`, en bij een groep
+`active_from_departments`) houdt een rol leeg totdat de organisatie of
+afdeling groot genoeg is: de rol komt dan niet in de initiële allocatie en niet
+in groei-vacatures, promoties of transfers voor. De rolsleutel
+`initially_staffed` staat nog in de configuratie maar wordt door de simulatie
+niet gelezen (alleen een test verwijst ernaar); de sleutel `qualification_events`
+staat er ook nog en is gereserveerd voor het openstaande onderdeel
+"kwalificatie-events tijdens het dienstverband" (zie `BACKLOG.md`), maar wordt
+eveneens niet door de simulatie gelezen. Nu worden kwalificaties alleen bij de
+aanname vastgelegd en is `Verkregen_Tijdens_Dienstverband` altijd `false`.
 
 De huidige sectorconfiguratie is `maakindustrie`.
 
@@ -129,15 +137,19 @@ azure_function/
 
 Belangrijke dimensies zijn `dim_employee`, `dim_department`, `dim_role`,
 `dim_manager`, `dim_hire_source`, `dim_recruitment_status`, `dim_education`,
-`dim_absence_type`, `dim_ploegendienst`, `dim_salary_band`,
+`dim_absence_type`, `dim_shift`, `dim_salary_band`,
 `dim_salary_scale`, `dim_satisfaction_band`, `dim_engagement_band`,
 `dim_satisfaction_driver`, `dim_performance_driver`,
 `dim_engagement_driver` en `dim_incident_type`.
 
 `dim_education` vervangt de eerdere niveau-dimensie. Elke rij combineert een
-opleidingsnaam, niveau en richting. `dim_role` bewaart daarnaast de leesbare
-lijsten `Relevante_Opleidingen` en `Logische_Doorgroei`; de gestructureerde
-bron daarvoor is `role_career_paths` in de sectorconfiguratie.
+opleidingsnaam, niveau en richting. `dim_role` is de enige bron van rolidentiteit
+en geschiktheid. Naast de leesbare lijsten `Relevante_Opleidingen`,
+`Logische_Doorgroei` en `Laterale_Transfers` bevat hij de geschiktheidsvoorwaarden
+`Min_Relevante_Ervaring_Jr`, `Formele_Kwalificatie_Vereist`,
+`Min_Opleidingsniveau`, `Leidinggevend` en `Min_Leidinggevende_Ervaring_Jr`;
+de gestructureerde bron daarvoor is `role_career_paths` in de
+sectorconfiguratie (een regel per rol, nu 57).
 
 `dim_employee` bevat daarnaast `Avatar_FileName` en `Avatar_URL`. De generator
 kiest de avatar stabiel op basis van `Employee_Key` en de avatar-seed. Mannen en
@@ -166,6 +178,13 @@ Belangrijke facts zijn:
   gelden bij de start van de episode, zoals rol, afdeling, salarisband en
   tevredenheidsband.
 - `fact_vacancy` en `fact_recruitment`: vacatures en alle sollicitaties.
+- `fact_employee_qualification`: kwalificatiegeschiedenis, een regel per
+  behaalde opleiding van een medewerker (verwijst naar `dim_education`). Nu
+  wordt precies één regel per medewerker vastgelegd, bij de aanname (initiële
+  populatie en elke nieuwe hire); `Behaald_Datum` is daarbij de aannamedatum, geen
+  echte diplomadatum, en `Verkregen_Tijdens_Dienstverband` is altijd `false`.
+  Kwalificaties die tijdens het dienstverband worden behaald zijn niet
+  gemodelleerd (open onderdeel in `BACKLOG.md`). De tabel is append-only.
 - `fact_workforce_snapshot`: maandelijkse workforce-stand per actieve
   medewerker; dit is de centrale analysetabel voor medewerkerstrends.
 - `fact_manager_assignment`: technische, effectieve-datumhistorie van de
@@ -252,7 +271,7 @@ ploegendienst opnieuw bepaald.
 `fact_recruitment` heeft één regel per sollicitatie. De fact bevat zowel de
 compacte tekstkolom `Status` als `RecruitmentStatus_Key`; gebruik voor nieuwe
 Power BI-relaties en legendes de laatste key naar `dim_recruitment_status`.
-Die dimensie bevat de korte status voor visuals, de uitleg (`Status_Verbose`),
+Die dimensie bevat de korte status voor visuals, de uitleg (`Status_Omschrijving`),
 een statusgroep en technische flags zoals `Counts_As_Hire`.
 
 Recruitmentbronnen hebben elk een eigen profiel in de
@@ -278,7 +297,7 @@ een aangenomen interne kandidaat koppelt de fact aan een bestaande
 `fact_employment`, geen nieuwe `dim_employee`-regel. De vrijgekomen oude rol
 wordt in de volgende simulatieweek als backfill-vacature aangemaakt.
 
-`Candidate_Quality` is een gesimuleerde, latente selectiescore op een schaal
+`Kandidaat_Kwaliteit` is een gesimuleerde, latente selectiescore op een schaal
 van 1-5. Het is geen werkelijk assessmentresultaat. Voor externe hires werkt
 de score beperkt door in de initiële performance; voor interne kandidaten is
 hij deels gebaseerd op de al bekende performance. Gebruik hem daarom alleen
@@ -288,7 +307,7 @@ instroom.
 `dim_salary_scale` is de arbeidsvoorwaardelijke salarisschaal: de schaalrange
 en het aantal treden. `dim_salary_band` is juist een rapportage-indeling van
 het feitelijke salaris in brede bins. `fact_workforce_snapshot` bevat beide
-keys, naast `SalaryStep`, `Benchmark_Salaris`, `Benchmark_Verschil` en
+keys, naast `Salaris_Trede`, `Benchmark_Salaris`, `Benchmark_Verschil` en
 `Benchmark_Status`. Daarmee kunnen medewerkers direct worden vergeleken met
 hun marktbenchmark zonder een relatie tussen twee facts te maken.
 
@@ -394,7 +413,7 @@ of coachen en kennisdeling. Verzuim, structureel overwerk en bereikbaarheid
 buiten werktijd zijn geen performancefactoren. De driver
 `Relevante startkwalificatie` blijft inactief totdat een opleidingsrichting en
 een aantoonbare relatie met rol of domein zijn gemodelleerd; alleen
-`EducationLevel_Key` is daarvoor onvoldoende.
+`Education_Key` is daarvoor onvoldoende.
 
 `Prestatie_Score` is een continue score op een schaal van 1-5. Hij bestaat uit
 een stabiel persoonlijk niveau (vaste gedragskenmerken, een klein
@@ -424,7 +443,7 @@ snapshotregel, dus ook medewerkers zonder afwezigheid. `fact_manager_assignment`
 ondersteunt alleen de historische managercontext van de snapshot en kan in
 Power BI verborgen blijven.
 
-`Ploegendienst_Key`, `SalaryScale_Key` en de technische
+`Shift_Key`, `SalaryScale_Key` en de technische
 `Streef_Compa_Ratio` horen bij `fact_employment`. Een promotie, transfer of
 salarisreview maakt een nieuwe employment-regel met die historische context.
 `fact_absence` kopieert de ploegendienst, schaal en salarisband bij aanvang
@@ -579,6 +598,19 @@ dim_recruitment_status -> fact_recruitment
 dim_incident_type       -> fact_safety_incident
 ```
 
+**Geaccepteerde uitzonderingen op "facts relateren via gedeelde dimensies".**
+Twee SQL-foreign keys tussen facts blijven bewust bestaan:
+`fact_workforce_snapshot.Employment_Key` naar `fact_employment` (de
+employment-regel waaruit de snapshotregel van die maand is afgeleid) en
+`fact_recruitment.Vacancy_Key` naar `fact_vacancy` (de vacature waarop is
+gesolliciteerd). Het zijn herkomstverwijzingen (lineage) die de integriteit in
+SQL bewaken, geen rapportagerelaties: leg in de webapp of in Power BI geen
+relatie op deze kolommen, maar join op querytijd (in Power BI met een
+DAX-measure). `fact_employment.Previous_Employment_Key` is een aparte zaak: een
+zelfverwijzing binnen dezelfde fact voor de keten van employment-regels. Een
+nieuwe sleutel tussen facts is niet toegestaan zonder hem hier en in
+`CLAUDE.md` als uitzondering vast te leggen; een schematest bewaakt de lijst.
+
 Een `fact_safety_incident`-rij met werkelijk verzuim
 (`Incidenttype_Naam = "Verzuimongeval"`) heeft geen aparte sleutel naar zijn
 `fact_absence`-episode: er is bewust geen `Absence_Key`-kolom op
@@ -703,8 +735,40 @@ mag niet in de toekomst liggen; zet hem weer leeg voor normale runs.
 Zet tijdelijk `HR_SIMULATION_MODE` op `full` en roep de HTTP-endpoint aan.
 Een full run bouwt de initiele populatie opnieuw op, simuleert de geschiedenis
 tot vandaag en reset de beheerde SQL-tabellen. Gebruik dit voor wijzigingen in
-de historische simulatielogica of het datamodel. Een full run verwijdert ook
-verouderde beheerde tabellen, waaronder `fact_salary_snapshot`.
+de historische simulatielogica of het datamodel. Verouderde beheerde tabellen
+(waaronder `fact_salary_snapshot`) en verouderde kolommen (`deprecated_columns`
+in het schema) worden bij elke schrijfactie verwijderd, dus ook bij een
+incremental run; een full run is daarvoor niet nodig.
+
+**Draai een full run altijd lokaal** (`func start`), niet op de gedeployde
+Function App. Een full run duurt met de huidige sectorconfiguratie meer dan twee
+uur, en op het Consumption-plan is de maximale looptijd van een functie 10
+minuten, dus een full run op de gedeployde app wordt afgebroken. Lokaal speelt
+die grens niet: `host.json` zet `functionTimeout` bewust op `-1` (onbeperkt) en
+een lokale `func start` houdt zich daaraan. De 10 minuten gelden voor de
+gedeployde app, waar alleen de wekelijkse incremental run hoort te draaien. De
+HTTP-aanroep blijft tijdens een lokale full run open totdat die klaar is.
+
+De run houdt gedurende de hele looptijd een SQL-lock (`sp_getapplock`) vast op
+een verbinding die niets anders doet. Verliest die verbinding de lock (Azure SQL
+of het netwerk verbreekt een inactieve verbinding), dan kan een timer-run op de
+gedeployde app tegelijk met jouw schrijfactie draaien. Daarom controleert de
+writer vóór de eerste schrijfactie, en nogmaals vlak vóór de datatransactie,
+dat de lock nog wordt vastgehouden (`SimulationLock.verify`,
+`APPLOCK_MODE`). Een lock die tijdens de inactiviteit is verloren, hoeft niet
+fataal te zijn: er is alleen overlap als een andere run ertussen echt heeft
+geschreven. Daarom legt de run direct na het nemen van de lock een vingerafdruk
+van `simulation_state` vast (volgende te simuleren week en `last_run`, of "geen
+rij"). Is de lock weg, dan probeert `verify` het eenmalig opnieuw op een verse
+verbinding (`sp_getapplock`, zelfde resource, timeout 0). Lukt dat en is de
+vingerafdruk ongewijzigd, dan logt de run een WARNING ("simulation lock was lost
+while idle and re-acquired; no other run wrote in between"), houdt de nieuwe
+verbinding de lock vast (en geeft die aan het eind vrij) en gaat de run door. Kan
+de lock niet worden teruggenomen (een andere run houdt hem) of is de
+vingerafdruk veranderd, dan stopt de run met `SimulationLockLostError` voordat er
+iets is geschreven; de oude data en het oude checkpoint blijven staan en je
+start de run opnieuw. Dit geldt ook voor een full run. De controle is een
+momentopname: de tijd die het schrijven zelf kost, valt daarbuiten.
 
 Een full run is ook vereist na wijzigingen aan recruitmentbronprofielen,
 recruitmentstatussen, de interne-mobiliteitslogica of snapshotkolommen zoals
@@ -959,6 +1023,8 @@ tevredenheidscontext, groeilogica en pensioenuitstroom.
 | Endpoint op poort 7071 niet bereikbaar | Controleer of `func start` volledig is opgestart en niet door een eerdere fout is gestopt. |
 | Nieuwe schemawijziging ontbreekt in SQL | Draai een full run, of controleer de incremental schema-initialisatie. |
 | `pyodbc.OperationalError: Login timeout expired (HYT00)` | Voorbijgaande Azure SQL-verbindingsstoring. `acquire_simulation_lock` doet hiervoor automatisch een paar nieuwe pogingen (`CONNECT_ATTEMPTS`/`CONNECT_RETRY_DELAY_SECONDS` in `simulation_lock.py`); houdt de storing langer aan, controleer de DTU/verbindingsbelasting van de database (vooral bij een kleine tier zoals S0) en of de firewallregels nog kloppen. |
+| `SimulationLockLostError` ("The simulation lock is no longer held" of "could not be verified") | De inactieve lock-verbinding is tijdens de run verbroken en de lock kon niet veilig worden teruggenomen: een andere run houdt hem, of `simulation_state` is veranderd terwijl de lock weg was. De writer schrijft dan niets en er is niets gewijzigd. Controleer dat er geen andere run is gestart en draai de run opnieuw. Was er geen andere run, dan staat er in de log een WARNING "re-acquired" en gaat de run gewoon door. |
+| De HTTP-endpoint geeft een algemene 500 met een "reference" | Zo gedraagt de gedeployde app zich: de volledige fout staat in de Function App-logs onder diezelfde reference. Lokaal (`func start` zet `AZURE_FUNCTIONS_ENVIRONMENT=Development`) bevat het antwoord de volledige foutmelding. |
 | De wekelijkse timer-run toont "Succeeded" maar er is geen nieuwe data | Controleer de logs op "Weekly HR job failed": `weekly_hr_run` gooit de fout sinds kort opnieuw op na loggen, dus een mislukte run staat voortaan ook als Failed in Azure. |
 
 ## Deployen
@@ -974,7 +1040,8 @@ Voor een release met simulatielogica- of schemawijzigingen:
 
 1. Voer `python -m pytest -q` uit vanuit `azure_function/`.
 2. Deploy de Function App en controleer de Application Settings.
-3. Voer eenmaal een handmatige full run uit.
+3. Voer eenmaal een handmatige full run uit, **lokaal** (zie "Full run"): op de
+   gedeployde app stopt een full run na 10 minuten (Consumption-plan).
 4. Controleer dat de webapp de gewijzigde tabellen correct oppikt; vernieuw
    indien er ook een Power BI-dashboard actief is de gewijzigde tabellen daar
    en controleer nieuwe relaties.

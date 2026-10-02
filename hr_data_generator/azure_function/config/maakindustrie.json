@@ -84,6 +84,9 @@
     },
     "max_weekly_hires": 4,
     "max_weekly_growth_rate": 0.012,
+    "shock_probability": 0.0,
+    "shock_min": -20,
+    "shock_max": 30,
     "economic_events": [
       {
         "start_date": "2020-03-01",
@@ -142,22 +145,6 @@
     "internal_min_performance": 2.7,
     "internal_first_leadership_min_experience_years": 3,
     "salary_increase_rate": 1.0,
-    "salary_growth": {
-      "inflation_min": 0.018,
-      "inflation_max": 0.028,
-      "performance_bonus_max": 0.01,
-      "role_band_cap_multiplier": 1.05,
-      "new_hire_band_position": {
-        "min": 0.32,
-        "max": 0.42
-      },
-      "initial_population_band_position": {
-        "min": 0.28,
-        "max": 0.4,
-        "tenure_increment_per_year": 0.035,
-        "max_position": 0.75
-      }
-    },
     "contract_change_rate": 0.03,
     "location_transfer_rate": 0.03,
     "new_site_pull_rate": 0.15,
@@ -1237,7 +1224,9 @@
       "Sales": 0.95,
       "HR": 0.95,
       "Finance": 0.9,
-      "Directie": 0.75
+      "Directie": 0.75,
+      "QHSE": 1.0,
+      "Marketing": 1.0
     },
     "gender_multipliers": {
       "F": 1.15,
@@ -2696,6 +2685,7 @@
     "Minimumloonaanpassing"
   ],
   "recruitment": {
+    "external_candidate_match_probability": 0.7,
     "candidate_quality_weights": {
       "Kandidaat_Ervaring_Score": 0.28,
       "Kandidaat_Opleiding_Relevantie_Score": 0.18,
@@ -3780,13 +3770,11 @@
     "Productie": {
       "vast_kans": 0.7,
       "tijdelijk_kans": 0.25,
-      "zomer_kans": 0.05,
       "keten_conversion_kans": 0.55
     },
     "default": {
       "vast_kans": 0.85,
       "tijdelijk_kans": 0.15,
-      "zomer_kans": 0.0,
       "keten_conversion_kans": 0.65
     }
   },
@@ -3802,6 +3790,8 @@
     "HR": 0.06,
     "Finance": 0.06,
     "Directie": 0.03,
+    "QHSE": 0.05,
+    "Marketing": 0.05,
     "satisfaction_attrition_multipliers": {
       "zeer_laag": 1.8,
       "laag": 1.35,

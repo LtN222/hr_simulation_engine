@@ -627,7 +627,7 @@ def test_choose_source_returns_the_eligible_internal_candidate_when_it_wins():
 
 
 def test_choose_source_redraws_among_remaining_sources_when_internal_wins_but_has_no_eligible_candidate():
-    """Regression test for AR-16 (see BACKLOG.md "Architecture review"):
+    """Regression test for AR-16 (see CHANGELOG.md "Architecture review"):
     the eligibility scan now runs only for the source actually drawn. When
     that source is Interne mobiliteit and turns out to have no eligible
     candidate (no active employees here), the draw must fall back to the

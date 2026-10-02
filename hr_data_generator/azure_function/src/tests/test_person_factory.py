@@ -76,7 +76,7 @@ def test_create_uses_a_pre_chosen_gender_without_redrawing_it():
 
 
 def test_seed_person_names_makes_drawn_names_reproducible():
-    """Regression test for AR-32 (see BACKLOG.md "Architecture review"):
+    """Regression test for AR-32 (see CHANGELOG.md "Architecture review"):
     names were drawn from faker's own unseeded generator, so two runs with
     the same simulation_seed produced different names every time even though
     every other simulated value (role, salary, tenure, every weekly event)

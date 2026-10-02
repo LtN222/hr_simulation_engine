@@ -321,7 +321,7 @@ Of via VS Code.
 * dim_education_level
 * dim_absence_type
 * dim_event_type
-* dim_reden_vertrek
+* dim_departure_reason
 * dim_manager
 
 ---

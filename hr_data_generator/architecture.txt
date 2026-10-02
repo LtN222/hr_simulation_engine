@@ -112,10 +112,10 @@ Dimensions include:
 
 - dim_employee, dim_department, dim_role and dim_manager
 - dim_hire_source, dim_education and dim_location
-- dim_absence_type, dim_ploegendienst, dim_satisfaction_band and
+- dim_absence_type, dim_shift, dim_satisfaction_band and
   dim_engagement_band
 - dim_satisfaction_driver, dim_performance_driver and dim_engagement_driver
-- dim_salary_band, dim_salary_scale, dim_event_type and dim_reden_vertrek
+- dim_salary_band, dim_salary_scale, dim_event_type and dim_departure_reason
 - dim_incident_type
 
 Facts include:
@@ -132,6 +132,12 @@ Facts include:
   hiring (role_eligibility.qualification_and_experience_reason and
   carried_experience); a promotion or transfer inside a department keeps the
   employee's shift.
+- fact_employee_qualification: qualification history, one row per qualification
+  held by an employee (to dim_education). Today exactly one row per employee,
+  written at hire (initial population and every new hire), with Behaald_Datum =
+  the hire date (not a real diploma date) and Verkregen_Tijdens_Dienstverband
+  always false; qualifications gained during employment are not simulated yet
+  (open backlog item). Append-only.
 - fact_workforce_snapshot: one active employee per month-end (a leaver is
   excluded from the month-end on or after the departure date, so
   headcount(start) + hires - leavers = headcount(end)). This is the
@@ -183,6 +189,10 @@ Modeling principles
   carry (Employee_Key + date) at query time rather than storing a fact-to-fact
   foreign key. In Power BI this is the same DAX-measure pattern used for
   fact_vacancy/fact_recruitment below, not a modeled relationship.
+  Two SQL foreign keys between facts are accepted exceptions (AR-26):
+  fact_workforce_snapshot.Employment_Key -> fact_employment and
+  fact_recruitment.Vacancy_Key -> fact_vacancy. They are lineage references,
+  not reporting relationships; do not model a relationship on them.
 - Shared dimensions filter facts with single-direction relationships.
 - fact_workforce_snapshot is employee-month grain and includes zero absence
   employees. Use it for denominators and employee trend measures.

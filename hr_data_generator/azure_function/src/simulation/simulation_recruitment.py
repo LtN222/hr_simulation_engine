@@ -109,7 +109,7 @@ class RecruitmentSimulator:
         # hire, which would change fact_employment/dim_employee, happens
         # later that week in HiringSimulator - see simulation_runner.py), so
         # this is computed at most once per vacancy rather than once per
-        # application drawn for it. See BACKLOG.md AR-16.
+        # application drawn for it. See CHANGELOG.md AR-16.
         internal_pool_cache = {}
 
         for _, vacancy in self._open_vacancies(state).iterrows():
@@ -591,7 +591,7 @@ class RecruitmentSimulator:
         selection *probabilities* exactly (removing an always-infeasible
         option before drawing and redrawing after an infeasible draw both
         renormalise over the same remaining weights), it just resolves the
-        infeasibility after drawing instead of before. See BACKLOG.md AR-16.
+        infeasibility after drawing instead of before. See CHANGELOG.md AR-16.
         """
         remaining = self._weighted_hire_sources(state, department_name)
 

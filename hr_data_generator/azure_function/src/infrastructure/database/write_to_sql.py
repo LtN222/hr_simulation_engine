@@ -588,6 +588,7 @@ def write_dataset(
     checkpoint=None,
     write_checkpoint=None,
     dry_run=False,
+    verify_lock=None,
 ):
     """Write the state to SQL: schema first, then one atomic data transaction.
 
@@ -596,12 +597,17 @@ def write_dataset(
     `write_checkpoint(conn, checkpoint)` runs as the last statement of the
     transaction. With `dry_run` schema evolution is skipped and the whole
     transaction runs and is rolled back; the per-table counts are returned.
+    `verify_lock()` raises when the simulation lock is no longer held; it runs
+    before the first write (schema evolution) and again before the transaction.
     """
     logging.info("Writing dataset to SQL")
     if dry_run and reset:
         raise ValueError("A dry run is only allowed for incremental writes.")
     if not reset and baseline is None:
         raise ValueError("An incremental write needs the baseline of the loaded tables.")
+
+    if verify_lock is not None:
+        verify_lock()
 
     if dry_run:
         # A dry run must not change anything, schema included. If the schema is
@@ -615,6 +621,10 @@ def write_dataset(
     # Planning is pure: it raises (before anything is written) when a table
     # lost rows it may not lose.
     changes = None if reset else plan_incremental(tables, schema_config, baseline, table_order)
+
+    # Schema evolution can take a while on a big table; re-check right before the data transaction.
+    if verify_lock is not None:
+        verify_lock()
 
     conn = engine.connect()
     transaction = conn.begin()

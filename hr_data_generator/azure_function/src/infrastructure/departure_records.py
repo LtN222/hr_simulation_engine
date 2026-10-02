@@ -3,7 +3,7 @@
 Departure is an instant (what happens at Einddatum), not a continuing
 employment period like a hire/promotion/transfer/salary review. It therefore
 gets its own terminal row instead of overwriting the row it closes - see
-BACKLOG.md's "Departures" entry for the full rationale. Any simulator that
+CHANGELOG.md's "Departures" entry for the full rationale. Any simulator that
 ends someone's employment (attrition, or a lapsed temporary contract) closes
 the active row in place (Einddatum/Dienstverband_status only - its own
 EventType_Key is left untouched) and appends the row this module builds.
