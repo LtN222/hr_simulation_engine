@@ -41,6 +41,8 @@ def validate_role_configuration(config):
     problems.extend(_check_hire_source_weights(config))
     problems.extend(_check_benchmark_key_bounds(config, structure))
     problems.extend(_check_shift_allowance(config))
+    problems.extend(_check_score_bands(config))
+    problems.extend(_check_time_varying_settings(config))
     return problems
 
 
@@ -306,4 +308,54 @@ def _check_shift_allowance(config):
             continue
         if not 0.0 <= number <= 0.5:
             problems.append(f"shift_allowance.percentages['{name}'] = {number} is outside 0 - 0.5")
+    return problems
+
+
+BAND_TOLERANCE = 0.0201      # bands are written as 4.49 | 4.5: a gap of one hundredth
+
+
+def _check_score_bands(config):
+    """Satisfaction/engagement bands: exactly five, ordered, contiguous, valid.
+
+    Attrition and absence derive their cut-offs from the band minimums, named by
+    position (zeer_laag ... zeer_hoog), so the bands must form one ordered chain.
+    """
+    problems = []
+    for dimension in ("dim_satisfaction_band", "dim_engagement_band"):
+        bands = getattr(config, dimension, None)
+        if not bands:
+            continue
+        if len(bands) != 5:
+            problems.append(f"{dimension} must have exactly 5 bands (has {len(bands)})")
+        previous = None
+        for band in bands:
+            minimum, maximum = band.get("Minimum_Score"), band.get("Maximum_Score")
+            if minimum is None or maximum is None or float(minimum) > float(maximum):
+                problems.append(f"{dimension}: band {band} has Minimum_Score above Maximum_Score")
+                previous = band
+                continue
+            if previous is not None and previous.get("Maximum_Score") is not None:
+                gap = float(minimum) - float(previous["Maximum_Score"])
+                if not 0 < gap <= BAND_TOLERANCE:
+                    problems.append(
+                        f"{dimension}: bands are not ordered and contiguous at "
+                        f"{previous.get('Maximum_Score')} -> {minimum} (gap {gap:.2f})"
+                    )
+            previous = band
+    return problems
+
+
+def _check_time_varying_settings(config):
+    """`time_varying` of satisfaction/engagement: sd >= 0, window >= 1, shared in [0, 1]."""
+    problems = []
+    for section in ("satisfaction", "engagement"):
+        settings = (getattr(config, section, None) or {}).get("time_varying")
+        if not settings:
+            continue
+        if float(settings.get("sd", 0)) < 0:
+            problems.append(f"{section}.time_varying.sd must be >= 0")
+        if int(settings.get("window_months", 1)) < 1:
+            problems.append(f"{section}.time_varying.window_months must be >= 1")
+        if not 0.0 <= float(settings.get("shared_fraction", 0.0)) <= 1.0:
+            problems.append(f"{section}.time_varying.shared_fraction must be between 0 and 1")
     return problems

@@ -249,6 +249,129 @@ Proposed fix (to decide when picked up):
 
 Bundle this with the next history-changing change; it needs a full run.
 
+**HP-04 FIXED (awaiting full run) - Satisfaction and engagement scores are far too compressed; the outer bands never occur (medium-high; full run: yes)**
+Fixed: the random parts are normal (`stable_normal`, each `*_spread` is a real sd), a stateless smoothed time-varying part per employee and month was added (`time_varying`: `sd`, `window_months`, `shared_fraction`), the factor effects were scaled up, and attrition/absence read their cut-offs from the band dimensions (`band_thresholds.py`; AR-23: the 4.5/6.0/7.5/8.5 satisfaction cut-offs, the 6.0/7.5 engagement cut-offs, the 6.0/8.5 category thresholds, the 6.0/7.5 reason groups and the absence 6.0/7.5 thresholds). `driver_selection.low_score/high_score` stay (driver thresholds, not bands). New config validation: five ordered, contiguous bands per dimension and sane `time_varying` values.
+
+Final values. Satisfaction: `baseline_mean` 7.0 -> 7.2, `individual_spread` 0.45 -> 0.5, `manager_effect_spread` 0.45 -> 0.5, `team_effect_spread` 0.2 -> 0.25, `culture_effect_spread` 0.15 -> 0.2, `time_varying` {sd 0.55, window_months 6, shared_fraction 0.3}, factor effects x1.35 (compa -1.15/-0.55/+0.15/+0.25 -> -1.5525/-0.7425/+0.2025/+0.3375, `performance_effect` 0.25 -> 0.3375, tenure, department and career-momentum effects x1.35). Engagement (revised after review, see "Engagement: pay is bounded context" below): `baseline_mean` 6.7 -> 6.61, `individual_spread` 0.45 -> 0.57, new `individual_shared_fraction` 0.7, `manager_effect_spread` 0.35 -> 0.3, `satisfaction_effect` 0.5 -> 0.15, `constructive_contribution_effect` 0.7 -> 4.0, `performance_effect` 0.22 -> 0.5, `time_varying` {sd 0.6, window_months 6, shared_fraction 1.0}, `compa_ratio_adjustments` unchanged at -0.45/-0.2/0.0/+0.08/+0.12, department effects x1.7 (Productie -0.17, Logistiek -0.136, Techniek -0.05, R&D/IT/Directie +0.17, Sales +0.085) and career momentum promotion 0.35 -> 0.6, transfer 0.15 -> 0.25, stagnation -0.3 -> -0.5. The attrition multipliers, department base rates and absence multipliers were NOT changed.
+
+Measured with a narrow harness (800 employees, real department mix, 24 month-ends; the model called directly):
+
+| | Before | After | Target |
+|---|---|---|---|
+| Satisfaction mean / sd | 6.66 / 0.65 | 6.74 / 1.21 | 6.75 / ~1.2 |
+| Satisfaction bands (Zeer laag..Zeer hoog) | 0 / 16.5 / 74.0 / 9.4 / 0.1 % | 3.5 / 22.7 / 46.3 / 20.9 / 6.6 % | 3 / 24 / 47 / 19 / 7 % |
+| Satisfaction between / within sd | 0.65 / 0.08 | 1.10 / 0.52 | within a visible share |
+| Satisfaction explained by observable factors | 58% | 31% | 25-35% |
+| Engagement mean / sd | 6.36 / 0.61 | 6.40 / 1.19 | 6.4 / ~1.2 |
+| Engagement bands | 0.3 / 25.6 / 71.7 / 2.4 / 0 % | 5.3 / 31.5 / 45.6 / 13.6 / 4.1 % | 6 / 31 / 45 / 14 / 4 % |
+| Engagement between / within sd | 0.61 / 0.10 | 1.02 / 0.62 | |
+| Engagement observable sources | (see decomposition) | contribution signals largest; pay (direct + indirect) 5.6% of variance vs 27.0% for satisfaction | contributions largest, pay <= ~half of satisfaction's share |
+| Correlation satisfaction-engagement | 0.79 | 0.58 | ~0.6 |
+| Employees >= 3 months outside their usual satisfaction band (24 months) | 9% | 85% | |
+| Employees visiting >= 3 different satisfaction bands | 0% | 35% | |
+
+Knock-on effects (4,000-employee sample for the per-department rows): expected annual turnover overall 12.74% -> 12.94%, per department between -2.6% and +4.0% of the original (Directie +4.0%, HR +3.5%, Productie +2.0%, IT -2.6%; all within +-10%, so no attrition multipliers were rescaled); mean absence satisfaction multiplier 1.0137 -> 1.0154 (+0.2%); performance reviews with the engagement effect: mean 3.317 -> 3.325, share >= 4.0 6.8% -> 7.3%, >= 4.5 0.43% -> 0.57% (the calibrated targets are mean ~3.36, ~7.5%, ~0.5%); satisfaction drivers: "Beloning|Negatief" 43% -> 36%, "Geen dominant aandachtspunt" 1.2% -> 0.5% (does not become dominant); engagement drivers unchanged in shape (they come from uniform contribution signals; "Geen dominant aandachtspunt" 13.2% -> 13.0%, no change to `driver_dominance_threshold` needed). Not calibrated against a real full run: recheck the live distributions after the next full run.
+
+**Engagement: pay is bounded context (decision, revision of the first HP-04 calibration).** The first calibration multiplied all of engagement's factor effects by 2.7, pay included, so a "well below market" employee lost about -1.55 engagement points through pay (direct -1.215 plus 0.22 x satisfaction's -1.5525), as much as their satisfaction loss, while the reported engagement driver (contribution signals only) could not explain it. Decision: pay must weigh clearly less on engagement than on satisfaction. Rule (enforced by a unit test, per compa band and on a 0.01 grid): the TOTAL pay effect on engagement (direct + `satisfaction_effect` x satisfaction's pay effect) is at most 55% of satisfaction's pay effect, in absolute value. Direct pay effects were restored to -0.45/-0.2/0.0/+0.08/+0.12 and `satisfaction_effect` lowered to 0.15 (the rule caps it near 0.155 because of the "boven" band). Total pay effect on engagement now: ratio 0.8 or lower -0.683 (satisfaction -1.552, 44%), 0.9 -0.311 (-0.743, 42%), 1.1 +0.110 (+0.203, 54%), 1.2 or higher +0.171 (+0.338, 51%). Satisfaction's calibration is unchanged. The engagement spread now comes from what engagement is about: `constructive_contribution_effect` 0.7 -> 4.0 (the aggregate stays the bounded mean of the six uniform signals; its tails were wide enough, so no normal aggregate), plus performance/career effects at a moderate level. To keep the correlation with satisfaction near 0.6 despite the lower `satisfaction_effect`, engagement shares 70% of the variance of its personal part with satisfaction's personal preference draw (`individual_shared_fraction`) and all of its time-varying part with satisfaction's life-circumstances draw (`shared_fraction` 1.0). The target "observable factors explain 25-35% of engagement" is replaced by: the contribution signals are the largest observable source and pay (direct + indirect) is at most about half of its share in satisfaction.
+
+Engagement variance decomposition (share of the score variance; the remainder is covariance between parts):
+
+| Part | First calibration | Now |
+|---|---|---|
+| Contribution signals | 0.5% | 16.6% |
+| Pay (direct) | 18.1% | 2.5% |
+| Pay via satisfaction | 1.4% | 0.6% |
+| Other inherited satisfaction | 3.4% | 1.6% |
+| Performance / career | 5.1% | 3.1% |
+| Department | 1.8% | 0.7% |
+| Random: personal | 19.2% | 24.5% |
+| Random: manager | 6.4% | 6.4% |
+| Random: time-varying | 25.7% | 25.8% |
+| Covariances (remainder) | 18.5% | 18.2% |
+
+Original description follows.
+Found by the user on 2026-10-01, in the full run with baseline_headcount 50.
+In `fact_workforce_snapshot`, satisfaction has a mean of 6.56, a standard
+deviation of only 0.56, a range of 4.89-8.18 and a 1st-99th percentile of
+5.35-7.73.
+- Satisfaction: 0 rows in "Zeer laag" and 0 in "Zeer hoog".
+- Engagement: mean 6.35, standard deviation 0.62, range 4.40-7.93; 11 rows
+  in "Zeer laag" and 0 in "Zeer hoog".
+- The standard deviation between employees (0.56) is as large as the
+  total, so scores barely move over time.
+
+Root causes (`src/infrastructure/satisfaction.py`; engagement.py has the
+same pattern):
+- `_stable_value` returns a uniform value in [-1, 1]. Each component is
+  `uniform * spread`: individual 0.45, manager 0.45, team 0.20, culture
+  0.15. So a "spread" of 0.45 is a uniform range of +-0.45 with a standard
+  deviation of only about 0.26, and the total has hard limits. Reaching
+  8.5 needs nearly every component at its maximum at once.
+- Every component is stable per employee or manager. There is no
+  time-varying part (a difficult period, a good year), so nobody passes
+  through the outer bands temporarily.
+- The mean sits about 0.45 below `baseline_mean` 7.0, through the pay,
+  department and tenure adjustments.
+
+Why the bands should NOT simply be moved: attrition uses the same
+thresholds, hard-coded at 4.5/6.0/7.5/8.5 (`simulation_attrition.py`
+~260-266 and ~292-294, AR-23). So `attrition.satisfaction_attrition_multipliers`
+`zeer_laag` (1.8) and `zeer_hoog` (0.7), and the "satisfaction >= 8.5"
+voluntary/employer split, never apply. Moving the band boundaries would
+not fix that; it would only make the bands and the attrition logic
+disagree.
+
+Recommended direction (to confirm when picked up):
+1. Make the stable components normally distributed: map the hash value
+   through the inverse normal CDF (`statistics.NormalDist().inv_cdf`),
+   which is still deterministic, and treat each `*_spread` as a real
+   standard deviation.
+2. Add a small, slowly varying personal component, deterministic per
+   employee and month (for example a smoothed hash value or an AR(1) with
+   seeded draws), so scores move over time and people pass through the
+   outer bands for a while.
+3. Calibrate with a narrow harness. Targets agreed with the user on
+   2026-10-01:
+   - Satisfaction: mean 6.75 (the middle of "Neutraal", 6.0-7.49),
+     standard deviation about 1.2. The bands come out at about 3% "Zeer
+     laag" (<= 4.49), 24% "Laag", 47% "Neutraal", 19% "Hoog" and 7% "Zeer
+     hoog" (>= 8.5). This deliberately tilts slightly positive, as real
+     surveys do. The pay factor's asymmetric effects may make the low tail
+     slightly longer (3-4% "Zeer laag"), which is fine.
+   - Engagement: mean 6.4, standard deviation about 1.2. The bands come out
+     at about 6% "Zeer laag", 31% "Laag", 45% "Neutraal", 14% "Hoog" and
+     4% "Zeer hoog". It is lower than satisfaction and tilts the other way,
+     because engagement measures going beyond the role, not being content.
+   - At about 180 employees, 3% is roughly 5 people per month-end; the
+     time-varying part spreads that over more different people across a
+     year. Small departments will often show 0 in a given month, which is
+     expected.
+   - Correlation between satisfaction and engagement: about 0.6 (real
+     surveys show roughly 0.5-0.7). They move together, but stay distinct
+     concepts (CLAUDE.md). Engagement inherits part of satisfaction's
+     spread through `satisfaction_effect`, so calibrate both together.
+   - Explained share: the known factors (pay, career/performance/tenure,
+     department) explain about 25-35% of each score's variance. Scale
+     those factor effects up along with the wider random parts, so pay and
+     career stay visibly meaningful per employee.
+   - The normal distribution only replaces the random parts (personal
+     preference, manager quality, team fit, culture fit, and the new
+     time-varying part). The factor-driven parts and the driver logic stay
+     as they are.
+4. Read the attrition satisfaction/engagement cut-offs from the band
+   dimensions or config, instead of the hard-coded 4.5/6.0/7.5/8.5 (part
+   of AR-23), so bands and attrition always agree.
+5. Measure the knock-on effects before and after, and recalibrate where
+   needed: attrition (the 1.8 / 0.7 multipliers now really apply, so
+   turnover changes), absence (`satisfaction_incident_multipliers`),
+   engagement (`satisfaction_effect` 0.5) and, through engagement, the
+   capped performance effect. Report the turnover per department before
+   and after.
+
+Keep the bands as they are (absolute 1-10 cut-offs). They are the
+reporting vocabulary, and percentile-based bands would hide real changes
+over time.
+
 ## Later - new features (agreed with the user on 2026-09-30)
 
 **LF-01 DONE (awaiting full run, together with HP-03) - Model a shift allowance (ploegentoeslag) (medium; full run: yes)**

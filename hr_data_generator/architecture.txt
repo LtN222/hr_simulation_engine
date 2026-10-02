@@ -189,13 +189,21 @@ Modeling principles
 - fact_absence is episode grain. Use it for absence-type filtering and
   episode-level analysis. `Duur_dagen` is calendar duration; workday and hour
   fields are preferred for capacity and verzuim metrics.
+- Satisfaction and engagement are built from observable factors plus normally
+  distributed personal/manager parts (the *_spread settings are standard
+  deviations) and a smoothed, stateless time-varying part per employee and month
+  (stable_random.py); attrition and absence read their score cut-offs from
+  dim_satisfaction_band/dim_engagement_band (band_thresholds.py).
 - Satisfaction is time-varying. `SatisfactionBand_Key` is therefore stored on
   the workforce snapshot, on absence episodes at their start date, and on exit
   events at their departure date.
 - Engagement is a separate time-varying score on the workforce snapshot and
   exit events. Voluntary constructive contribution signals feed both its score
-  and its dominant driver; satisfaction, relative pay, manager, performance
-  and career momentum remain bounded context. Its effects on future performance
+  and its dominant driver and are its largest observable source; satisfaction,
+  relative pay, manager, performance and career momentum remain bounded context.
+  Pay is deliberately weaker than for satisfaction: its total effect on
+  engagement (direct plus via satisfaction_effect) is at most 55% of its effect
+  on satisfaction in every compa band (unit-tested). Its effects on future performance
   and attrition are deliberately capped.
 - Performance excludes absence, overtime and out-of-hours availability. Its
   drivers describe bounded, role-relevant execution, experience, collaboration,

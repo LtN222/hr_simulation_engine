@@ -2,6 +2,7 @@ import math
 
 import pandas as pd
 
+from src.infrastructure.band_thresholds import band_minimums
 from src.infrastructure.absence_calendar import (
     duration_days,
     hours_per_workday,
@@ -40,6 +41,7 @@ class AbsenceSimulator:
         self.rng = rng
         self.absence_cfg = config.absence
         self.satisfaction_model = SatisfactionModel(config)
+        self.satisfaction_cutoffs = band_minimums(config, "dim_satisfaction_band")
 
     def run(self, state, today):
         today = pd.Timestamp(today).normalize()
@@ -296,9 +298,9 @@ class AbsenceSimulator:
         score = pd.to_numeric(satisfaction_score, errors="coerce")
         if pd.isna(score):
             return 1.0
-        if score < 6.0:
+        if score < self.satisfaction_cutoffs["neutraal"]:
             return float(multipliers.get("low", 1.12))
-        if score < 7.5:
+        if score < self.satisfaction_cutoffs["hoog"]:
             return float(multipliers.get("neutral", 1.0))
         return float(multipliers.get("high", 0.94))
 

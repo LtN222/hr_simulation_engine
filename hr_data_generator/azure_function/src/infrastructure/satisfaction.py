@@ -1,9 +1,14 @@
 """Satisfaction scoring shared by snapshot and event simulations."""
 
-import hashlib
 from dataclasses import dataclass
 
 import pandas as pd
+
+from src.infrastructure.stable_random import (
+    stable_normal,
+    stable_uniform,
+    time_varying_component,
+)
 
 from src.infrastructure.employment_history import employment_history_for
 from src.infrastructure.dimension_lookup import (
@@ -25,9 +30,14 @@ class SatisfactionExplanation:
 class SatisfactionModel:
     """Calculate stable, explainable employee satisfaction scores on a 1-10 scale.
 
-    The model deliberately uses only slowly changing employment conditions.
-    A small employee-specific residual represents unobserved preferences, but
-    it cannot overwhelm relative pay, manager quality or career conditions.
+    The observable factors (pay, career/performance/tenure/momentum, department)
+    are deterministic functions of the employment context. Everything HR cannot
+    observe is a *normally distributed* random part, deterministic per employee
+    or manager (personal preference, manager quality, team fit, culture fit): the
+    configured `*_spread` values are their standard deviations. A smoothed
+    time-varying part (`time_varying`) lets scores drift from month to month, so
+    people pass through the outer bands for a while; it depends only on the
+    employee and the month of the scoring date.
     """
 
     def __init__(self, config):
@@ -79,7 +89,10 @@ class SatisfactionModel:
         minimum = float(self.settings.get("minimum_score", 1.0))
         maximum = float(self.settings.get("maximum_score", 10.0))
 
-        score = baseline + self._stable_value(employee_key, "preference") * spread
+        score = baseline + self._stable_normal(employee_key, "preference") * spread
+        score += time_varying_component(
+            employee_key, snapshot_date, self.settings.get("time_varying"), "satisfaction"
+        )
 
         performance = pd.to_numeric(performance_score, errors="coerce")
         career_component = self._tenure_component(tenure_years) + float(
@@ -160,18 +173,18 @@ class SatisfactionModel:
         if pd.isna(manager_key):
             return 0.0
         spread = float(self.settings.get("manager_effect_spread", 0.45))
-        return self._stable_value(manager_key, "manager_quality") * spread
+        return self._stable_normal(manager_key, "manager_quality") * spread
 
     def _team_component(self, employee_key, manager_key, department_name):
         """Represent stable team fit without introducing a separate team entity."""
         spread = float(self.settings.get("team_effect_spread", 0.20))
         identifier = f"{employee_key}:{manager_key}:{department_name}"
-        return self._stable_value(identifier, "team_fit") * spread
+        return self._stable_normal(identifier, "team_fit") * spread
 
     def _culture_component(self, employee_key):
         """Represent durable organisation fit rather than month-to-month noise."""
         spread = float(self.settings.get("culture_effect_spread", 0.15))
-        return self._stable_value(employee_key, "culture_fit") * spread
+        return self._stable_normal(employee_key, "culture_fit") * spread
 
     def _tenure_component(self, tenure_years):
         value = pd.to_numeric(tenure_years, errors="coerce")
@@ -216,9 +229,13 @@ class SatisfactionModel:
 
     @staticmethod
     def _stable_value(identifier, purpose):
-        digest = hashlib.sha256(f"{identifier}:{purpose}".encode()).digest()
-        value = int.from_bytes(digest[:8], "big") / (2 ** 64 - 1)
-        return value * 2 - 1
+        """A uniform value in [-1, 1] (kept for callers that need a bounded value)."""
+        return stable_uniform(identifier, purpose)
+
+    @staticmethod
+    def _stable_normal(identifier, purpose):
+        """A standard normal value; multiply by a configured spread (a real sd)."""
+        return stable_normal(identifier, purpose)
 
 
 def score_employee_satisfaction(

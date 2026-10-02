@@ -321,6 +321,72 @@ begrensde bijdrage. De score heeft een kleine, gemaximeerde invloed op de
 volgende performance-review en op vrijwillige uitstroom; hij beinvloedt niet
 rechtstreeks de afwezigheidsduur.
 
+**Verdeling van tevredenheid en betrokkenheid.** De scores zijn opgebouwd uit
+waarneembare factoren (beloning ten opzichte van de benchmark, loopbaan/
+performance/diensttijd/loopbaanmomentum en afdeling) plus wat HR niet kan
+zien. Die laatste delen zijn **normaal verdeeld**: de instellingen
+`individual_spread`, `manager_effect_spread`, `team_effect_spread` en
+`culture_effect_spread` (tevredenheid) en `individual_spread` en
+`manager_effect_spread` (betrokkenheid) zijn echte standaarddeviaties in
+scorepunten (via de inverse normale verdeling van een deterministische hash; het
+oude uniforme bereik gaf een standaarddeviatie van slechts 0,58 x de instelling en
+harde grenzen). Daarnaast heeft elke score een **tijdsvariërend deel**
+(`satisfaction.time_varying` en `engagement.time_varying`): per medewerker en
+maand een gewogen som van de laatste `window_months` maandelijkse normale trekkingen
+(lineair afnemend, genormaliseerd tot variantie 1, de correlatie tussen opeenvolgende
+maanden is dus 0,77 bij 6 maanden) maal `sd`. Het deel hangt alleen van de
+medewerker en de maand van de scoredatum af, zonder opgeslagen state: attrition,
+verzuim, snapshot en vertrek geven dezelfde waarde voor dezelfde medewerker in
+dezelfde maand, en een full run en een hervatte incremental run blijven identiek.
+`shared_fraction` is het deel van de variantie dat uit een gedeelde "levensomstandigheden"-
+trekking komt (dezelfde voor tevredenheid en betrokkenheid), de rest is
+scorespecifiek. Betrokkenheid erft bovendien via `satisfaction_effect` een deel van
+tevredenheid; ze blijven aparte concepten. De trekkingen voor de
+constructieve-bijdragesignalen (en dus de betrokkenheidsdriver) en de
+performance-eigenschappen blijven uniform.
+
+Doelen (eerste-passkalibratie met een smalle harnas zonder weeklus, op de echte
+afdelingsmix, 24 maandultimo's): tevredenheid gemiddelde 6,75 en standaarddeviatie
+ca. 1,2 met banden van ca. 3% / 24% / 47% / 19% / 7% (Zeer laag ... Zeer hoog);
+betrokkenheid gemiddelde 6,4 en standaarddeviatie ca. 1,2 met ca. 6% / 31% / 45% /
+14% / 4%; correlatie tussen beide ca. 0,6; en voor tevredenheid verklaren de
+waarneembare factoren 25-35% van de variantie. Daarvoor zijn de factoreffecten van
+tevredenheid (`compa_ratio_adjustments`, `performance_effect`, `tenure_adjustments`,
+loopbaanmomentum, `department_adjustments`) x1,35 opgeschaald, met behoud van tekens en
+volgorde. Voor betrokkenheid geldt iets anders: **beloning is begrensde context, de
+vrijwillige constructieve bijdragen sturen de score.** De bijdragesignalen
+(`constructive_contribution_effect` 4,0) zijn de grootste waarneembare bron van
+betrokkenheidsvariantie; prestatie en loopbaan wegen matig en de directe beloningseffecten
+blijven op hun oorspronkelijke waarden (-0,45 / -0,2 / 0 / +0,08 / +0,12). Regel, afgedwongen
+door een unittest: het TOTALE beloningseffect op betrokkenheid (direct plus
+`satisfaction_effect` x het beloningseffect op tevredenheid) is voor elke compa-band
+hoogstens 55% van het beloningseffect op tevredenheid. Een medewerker ver onder de markt
+verliest zo ca. 0,68 betrokkenheidspunt (en 1,55 tevredenheidspunt). Om de correlatie met
+tevredenheid ondanks de lage `satisfaction_effect` (0,15) rond 0,6 te houden, deelt
+betrokkenheid 70% van de variantie van haar persoonlijke deel
+(`individual_shared_fraction`) en haar hele tijdsvariërende deel (`shared_fraction` 1,0)
+met tevredenheid. In plaats van "25-35% verklaard" geldt voor betrokkenheid: de
+bijdragesignalen zijn de grootste waarneembare bron en beloning (direct en indirect) weegt
+hoogstens ongeveer de helft van zijn aandeel in tevredenheid (nu 5,6% tegen 27,0% van de
+variantie). Een hoge tevredenheid of
+betrokkenheid hangt dus zichtbaar samen met beloning en loopbaan, maar de rest is
+individueel en verandert door de tijd, waardoor medewerkers tijdelijk door de buitenste
+banden gaan. Deze waarden zijn gekalibreerd op het harnas en niet op een full run;
+herkalibreer ze als een echte run er duidelijk van afwijkt.
+
+**Attrition en verzuim volgen de banden.** De grenzen waarmee uitstroom
+(`satisfaction_attrition_multipliers`, `engagement_attrition_multipliers`, de
+vrijwillig/werkgever-verdeling en de redengroepen) en verzuim
+(`satisfaction_incident_multipliers`) tevredenheid en betrokkenheid indelen, zijn niet
+meer vastgelegd als 4,5/6,0/7,5/8,5 maar komen uit de `Minimum_Score` van
+`dim_satisfaction_band` en `dim_engagement_band`, op positie benoemd (zeer_laag, laag,
+neutraal, hoog, zeer_hoog). Zo kloppen banden en gedrag altijd met elkaar, en gelden de
+multipliers voor "Zeer laag" (1,8) en "Zeer hoog" (0,7) ook echt. De
+`driver_selection`-drempels (`low_score`, `high_score`) zijn driverdrempels en geen
+banden en blijven staan. `validate_role_configuration` eist dat elke banddimensie uit
+precies vijf geordende, aaneensluitende banden bestaat en controleert de
+`time_varying`-instellingen.
+
 Elke `fact_performance_review` bevat één dominante `PerformanceDriver_Key`.
 De driver verklaart het zwaartepunt van de score vanuit resultaat en
 werkuitvoering, vakmanschap en relevante ervaring, samenwerking, initiatief
@@ -797,9 +863,12 @@ De kosten van de simulatie zelf groeien nog met de geschiedenis (AR-18, open).
   `contract_rules.<afdeling>.keten_conversion_kans` stuurt de kans op omzetting
   naar vast zodra de wettelijke grens is bereikt.
 - `satisfaction`: de scoreverdeling en effecten van relatieve beloning,
-  manager, performance, diensttijd en afdeling.
+  manager, performance, diensttijd en afdeling. De `*_spread`-waarden zijn
+  standaarddeviaties van normaal verdeelde delen; `time_varying` (`sd`,
+  `window_months`, `shared_fraction`) is het maand-op-maand variërende deel.
 - `engagement`: de scoreverdeling en effecten van tevredenheid, relatieve
-  beloning, manager, performance, loopbaanmomentum en afdeling.
+  beloning, manager, performance, loopbaanmomentum en afdeling, met dezelfde
+  betekenis van `*_spread` en `time_varying`.
 - `attrition`: uitstroompercentages per afdeling, plus de invloed van
   tevredenheid en betrokkenheid op vertrek- en vertrekredenlogica.
   `no_show_max_tenure_days` (30): de vertrekreden `No-show` is alleen mogelijk

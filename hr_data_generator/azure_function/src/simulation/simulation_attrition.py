@@ -5,6 +5,7 @@ import math
 import pandas as pd
 
 from src.infrastructure.departure_records import build_departure_row, close_open_absence
+from src.infrastructure.band_thresholds import band_minimums
 from src.infrastructure.tenure import service_years
 from src.infrastructure.satisfaction import (
     SatisfactionModel,
@@ -25,6 +26,9 @@ class AttritionSimulator:
         self.rng = rng
         self.event_type_map = event_type_map
         self.departure_reason_map = departure_reason_map
+        # Cut-offs come from the band dimensions, so attrition and reporting agree.
+        self.satisfaction_cutoffs = band_minimums(config, "dim_satisfaction_band")
+        self.engagement_cutoffs = band_minimums(config, "dim_engagement_band")
 
     def run(self, state, today):
         dim_department = state["dim_department"]
@@ -257,13 +261,14 @@ class AttritionSimulator:
             "satisfaction_attrition_multipliers",
             {},
         )
-        if satisfaction < 4.5:
+        cutoffs = self.satisfaction_cutoffs
+        if satisfaction < cutoffs["laag"]:
             return float(multipliers.get("zeer_laag", 1.80))
-        if satisfaction < 6.0:
+        if satisfaction < cutoffs["neutraal"]:
             return float(multipliers.get("laag", 1.35))
-        if satisfaction < 7.5:
+        if satisfaction < cutoffs["hoog"]:
             return float(multipliers.get("neutraal", 1.05))
-        if satisfaction < 8.5:
+        if satisfaction < cutoffs["zeer_hoog"]:
             return float(multipliers.get("hoog", 0.85))
         return float(multipliers.get("zeer_hoog", 0.70))
 
@@ -273,9 +278,10 @@ class AttritionSimulator:
             "engagement_attrition_multipliers",
             {},
         )
-        if engagement < 6.0:
+        cutoffs = self.engagement_cutoffs
+        if engagement < cutoffs["neutraal"]:
             return float(multipliers.get("laag", 1.18))
-        if engagement < 7.5:
+        if engagement < cutoffs["hoog"]:
             return float(multipliers.get("neutraal", 1.0))
         return float(multipliers.get("hoog", 0.92))
 
@@ -289,9 +295,12 @@ class AttritionSimulator:
         """Choose who initiates the exit after its probability was drawn."""
         if performance < 2.5:
             voluntary_weight, employer_weight = 0.35, 0.65
-        elif satisfaction < 6.0 or engagement < 6.0:
+        elif (
+            satisfaction < self.satisfaction_cutoffs["neutraal"]
+            or engagement < self.engagement_cutoffs["neutraal"]
+        ):
             voluntary_weight, employer_weight = 0.90, 0.10
-        elif satisfaction >= 8.5:
+        elif satisfaction >= self.satisfaction_cutoffs["zeer_hoog"]:
             voluntary_weight, employer_weight = 0.60, 0.40
         elif tenure_years < 1:
             voluntary_weight, employer_weight = 0.80, 0.20
@@ -352,8 +361,8 @@ class AttritionSimulator:
             {},
         )
         satisfaction_group = (
-            "laag" if satisfaction < 6.0
-            else "hoog" if satisfaction >= 7.5
+            "laag" if satisfaction < self.satisfaction_cutoffs["neutraal"]
+            else "hoog" if satisfaction >= self.satisfaction_cutoffs["hoog"]
             else "neutraal"
         )
         factor = float(settings.get(reason, {}).get(satisfaction_group, 1.0))

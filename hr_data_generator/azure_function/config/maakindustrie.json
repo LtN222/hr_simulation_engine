@@ -956,41 +956,46 @@
     }
   ],
   "satisfaction": {
-    "baseline_mean": 7.0,
-    "individual_spread": 0.45,
+    "baseline_mean": 7.2,
+  "time_varying": {
+    "sd": 0.55,
+    "window_months": 6,
+    "shared_fraction": 0.3
+  },
+    "individual_spread": 0.5,
     "performance_midpoint": 3.4,
-    "performance_effect": 0.25,
+    "performance_effect": 0.3375,
     "compa_ratio_adjustments": {
-      "ver_onder": -1.15,
-      "onder": -0.55,
-      "rond": 0.0,
-      "boven": 0.15,
-      "ver_boven": 0.25
+      "ver_onder": -1.5525,
+      "onder": -0.7425,
+      "rond": 0,
+      "boven": 0.2025,
+      "ver_boven": 0.3375
     },
-    "manager_effect_spread": 0.45,
-    "team_effect_spread": 0.2,
-    "culture_effect_spread": 0.15,
+    "manager_effect_spread": 0.5,
+    "team_effect_spread": 0.25,
+    "culture_effect_spread": 0.2,
     "tenure_adjustments": {
-      "under_half_year": 0.15,
-      "under_two_years": 0.05,
-      "two_to_five_years": -0.1,
-      "five_years_or_more": 0.0
+      "under_half_year": 0.2025,
+      "under_two_years": 0.0675,
+      "two_to_five_years": -0.135,
+      "five_years_or_more": 0
     },
     "department_adjustments": {
-      "Productie": -0.1,
-      "Logistiek": -0.05,
-      "Techniek": 0.0,
-      "R&D": 0.1,
-      "IT": 0.1,
-      "Sales": 0.05,
-      "Directie": 0.1
+      "Productie": -0.135,
+      "Logistiek": -0.0675,
+      "Techniek": 0,
+      "R&D": 0.135,
+      "IT": 0.135,
+      "Sales": 0.0675,
+      "Directie": 0.135
     },
     "career_momentum": {
       "momentum_months": 12,
-      "promotion_max_effect": 0.18,
-      "transfer_max_effect": 0.08,
+      "promotion_max_effect": 0.243,
+      "transfer_max_effect": 0.108,
       "high_performer_stagnation_after_years": 3,
-      "high_performer_stagnation_effect": -0.18
+      "high_performer_stagnation_effect": -0.243
     },
     "driver_selection": {
       "minimum_absolute_impact": 0.12,
@@ -1004,36 +1009,42 @@
     "full_time_weekly_hours": 40
   },
   "engagement": {
-    "baseline_mean": 6.7,
-    "individual_spread": 0.45,
-    "satisfaction_effect": 0.5,
+    "baseline_mean": 6.61,
+  "time_varying": {
+    "sd": 0.6,
+    "window_months": 6,
+    "shared_fraction": 1.0
+  },
+    "individual_spread": 0.57,
+  "individual_shared_fraction": 0.7,
+    "satisfaction_effect": 0.15,
     "performance_midpoint": 3.4,
-    "performance_effect": 0.22,
-    "manager_effect_spread": 0.35,
-    "constructive_contribution_effect": 0.7,
+    "performance_effect": 0.5,
+    "manager_effect_spread": 0.3,
+    "constructive_contribution_effect": 4.0,
     "driver_dominance_threshold": 0.7,
     "compa_ratio_adjustments": {
       "ver_onder": -0.45,
       "onder": -0.2,
-      "rond": 0.0,
+      "rond": 0,
       "boven": 0.08,
       "ver_boven": 0.12
     },
     "career_momentum": {
-      "promotion_max_effect": 0.35,
-      "transfer_max_effect": 0.15,
+      "promotion_max_effect": 0.6,
+      "transfer_max_effect": 0.25,
       "momentum_months": 12,
       "high_performer_stagnation_after_years": 3,
-      "high_performer_stagnation_effect": -0.3
+      "high_performer_stagnation_effect": -0.5
     },
     "department_adjustments": {
-      "Productie": -0.1,
-      "Logistiek": -0.08,
-      "Techniek": -0.03,
-      "R&D": 0.1,
-      "IT": 0.1,
-      "Sales": 0.05,
-      "Directie": 0.1
+      "Productie": -0.17,
+      "Logistiek": -0.136,
+      "Techniek": -0.05,
+      "R&D": 0.17,
+      "IT": 0.17,
+      "Sales": 0.085,
+      "Directie": 0.17
     },
     "minimum_score": 1.0,
     "maximum_score": 10.0,

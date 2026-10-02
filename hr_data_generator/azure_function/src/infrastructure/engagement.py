@@ -1,10 +1,13 @@
 """Engagement scoring shared by snapshots, performance and attrition."""
 
-import hashlib
-
 import pandas as pd
 
 from src.infrastructure.satisfaction import _cache_scalar, _interpolate
+from src.infrastructure.stable_random import (
+    stable_normal,
+    stable_uniform,
+    time_varying_component,
+)
 from src.infrastructure.employment_history import employment_history_for
 from src.infrastructure.driver_selection import driver_key_for
 from src.infrastructure.dimension_lookup import (
@@ -19,7 +22,10 @@ class EngagementModel:
     Engagement is related to satisfaction but remains a distinct construct:
     it captures discretionary energy and connection to work. The model avoids
     artificial month-to-month waves; changes come from manager, reward and
-    career context instead.
+    career context, a normally distributed personal and manager part (the
+    `*_spread` settings are standard deviations) and a smoothed time-varying
+    part (`time_varying`, optionally sharing a "life circumstances" draw with
+    satisfaction) that depends only on the employee and the month.
     """
 
     def __init__(self, config):
@@ -36,31 +42,66 @@ class EngagementModel:
         manager_key=None,
         career_momentum=0.0,
         constructive_contributions=None,
+        as_of_date=None,
     ):
-        baseline = float(self.settings.get("baseline_mean", 6.7))
+        components = self.components(
+            employee_key, satisfaction_score, performance_score, compa_ratio,
+            department_name, manager_key, career_momentum,
+            constructive_contributions, as_of_date,
+        )
+        minimum = float(self.settings.get("minimum_score", 1.0))
+        maximum = float(self.settings.get("maximum_score", 10.0))
+        score = float(self.settings.get("baseline_mean", 6.7)) + sum(components.values())
+        return round(min(max(float(score), minimum), maximum), 2)
+
+    def components(
+        self,
+        employee_key,
+        satisfaction_score,
+        performance_score,
+        compa_ratio=None,
+        department_name=None,
+        manager_key=None,
+        career_momentum=0.0,
+        constructive_contributions=None,
+        as_of_date=None,
+    ):
+        """The additive parts of a score (everything except `baseline_mean`).
+
+        Observable: `contributions` (the voluntary constructive signals, the
+        main driver of engagement), `satisfaction` (inherited from the
+        satisfaction score), `performance`, `pay` (relative pay, bounded context:
+        deliberately weaker than for satisfaction), `department`, `momentum`.
+        Not observable: `personal`, `manager` and the smoothed `time_varying` part.
+        """
         spread = float(self.settings.get("individual_spread", 0.45))
         satisfaction_effect = float(self.settings.get("satisfaction_effect", 0.50))
         performance_midpoint = float(self.settings.get("performance_midpoint", 3.4))
         performance_effect = float(self.settings.get("performance_effect", 0.22))
-        minimum = float(self.settings.get("minimum_score", 1.0))
-        maximum = float(self.settings.get("maximum_score", 10.0))
 
-        score = baseline + self._stable_value(employee_key, "engagement") * spread
+        components = {
+            "personal": self._personal_draw(employee_key) * spread,
+            "time_varying": time_varying_component(
+                employee_key, as_of_date, self.settings.get("time_varying"), "engagement"
+            ),
+            "satisfaction": 0.0,
+            "performance": 0.0,
+            "pay": self._compa_ratio_component(compa_ratio),
+            "department": float(self.settings.get("department_adjustments", {}).get(
+                department_name, 0.0,
+            )),
+            "manager": self._manager_component(manager_key),
+            "momentum": float(career_momentum or 0.0),
+            "contributions": 0.0,
+        }
         satisfaction = pd.to_numeric(satisfaction_score, errors="coerce")
         if pd.notna(satisfaction):
-            score += (float(satisfaction) - 7.0) * satisfaction_effect
+            components["satisfaction"] = (float(satisfaction) - 7.0) * satisfaction_effect
 
         performance = pd.to_numeric(performance_score, errors="coerce")
         if pd.notna(performance):
-            score += (float(performance) - performance_midpoint) * performance_effect
+            components["performance"] = (float(performance) - performance_midpoint) * performance_effect
 
-        score += self._compa_ratio_component(compa_ratio)
-        score += self.settings.get("department_adjustments", {}).get(
-            department_name,
-            0.0,
-        )
-        score += self._manager_component(manager_key)
-        score += float(career_momentum or 0.0)
         # These voluntary, constructive signals also determine the one
         # reportable engagement driver; they are not social availability.
         contributions = constructive_contributions or {}
@@ -69,8 +110,8 @@ class EngagementModel:
             effect = float(
                 self.settings.get("constructive_contribution_effect", 0.70)
             )
-            score += (mean_signal - 0.5) * effect
-        return round(min(max(float(score), minimum), maximum), 2)
+            components["contributions"] = (mean_signal - 0.5) * effect
+        return components
 
     def constructive_contributions(
         self, state, employee_key, as_of_date, performance_score
@@ -141,17 +182,37 @@ class EngagementModel:
             return _interpolate(ratio, 1.10, 1.20, high, very_high)
         return very_high
 
+    def _personal_draw(self, employee_key):
+        """Standard normal personal part, partly shared with satisfaction's.
+
+        `individual_shared_fraction` is the share of its variance that comes from
+        the same employee draw satisfaction uses for its personal preference
+        (someone who is generally content is also somewhat more engaged); the
+        rest is engagement-specific. 0 (default) keeps them independent.
+        """
+        shared = min(1.0, max(0.0, float(self.settings.get("individual_shared_fraction", 0.0))))
+        specific = self._stable_normal(employee_key, "engagement")
+        if shared == 0.0:
+            return specific
+        common = self._stable_normal(employee_key, "preference")
+        return (shared ** 0.5) * common + ((1.0 - shared) ** 0.5) * specific
+
     def _manager_component(self, manager_key):
         if pd.isna(manager_key):
             return 0.0
         spread = float(self.settings.get("manager_effect_spread", 0.35))
-        return self._stable_value(manager_key, "engagement_manager") * spread
+        return self._stable_normal(manager_key, "engagement_manager") * spread
 
     @staticmethod
     def _stable_value(identifier, purpose):
-        digest = hashlib.sha256(f"{identifier}:{purpose}".encode()).digest()
-        value = int.from_bytes(digest[:8], "big") / (2 ** 64 - 1)
-        return value * 2 - 1
+        """A uniform value in [-1, 1]: the constructive-contribution signals and
+        the performance traits need a bounded value."""
+        return stable_uniform(identifier, purpose)
+
+    @staticmethod
+    def _stable_normal(identifier, purpose):
+        """A standard normal value; multiply by a configured spread (a real sd)."""
+        return stable_normal(identifier, purpose)
 
 
 def score_employee_engagement(
@@ -212,6 +273,7 @@ def score_employee_engagement(
             model.settings,
         ),
         constructive_contributions=contributions,
+        as_of_date=as_of_date,
     )
     cache[cache_key] = result
     return result
